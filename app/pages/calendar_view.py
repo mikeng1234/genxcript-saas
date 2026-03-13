@@ -69,9 +69,9 @@ def _load_pay_periods_overlapping(year: int, month: int) -> list[dict]:
 # ============================================================
 
 # Visual styling per pay period status
-_STATUS_BG     = {"draft": "#cfe2ff", "finalized": "#fff3cd", "paid": "#d1e7dd"}
-_STATUS_FG     = {"draft": "#084298", "finalized": "#664d03", "paid": "#0a3622"}
-_STATUS_BORDER = {"draft": "#0d6efd", "finalized": "#ffc107", "paid": "#198754"}
+_STATUS_BG     = {"draft": "#cfe2ff", "reviewed": "#e8daef", "finalized": "#fff3cd", "paid": "#d1e7dd"}
+_STATUS_FG     = {"draft": "#084298", "reviewed": "#6c3483", "finalized": "#664d03", "paid": "#0a3622"}
+_STATUS_BORDER = {"draft": "#0d6efd", "reviewed": "#8e44ad", "finalized": "#ffc107", "paid": "#198754"}
 
 
 def _build_day_events(

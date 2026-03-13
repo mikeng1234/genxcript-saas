@@ -690,23 +690,33 @@ def render():
     if period is None:
         return
 
-    is_finalized = period["status"] in ("finalized", "paid")
+    is_locked = period["status"] in ("reviewed", "finalized", "paid")
 
     st.divider()
 
     # Status badge
-    status_colors = {"draft": "blue", "finalized": "orange", "paid": "green"}
+    status_colors = {"draft": "blue", "reviewed": "violet", "finalized": "orange", "paid": "green"}
     color = status_colors.get(period["status"], "gray")
-    st.markdown(f"**Period:** {period['period_start']} to {period['period_end']}  &nbsp; | &nbsp;  **Payment Date:** {period['payment_date']}  &nbsp; | &nbsp;  **Status:** :{color}[{period['status'].upper()}]")
+    status_line = f"**Period:** {period['period_start']} to {period['period_end']}  &nbsp; | &nbsp;  **Payment Date:** {period['payment_date']}  &nbsp; | &nbsp;  **Status:** :{color}[{period['status'].upper()}]"
 
-    if is_finalized:
+    # Show reviewer info if available
+    if period.get("reviewed_by"):
+        reviewed_at = period["reviewed_at"][:16].replace("T", " ") if period.get("reviewed_at") else ""
+        status_line += f"  &nbsp; | &nbsp;  **Reviewed by:** {period['reviewed_by']} ({reviewed_at})"
+
+    st.markdown(status_line)
+
+    if is_locked:
         col_msg, col_btn = st.columns([4, 1])
         with col_msg:
-            st.info("This pay period is finalized. Earnings are read-only.")
+            if period["status"] == "reviewed":
+                st.info("This pay period is under review. Earnings are read-only.")
+            else:
+                st.info("This pay period is finalized. Earnings are read-only.")
         with col_btn:
             st.write("")  # spacer
             if st.button("Reopen for Editing", width="stretch"):
-                _update_pay_period(period["id"], {"status": "draft"})
+                _update_pay_period(period["id"], {"status": "draft", "reviewed_by": None, "reviewed_at": None})
                 st.rerun()
 
     # --- Load payroll entries for this period ---
@@ -716,32 +726,53 @@ def render():
     st.subheader(f"Employees ({len(employees)})")
 
     for emp in employees:
-        _render_employee_payroll(emp, period["id"], is_finalized, entries)
+        _render_employee_payroll(emp, period["id"], is_locked, entries)
 
     # --- Period totals ---
     _render_period_totals(entries, employees)
 
-    # --- Finalize button ---
-    if not is_finalized:
+    # --- Workflow buttons ---
+    if period["status"] == "draft":
         st.divider()
         all_computed = all(e["id"] in entries for e in employees)
 
         col1, col2, col3 = st.columns([2, 1, 1])
         with col2:
             if st.button(
-                "Finalize Pay Period",
+                "Submit for Review",
                 type="primary",
                 disabled=not all_computed,
                 width="stretch",
             ):
-                _update_pay_period(period["id"], {"status": "finalized"})
-                st.success("Pay period finalized! Payroll is now locked.")
+                _update_pay_period(period["id"], {"status": "reviewed"})
+                st.success("Pay period submitted for review.")
                 st.rerun()
-        with col3:
-            pass  # Mark as Paid only shows when finalized
 
         if not all_computed:
-            st.caption("Compute all employees before finalizing.")
+            st.caption("Compute all employees before submitting for review.")
+
+    elif period["status"] == "reviewed":
+        st.divider()
+        reviewer_name = st.text_input("Reviewer Name", placeholder="e.g. Juan dela Cruz")
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col2:
+            if st.button(
+                "Approve & Finalize",
+                type="primary",
+                disabled=not reviewer_name.strip(),
+                width="stretch",
+            ):
+                from datetime import datetime
+                _update_pay_period(period["id"], {
+                    "status": "finalized",
+                    "reviewed_by": reviewer_name.strip(),
+                    "reviewed_at": datetime.now().isoformat(),
+                })
+                st.success(f"Approved by {reviewer_name.strip()}. Pay period finalized!")
+                st.rerun()
+
+        if not reviewer_name.strip():
+            st.caption("Enter reviewer name to approve and finalize.")
 
     elif period["status"] == "finalized":
         st.divider()

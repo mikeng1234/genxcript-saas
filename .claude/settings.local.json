@@ -21,7 +21,16 @@
       "Bash(python -c \"from app.pages.payroll_run import render; print\\(''OK''\\)\")",
       "Bash(python -c \"from app.pages.calendar_view import render; print\\(''OK''\\)\")",
       "Bash(python -c \"from app.pages.dashboard import render; print\\(''OK''\\)\")",
-      "Bash(python -c \"from app.pages.dashboard import render; from app.pages.payroll_run import render; print\\(''OK''\\)\")"
+      "Bash(python -c \"from app.pages.dashboard import render; from app.pages.payroll_run import render; print\\(''OK''\\)\")",
+      "Bash(wc -l I:SaaSPaySysgenxcript-saas/**/*.py)",
+      "Bash(find \"I:\\\\SaaS\\\\PaySys\\\\genxcript-saas\" -type f -name \"*.py\" -exec wc -l {} +)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python -m pip show supabase gotrue httpx)",
+      "Bash(findstr \"Name Version\")",
+      "Bash(python -m pip install \"gotrue==2.4.1\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''app/pages/dashboard.py''\\).read\\(\\)\\); print\\(''OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''app/pages/dashboard.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''OK''\\)\")",
+      "Bash(git config:*)"
     ]
   }
 }

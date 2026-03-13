@@ -13,12 +13,12 @@
 
 ## Phase 2: Enhancements
 - [x] Employee onboarding checklist — track if gov IDs (SSS, PhilHealth, Pag-IBIG, BIR TIN) are complete; many SMEs onboard employees without all numbers ready
-- [ ] Payroll approval workflow — add a "Reviewed by" field before finalize; useful when the boss wants to sign off before releasing pay
+- [x] Payroll approval workflow — add a "Reviewed by" field before finalize; useful when the boss wants to sign off before releasing pay
 - [x] Payroll comparison — show period-over-period changes (new hires, salary adjustments, OT spikes) so employers can spot anomalies
 - [x] Calendar view — visual timeline of pay periods, government deadlines, and Philippine holidays (~20 holidays/year affect holiday pay computation)
 - [ ] Employee self-service portal — let employees view their own payslips via login (requires Supabase Auth with employee-level roles)
 - [x] Philippine holiday calendar table — auto-adjust remittance deadlines that fall on weekends/holidays to the next business day
-- [ ] Dashboard charts — payroll cost trend (line), deductions breakdown (pie), headcount over time (bar)
+- [x] Dashboard charts — payroll cost trend (line), deductions breakdown (pie), headcount over time (bar)
 - [ ] PWA cache — offline-capable for areas with unstable internet
 
 ## Phase 3: Scale

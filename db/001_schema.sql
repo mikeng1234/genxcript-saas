@@ -70,7 +70,9 @@ CREATE TABLE pay_periods (
     period_end      DATE NOT NULL,
     payment_date    DATE NOT NULL,
     status          TEXT NOT NULL DEFAULT 'draft'
-                    CHECK (status IN ('draft', 'finalized', 'paid')),
+                    CHECK (status IN ('draft', 'reviewed', 'finalized', 'paid')),
+    reviewed_by     TEXT,
+    reviewed_at     TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     UNIQUE (company_id, period_start, period_end)
