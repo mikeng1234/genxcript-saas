@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/test_payroll.py -v)",
+      "Bash(pip install:*)",
+      "Bash(timeout 10 streamlit run app/main.py --server.headless true)",
+      "Bash(python -c \"from app.pages.employees import render; print\\(''Import OK''\\)\")",
+      "Bash(python -c \"from app.pages.payroll_run import render; print\\(''Import OK''\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(python -c \"from app.pages.employees import render; from app.pages.payroll_run import render; print\\(''Both pages import OK''\\)\")",
+      "Bash(python -c \"from app.pages.payslips import render; print\\(''Payslips page import OK''\\)\")",
+      "Bash(python -c \"from app.pages.dashboard import render; from app.pages.company_setup import render; print\\(''Both pages import OK''\\)\")",
+      "Bash(python -c \"from reports.government_reports_pdf import generate_sss_r3, generate_philhealth_rf1, generate_pagibig_mcrf, generate_bir_1601c; print\\(''All PDF generators imported OK''\\)\")",
+      "Bash(python -c \"from app.pages.government_reports import render; print\\(''Government Reports page imported OK''\\)\")",
+      "Bash(python -c \"from app.auth import is_logged_in, login, signup, logout; print\\(''auth.py OK''\\)\")",
+      "Bash(python -c \"from streamlit_cookies_controller import CookieController; print\\(''OK''\\)\")",
+      "Bash(python -c \"from app.auth import restore_from_cookies, login, logout; print\\(''auth.py OK''\\)\")",
+      "Bash(python -c \"from app.auth import login, logout, is_logged_in; from app.main import *\")",
+      "Bash(python -c \"from app.auth import login, logout, restore_from_query_params, is_logged_in; print\\(''OK''\\)\")",
+      "Bash(python -c \"from app.pages.payroll_comparison import render; print\\(''OK''\\)\")",
+      "Bash(python -c \"from app.pages.payroll_run import render; print\\(''OK''\\)\")",
+      "Bash(python -c \"from app.pages.calendar_view import render; print\\(''OK''\\)\")",
+      "Bash(python -c \"from app.pages.dashboard import render; print\\(''OK''\\)\")",
+      "Bash(python -c \"from app.pages.dashboard import render; from app.pages.payroll_run import render; print\\(''OK''\\)\")"
+    ]
+  }
+}

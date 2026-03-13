@@ -1,0 +1,438 @@
+"""
+Calendar View — Streamlit page.
+
+Monthly grid showing:
+- Pay period spans (draft / finalized / paid, color-coded)
+- Philippine holidays (regular and special non-working)
+- Government remittance deadlines (adjusted for weekends/holidays)
+- Payment dates
+
+Below the calendar: a collapsible Philippine Holiday reference table
+for the viewed year.
+"""
+
+import streamlit as st
+from datetime import date, timedelta
+import calendar as _cal
+
+from app.db_helper import get_db, get_company_id
+from backend.deadlines import get_remittance_deadlines, load_holiday_set
+
+
+# ============================================================
+# Database helpers
+# ============================================================
+
+def _load_holidays(year: int) -> list[dict]:
+    """Return all holiday rows for the year with holiday_date as date objects."""
+    db = get_db()
+    result = (
+        db.table("holidays")
+        .select("holiday_date, name, type")
+        .eq("year", year)
+        .order("holiday_date")
+        .execute()
+    )
+    return [
+        {
+            "holiday_date": (
+                date.fromisoformat(r["holiday_date"])
+                if isinstance(r["holiday_date"], str)
+                else r["holiday_date"]
+            ),
+            "name": r["name"],
+            "type": r["type"],
+        }
+        for r in result.data
+    ]
+
+
+def _load_pay_periods_overlapping(year: int, month: int) -> list[dict]:
+    """Return pay periods whose date range overlaps with the given month."""
+    db     = get_db()
+    first  = date(year, month, 1).isoformat()
+    last   = date(year, month, _cal.monthrange(year, month)[1]).isoformat()
+    result = (
+        db.table("pay_periods")
+        .select("*")
+        .eq("company_id", get_company_id())
+        .lte("period_start", last)   # period starts before or on month-end
+        .gte("period_end",   first)  # period ends on or after month-start
+        .order("period_start")
+        .execute()
+    )
+    return result.data
+
+
+# ============================================================
+# Event builder
+# ============================================================
+
+# Visual styling per pay period status
+_STATUS_BG     = {"draft": "#cfe2ff", "finalized": "#fff3cd", "paid": "#d1e7dd"}
+_STATUS_FG     = {"draft": "#084298", "finalized": "#664d03", "paid": "#0a3622"}
+_STATUS_BORDER = {"draft": "#0d6efd", "finalized": "#ffc107", "paid": "#198754"}
+
+
+def _build_day_events(
+    year: int,
+    month: int,
+    holidays: list[dict],
+    pay_periods: list[dict],
+    deadlines: list[dict],
+) -> dict[date, list[dict]]:
+    """
+    Aggregate all calendar events into a {date: [event, ...]} dict.
+
+    Event types:
+      hol_reg, hol_spec          — Philippine holidays
+      period_span                — day falls inside a pay period
+      payment                    — payment date of a period
+      deadline_sss / _philhealth / _pagibig / _bir   — gov remittance deadlines
+    """
+    events: dict[date, list[dict]] = {}
+
+    def add(d: date, evt: dict):
+        events.setdefault(d, []).append(evt)
+
+    # ── Holidays ─────────────────────────────────────────────
+    for h in holidays:
+        hd = h["holiday_date"]
+        if hd.year == year and hd.month == month:
+            t   = "hol_reg" if h["type"] == "regular" else "hol_spec"
+            lbl = h["name"][:20] + "…" if len(h["name"]) > 20 else h["name"]
+            add(hd, {"type": t, "label": lbl, "priority": 0})
+
+    # ── Pay periods ───────────────────────────────────────────
+    for p in pay_periods:
+        p_start = date.fromisoformat(p["period_start"])
+        p_end   = date.fromisoformat(p["period_end"])
+        p_pay   = date.fromisoformat(p["payment_date"])
+        status  = p["status"]
+        bg      = _STATUS_BG.get(status, "#e2e3e5")
+        fg      = _STATUS_FG.get(status, "#41464b")
+        border  = _STATUS_BORDER.get(status, "#6c757d")
+        short   = f"{p_start.strftime('%m/%d')}–{p_end.strftime('%m/%d')}"
+
+        # Mark every day in the period that falls in this month
+        d = p_start
+        while d <= p_end:
+            if d.year == year and d.month == month:
+                if d == p_start:
+                    lbl = f"▶ {short} [{status.upper()}]"
+                elif d == p_end:
+                    lbl = f"◀ {short} [{status.upper()}]"
+                else:
+                    lbl = f"━ {status.upper()}"
+                add(d, {
+                    "type": "period_span", "label": lbl,
+                    "bg": bg, "fg": fg, "border": border, "priority": 1,
+                })
+            d += timedelta(days=1)
+
+        # Payment date badge
+        if p_pay.year == year and p_pay.month == month:
+            add(p_pay, {
+                "type": "payment",
+                "label": f"💰 Pay Day ({status.upper()})",
+                "priority": 2,
+            })
+
+    # ── Government deadlines ──────────────────────────────────
+    _deadline_type = {
+        "SSS":        "deadline_sss",
+        "PhilHealth": "deadline_philhealth",
+        "Pag-IBIG":   "deadline_pagibig",
+        "BIR":        "deadline_bir",
+    }
+    for dl in deadlines:
+        d = dl["deadline"]
+        if d.year == year and d.month == month:
+            dtype = _deadline_type.get(dl["agency"], "deadline_bir")
+            lbl   = f"{dl['agency']} due"
+            if dl["deadline"] != dl["raw_deadline"]:
+                lbl += " (adj)"
+            add(d, {"type": dtype, "label": lbl, "priority": 3})
+
+    # Sort each day's events by priority so holidays appear first
+    for d in events:
+        events[d].sort(key=lambda e: e.get("priority", 9))
+
+    return events
+
+
+# ============================================================
+# HTML calendar renderer
+# ============================================================
+
+_CALENDAR_CSS = """
+<style>
+.gxp-cal-wrap { overflow-x: auto; margin-bottom: 4px; }
+.gxp-cal {
+    width: 100%; border-collapse: collapse; table-layout: fixed;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.gxp-cal th {
+    background: #1e3a5f; color: #fff; padding: 8px 2px;
+    text-align: center; font-size: 12px; letter-spacing: 0.4px;
+}
+.gxp-cal td {
+    border: 1px solid #dee2e6; vertical-align: top;
+    padding: 4px 4px 2px; height: 90px; width: 14.28%;
+    box-sizing: border-box; overflow: hidden;
+}
+.gxp-cal .empty-cell { background: #f0f2f5; }
+.gxp-cal .weekend    { background: #f7f8fa; }
+.gxp-cal .hol-reg    { background: #fff0f0 !important; }
+.gxp-cal .hol-spec   { background: #fffaed !important; }
+.day-num {
+    font-size: 12px; font-weight: 700; color: #343a40;
+    display: inline-block; margin-bottom: 2px; line-height: 1;
+}
+.day-num.is-today {
+    background: #0d6efd; color: #fff; border-radius: 50%;
+    width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px;
+}
+.evt {
+    display: block; font-size: 9px; font-weight: 600;
+    padding: 1px 3px; border-radius: 3px; margin-bottom: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.evt-hol-reg             { background: #dc3545; color: #fff; }
+.evt-hol-spec            { background: #fd7e14; color: #fff; }
+.evt-payment             { background: #198754; color: #fff; }
+.evt-deadline-sss        { background: #6f42c1; color: #fff; }
+.evt-deadline-philhealth { background: #0dcaf0; color: #000; }
+.evt-deadline-pagibig    { background: #d63384; color: #fff; }
+.evt-deadline-bir        { background: #343a40; color: #fff; }
+</style>
+"""
+
+_TYPE_CSS = {
+    "hol_reg":             "evt-hol-reg",
+    "hol_spec":            "evt-hol-spec",
+    "payment":             "evt-payment",
+    "deadline_sss":        "evt-deadline-sss",
+    "deadline_philhealth": "evt-deadline-philhealth",
+    "deadline_pagibig":    "evt-deadline-pagibig",
+    "deadline_bir":        "evt-deadline-bir",
+}
+
+
+def _render_calendar_html(
+    year: int, month: int, day_events: dict[date, list[dict]]
+) -> str:
+    today = date.today()
+    weeks = _cal.monthcalendar(year, month)
+
+    parts = [_CALENDAR_CSS, '<div class="gxp-cal-wrap"><table class="gxp-cal">']
+
+    # Header row
+    parts.append(
+        "<tr>"
+        + "".join(f"<th>{h}</th>" for h in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+        + "</tr>"
+    )
+
+    for week in weeks:
+        parts.append("<tr>")
+        for wi, day_num in enumerate(week):
+            if day_num == 0:
+                parts.append('<td class="empty-cell"></td>')
+                continue
+
+            d    = date(year, month, day_num)
+            evts = day_events.get(d, [])
+
+            is_weekend  = wi >= 5
+            has_reg_hol = any(e["type"] == "hol_reg"  for e in evts)
+            has_spec_hol = any(e["type"] == "hol_spec" for e in evts)
+            period_evts = [e for e in evts if e["type"] == "period_span"]
+
+            # Cell class
+            cls = ""
+            if has_reg_hol:
+                cls = "hol-reg"
+            elif has_spec_hol:
+                cls = "hol-spec"
+            elif is_weekend:
+                cls = "weekend"
+
+            # Left border from first pay period in cell
+            style = ""
+            if period_evts:
+                style = f'border-left: 3px solid {period_evts[0]["border"]};'
+
+            parts.append(f'<td class="{cls}" style="{style}">')
+
+            # Day number (circle on today)
+            num_cls = "day-num is-today" if d == today else "day-num"
+            parts.append(f'<span class="{num_cls}">{day_num}</span>')
+
+            # Events
+            for e in evts:
+                t   = e["type"]
+                lbl = e["label"]
+                if t == "period_span":
+                    parts.append(
+                        f'<span class="evt" style="background:{e["bg"]};color:{e["fg"]}">'
+                        f"{lbl}</span>"
+                    )
+                else:
+                    css_cls = _TYPE_CSS.get(t, "")
+                    parts.append(f'<span class="evt {css_cls}">{lbl}</span>')
+
+            parts.append("</td>")
+
+        parts.append("</tr>")
+
+    parts.append("</table></div>")
+    return "".join(parts)
+
+
+# ============================================================
+# Legend
+# ============================================================
+
+def _render_legend():
+    st.markdown(
+        """
+        <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:10.5px;align-items:center;margin-top:4px">
+          <span style="background:#dc3545;color:#fff;padding:2px 7px;border-radius:3px">🔴 Regular Holiday</span>
+          <span style="background:#fd7e14;color:#fff;padding:2px 7px;border-radius:3px">🟠 Special Non-Working</span>
+          <span style="background:#cfe2ff;color:#084298;padding:2px 7px;border-radius:3px;border-left:4px solid #0d6efd">Draft Period</span>
+          <span style="background:#fff3cd;color:#664d03;padding:2px 7px;border-radius:3px;border-left:4px solid #ffc107">Finalized Period</span>
+          <span style="background:#d1e7dd;color:#0a3622;padding:2px 7px;border-radius:3px;border-left:4px solid #198754">Paid Period</span>
+          <span style="background:#198754;color:#fff;padding:2px 7px;border-radius:3px">💰 Pay Day</span>
+          <span style="background:#6f42c1;color:#fff;padding:2px 7px;border-radius:3px">SSS</span>
+          <span style="background:#0dcaf0;color:#000;padding:2px 7px;border-radius:3px">PhilHealth</span>
+          <span style="background:#d63384;color:#fff;padding:2px 7px;border-radius:3px">Pag-IBIG</span>
+          <span style="background:#343a40;color:#fff;padding:2px 7px;border-radius:3px">BIR</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# Holiday reference table
+# ============================================================
+
+def _render_holiday_table(holidays: list[dict]):
+    if not holidays:
+        st.info("No holidays on record for this year.")
+        return
+
+    type_labels = {
+        "regular":             "🔴 Regular",
+        "special_non_working": "🟡 Special Non-Working",
+        "special_working":     "🟢 Special Working",
+    }
+
+    rows = [
+        {
+            "Date": h["holiday_date"].strftime("%b %d, %Y (%A)"),
+            "Holiday": h["name"],
+            "Type": type_labels.get(h["type"], h["type"]),
+        }
+        for h in holidays
+    ]
+    st.dataframe(rows, width="stretch", hide_index=True)
+
+
+# ============================================================
+# Main render
+# ============================================================
+
+def render():
+    st.title("Calendar")
+
+    today = date.today()
+
+    # ── Month navigator ───────────────────────────────────────
+    if "cal_year" not in st.session_state:
+        st.session_state.cal_year  = today.year
+        st.session_state.cal_month = today.month
+
+    col_prev, col_label, col_today, col_next = st.columns([1, 4, 1, 1])
+
+    with col_prev:
+        st.write("")
+        if st.button("← Prev", width="stretch"):
+            m, y = st.session_state.cal_month, st.session_state.cal_year
+            if m == 1:
+                st.session_state.cal_month, st.session_state.cal_year = 12, y - 1
+            else:
+                st.session_state.cal_month = m - 1
+            st.rerun()
+
+    with col_label:
+        month_label = date(
+            st.session_state.cal_year, st.session_state.cal_month, 1
+        ).strftime("%B %Y")
+        st.markdown(
+            f"<h3 style='text-align:center;margin:6px 0'>{month_label}</h3>",
+            unsafe_allow_html=True,
+        )
+
+    with col_today:
+        st.write("")
+        if st.button("Today", width="stretch"):
+            st.session_state.cal_year  = today.year
+            st.session_state.cal_month = today.month
+            st.rerun()
+
+    with col_next:
+        st.write("")
+        if st.button("Next →", width="stretch"):
+            m, y = st.session_state.cal_month, st.session_state.cal_year
+            if m == 12:
+                st.session_state.cal_month, st.session_state.cal_year = 1, y + 1
+            else:
+                st.session_state.cal_month = m + 1
+            st.rerun()
+
+    year  = st.session_state.cal_year
+    month = st.session_state.cal_month
+
+    # ── Load data ─────────────────────────────────────────────
+    db          = get_db()
+    holidays    = _load_holidays(year)
+    holiday_set = load_holiday_set(db, year=year)
+    pay_periods = _load_pay_periods_overlapping(year, month)
+
+    # Deadlines for the viewed month.
+    # Passing the 1st of the month (day ≤ 20) causes get_remittance_deadlines
+    # to compute deadlines for that same month — exactly what we want.
+    deadlines = get_remittance_deadlines(date(year, month, 1), holiday_set)
+
+    # ── Build event map ───────────────────────────────────────
+    day_events = _build_day_events(year, month, holidays, pay_periods, deadlines)
+
+    # ── Calendar grid ─────────────────────────────────────────
+    st.markdown(
+        _render_calendar_html(year, month, day_events),
+        unsafe_allow_html=True,
+    )
+
+    # ── Legend ────────────────────────────────────────────────
+    _render_legend()
+
+    st.divider()
+
+    # ── Holiday reference table ───────────────────────────────
+    with st.expander(f"📅 Philippine Holidays — {year}", expanded=False):
+        # Allow switching year for the table (independent of the calendar month)
+        col_yr, _ = st.columns([1, 3])
+        with col_yr:
+            table_year = st.selectbox(
+                "Year",
+                options=[year - 1, year, year + 1],
+                index=1,
+                key="holiday_table_year",
+                label_visibility="collapsed",
+            )
+        table_holidays = _load_holidays(table_year) if table_year != year else holidays
+        _render_holiday_table(table_holidays)
