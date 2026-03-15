@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide",
 )
 
-from app.auth import is_logged_in, logout, get_current_user_email, restore_from_query_params
+from app.auth import is_logged_in, logout, get_current_user_email, restore_from_query_params, is_employee_role
 
 # Hide Streamlit's auto-generated page navigation (it scans the pages/
 # folder and shows all files as links, bypassing our auth gate).
@@ -56,6 +56,27 @@ st.sidebar.title("GenXcript Payroll")
 st.sidebar.caption(get_current_user_email())
 st.sidebar.divider()
 
+# ---- Employee portal (limited view) ----
+if is_employee_role():
+    PAGES = ["My Portal"]
+
+    if "nav_page" not in st.session_state:
+        st.session_state.nav_page = "My Portal"
+
+    page = st.sidebar.radio("Navigate", options=PAGES, key="nav_page")
+
+    st.sidebar.divider()
+    st.sidebar.caption("GenXcript Payroll SaaS v0.1.0")
+
+    if st.sidebar.button("Sign Out", width="stretch"):
+        logout()
+        st.rerun()
+
+    from app.pages.employee_portal import render as render_portal
+    render_portal()
+    st.stop()
+
+# ---- Admin / Viewer view ----
 PAGES = [
     "Dashboard",
     "Employees",
@@ -67,12 +88,16 @@ PAGES = [
     "Company Setup",
 ]
 
-# On the first render of a new session, seed the radio selection
-# from the URL so F5 refresh lands on the correct page.
-# After that, the radio widget manages its own state via the key.
+# Seed nav from URL on first render only.
+# For programmatic navigation (e.g. "Run Payroll" button), pages set
+# _nav_redirect in session_state before rerun, which we consume here.
 if "nav_page" not in st.session_state:
     _url_page = st.query_params.get("page", "Dashboard")
     st.session_state.nav_page = _url_page if _url_page in PAGES else "Dashboard"
+elif "_nav_redirect" in st.session_state:
+    _target = st.session_state.pop("_nav_redirect")
+    if _target in PAGES:
+        st.session_state.nav_page = _target
 
 page = st.sidebar.radio(
     "Navigate",
@@ -80,8 +105,7 @@ page = st.sidebar.radio(
     key="nav_page",
 )
 
-# Keep URL in sync — only update when the page actually changed
-# to avoid triggering unnecessary reruns.
+# Keep URL in sync so F5 refresh lands on the right page.
 if st.query_params.get("page") != page:
     st.query_params["page"] = page
 

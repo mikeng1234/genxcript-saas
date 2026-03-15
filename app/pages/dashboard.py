@@ -1,52 +1,20 @@
 """
-Dashboard — Streamlit page.
+Dashboard — ADP-inspired Streamlit page.
 
-Card-based layout with an Edit Dashboard mode that lets users reorder,
-resize, and hide sections. Layout is persisted in st.session_state.
+Action-oriented layout: what needs attention NOW at the top,
+analytics and history below. Designed after ADP's payroll dashboard
+pattern: CTA → Alerts → Stats → Summary → Trends.
 """
 
 import streamlit as st
 from datetime import date
-import calendar as cal_mod
-from collections import defaultdict
 from app.db_helper import get_db, get_company_id
+from app.styles import (
+    inject_css, status_badge, remit_card, GOV_COLORS,
+)
 from backend.deadlines import get_remittance_deadlines, load_holiday_set
 import plotly.express as px
 import pandas as pd
-
-
-# ============================================================
-# Card Definitions & Layout Config
-# ============================================================
-
-_CARDS = [
-    {"id": "kpi",        "name": "KPI Metrics",                   "default_width": "full"},
-    {"id": "trends",     "name": "Payroll Trends",                "default_width": "full"},
-    {"id": "headcount",  "name": "Headcount per Pay Period",      "default_width": "full"},
-    {"id": "periods",    "name": "Pay Periods",                   "default_width": "large"},
-    {"id": "deadlines",  "name": "Remittance Deadlines",          "default_width": "small"},
-    {"id": "remittance", "name": "Government Remittance Summary", "default_width": "full"},
-]
-
-_CARD_NAME = {c["id"]: c["name"] for c in _CARDS}
-
-_WIDTH_OPTIONS = ["full", "large", "small", "half"]
-_WIDTH_LABELS  = {
-    "full":  "Full Width",
-    "large": "Wide (2/3)",
-    "small": "Narrow (1/3)",
-    "half":  "Half Width",
-}
-
-
-def _init_layout():
-    if "dash_layout" not in st.session_state:
-        st.session_state.dash_layout = [
-            {"id": c["id"], "width": c["default_width"], "visible": True}
-            for c in _CARDS
-        ]
-    if "dash_edit" not in st.session_state:
-        st.session_state.dash_edit = False
 
 
 # ============================================================
@@ -54,7 +22,17 @@ def _init_layout():
 # ============================================================
 
 def _fmt(centavos: int) -> str:
-    return f"₱{centavos / 100:,.2f}"
+    return f"\u20b1{centavos / 100:,.2f}"
+
+
+def _fmt_short(centavos: int) -> str:
+    """Compact peso format for stat cards."""
+    pesos = centavos / 100
+    if pesos >= 1_000_000:
+        return f"\u20b1{pesos / 1_000_000:,.1f}M"
+    if pesos >= 1_000:
+        return f"\u20b1{pesos / 1_000:,.1f}K"
+    return f"\u20b1{pesos:,.0f}"
 
 
 def _load_company() -> dict:
@@ -139,186 +117,519 @@ def _load_payroll_history() -> list[dict]:
     return rows
 
 
-def _get_accurate_deadlines() -> list[dict]:
+def _get_deadlines() -> list[dict]:
     db = get_db()
     today = date.today()
     holidays = load_holiday_set(db, year=today.year)
     return get_remittance_deadlines(today, holidays)
 
 
-# ============================================================
-# Period Timeline
-# ============================================================
+def _count_pending_requests() -> tuple[int, int]:
+    """Return (pending_leave_count, pending_ot_count) for this company."""
+    try:
+        db  = get_db()
+        cid = get_company_id()
+        lr  = db.table("leave_requests").select("id", count="exact").eq("company_id", cid).eq("status", "pending").execute()
+        otr = db.table("overtime_requests").select("id", count="exact").eq("company_id", cid).eq("status", "pending").execute()
+        return (lr.count or 0), (otr.count or 0)
+    except Exception:
+        return 0, 0
 
-def _month_offset(base: str, n: int) -> str:
-    y, m = int(base[:4]), int(base[5:7])
-    m += n
-    while m > 12: m -= 12; y += 1
-    while m < 1:  m += 12; y -= 1
-    return f"{y:04d}-{m:02d}"
 
-
-def _render_period_timeline(periods: list[dict], pay_frequency: str = "semi-monthly"):
-    today = date.today()
-    cur = today.strftime("%Y-%m")
-
-    if pay_frequency == "monthly":
-        expected_slots = 1
-        slot_labels = ["Monthly"]
-    elif pay_frequency == "weekly":
-        expected_slots = 5
-        slot_labels = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"]
-    else:
-        expected_slots = 2
-        slot_labels = ["1st Half", "2nd Half"]
-
-    by_month = defaultdict(list)
+def _find_next_period(periods: list[dict]) -> dict | None:
+    """Find the most recent draft/reviewed period (next to run)."""
     for p in periods:
-        by_month[p["period_start"][:7]].append(p)
+        if p["status"] in ("draft", "reviewed"):
+            return p
+    return None
 
-    if "tl_month" not in st.session_state:
-        st.session_state.tl_month = cur
-    sel = st.session_state.tl_month
 
-    slots = [_month_offset(sel, i) for i in range(-2, 3)]
+def _find_latest_finalized(periods: list[dict]) -> dict | None:
+    """Find the most recent finalized/paid period."""
+    for p in periods:
+        if p["status"] in ("finalized", "paid"):
+            return p
+    return None
 
-    cols = st.columns([1, 1.3, 2, 1.3, 1])
-    for col, ym in zip(cols, slots):
-        y, m = int(ym[:4]), int(ym[5:7])
-        label = f"{cal_mod.month_abbr[m]} {y}"
-        is_sel    = ym == sel
-        is_future = ym > cur
 
-        with col:
-            if is_sel:
-                st.markdown(
-                    f"<div style='text-align:center;font-weight:700;font-size:15px;"
-                    f"color:#0d6efd;border-bottom:3px solid #0d6efd;"
-                    f"padding-bottom:6px;margin-bottom:8px'>{label}</div>",
-                    unsafe_allow_html=True,
-                )
-            elif is_future:
-                st.markdown(
-                    f"<div style='text-align:center;font-size:11px;"
-                    f"color:#ced4da;padding-bottom:6px;margin-bottom:8px'>{label}</div>",
-                    unsafe_allow_html=True,
-                )
-            else:
-                if st.button(label, key=f"tl_{ym}", use_container_width=True):
-                    st.session_state.tl_month = ym
-                    st.rerun()
+def _trend_html(current: int, previous: int) -> str:
+    """Return a coloured trend indicator comparing current vs previous value."""
+    if not previous or previous == 0:
+        return '<span class="gxp-stat-trend gxp-stat-trend-neutral">— new</span>'
+    pct = (current - previous) / previous * 100
+    if pct > 0.5:
+        return f'<span class="gxp-stat-trend gxp-stat-trend-up">▲ {pct:.1f}%</span>'
+    if pct < -0.5:
+        return f'<span class="gxp-stat-trend gxp-stat-trend-down">▼ {abs(pct):.1f}%</span>'
+    return '<span class="gxp-stat-trend gxp-stat-trend-neutral">— flat</span>'
 
-    _STATUS_CARD = {
-        "draft":     ("#cfe2ff", "#084298", "DRAFT"),
-        "reviewed":  ("#e8daef", "#6c3483", "REVIEWED"),
-        "finalized": ("#fff3cd", "#664d03", "FINALIZED"),
-        "paid":      ("#d1e7dd", "#0a3622", "PAID"),
-    }
 
-    month_periods = sorted(by_month.get(sel, []), key=lambda p: p["period_start"])
+# Inline SVG icons — stroke-based, single icon set (Heroicons-style)
+_SVG = {
+    "employees": (
+        '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">'
+        '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>'
+        '<circle cx="9" cy="7" r="4"/>'
+        '<path d="M23 21v-2a4 4 0 0 0-3-3.87"/>'
+        '<path d="M16 3.13a4 4 0 0 1 0 7.75"/>'
+        '</svg>'
+    ),
+    "gross": (
+        '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">'
+        '<line x1="12" y1="1" x2="12" y2="23"/>'
+        '<path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'
+        '</svg>'
+    ),
+    "net": (
+        '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">'
+        '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>'
+        '<line x1="1" y1="10" x2="23" y2="10"/>'
+        '</svg>'
+    ),
+    "cost": (
+        '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">'
+        '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>'
+        '</svg>'
+    ),
+    "ytd": (
+        '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">'
+        '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'
+        '</svg>'
+    ),
+}
 
-    if not month_periods:
-        msg = "Future period — not yet created." if sel > cur else "No pay periods for this month."
-        st.caption(msg)
+
+# ============================================================
+# Section 1: Action Bar (ADP Hero)
+# ============================================================
+
+def _render_action_bar(company: dict, next_period: dict | None):
+    company_name = company.get("name", "Your Company")
+    today = date.today()
+    today_str = today.strftime("%A, %B %d, %Y")
+
+    # Next payroll info block
+    if next_period:
+        next_date = next_period["period_end"]
+        badge = status_badge(next_period["status"])
+        next_html = (
+            '<div class="gxp-action-bar-next">'
+            '<div class="gxp-action-bar-next-label">Next Payroll</div>'
+            f'<div class="gxp-action-bar-next-date">{next_date}</div>'
+            f'<div style="margin-top:6px">{badge}</div>'
+            '</div>'
+        )
+    else:
+        next_html = (
+            '<div class="gxp-action-bar-next">'
+            '<div class="gxp-action-bar-next-label">Next Payroll</div>'
+            '<div class="gxp-action-bar-next-date" style="color:#94a3b8">Not scheduled</div>'
+            '<div style="margin-top:6px;font-size:11px;color:#64748b">Create a pay period to begin</div>'
+            '</div>'
+        )
+
+    st.markdown(
+        '<div class="gxp-action-bar">'
+        '<div class="gxp-action-bar-left">'
+        f'<div class="gxp-action-bar-greeting">{company_name}</div>'
+        f'<div class="gxp-action-bar-sub">Today is <strong>{today_str}</strong></div>'
+        '</div>'
+        '<div class="gxp-action-bar-right">'
+        f'{next_html}'
+        '</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Quick action buttons — flush below the hero bar
+    st.markdown('<div class="gxp-quick-actions">', unsafe_allow_html=True)
+    qa1, qa2, qa3, qa4 = st.columns(4)
+    with qa1:
+        if st.button("▶  Run Payroll", use_container_width=True, type="primary", key="qa_run"):
+            st.session_state["_nav_redirect"] = "Payroll Run"
+            st.rerun()
+    with qa2:
+        if st.button("＋  Add Employee", use_container_width=True, key="qa_add"):
+            st.session_state["_nav_redirect"] = "Employees"
+            st.rerun()
+    with qa3:
+        if st.button("⬡  Government Reports", use_container_width=True, key="qa_gov"):
+            st.session_state["_nav_redirect"] = "Government Reports"
+            st.rerun()
+    with qa4:
+        if st.button("⚙  Company Setup", use_container_width=True, key="qa_setup"):
+            st.session_state["_nav_redirect"] = "Company Setup"
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ============================================================
+# Section 2: Alerts / To-Do
+# ============================================================
+
+def _render_alerts(deadlines: list[dict], periods: list[dict],
+                   pending_leave: int = 0, pending_ot: int = 0):
+    alerts = []
+
+    # ── Pending Leave / OT approval reminder ──────────────────────────────────
+    pending_total = pending_leave + pending_ot
+    if pending_total > 0:
+        leave_part = f"{pending_leave} leave request{'s' if pending_leave != 1 else ''}" if pending_leave else ""
+        ot_part    = f"{pending_ot} overtime request{'s' if pending_ot != 1 else ''}"    if pending_ot    else ""
+        desc_parts = [p for p in [leave_part, ot_part] if p]
+        alerts.append({
+            "type":  "warning",
+            "icon":  "📋",
+            "title": f"{pending_total} Leave/OT Request{'s' if pending_total != 1 else ''} Awaiting Approval",
+            "desc":  " · ".join(desc_parts) + " — open Employees to review",
+            "action": f"{pending_total} pending",
+            "_is_leave_alert": True,
+        })
+
+    # Check for overdue deadlines
+    for d in deadlines:
+        if d["days_until"] < 0:
+            alerts.append({
+                "type": "overdue",
+                "icon": "\u26a0",
+                "title": f"{d['agency']} ({d['form']}) — OVERDUE",
+                "desc": f"Due {d['deadline'].strftime('%b %d')} \u2022 {abs(d['days_until'])} days overdue",
+                "action": "Remit now",
+            })
+        elif d["days_until"] <= 3:
+            alerts.append({
+                "type": "warning",
+                "icon": "\u23f0",
+                "title": f"{d['agency']} ({d['form']}) — Due Soon",
+                "desc": f"Due {d['deadline'].strftime('%b %d')} \u2022 {d['days_until']} day{'s' if d['days_until'] != 1 else ''} left",
+                "action": f"Due in {d['days_until']}d",
+            })
+
+    # Check for draft periods needing review
+    for p in periods[:3]:
+        if p["status"] == "draft":
+            alerts.append({
+                "type": "info",
+                "icon": "\u270e",
+                "title": f"Payroll Draft — {p['period_start']} to {p['period_end']}",
+                "desc": "Payroll entries need review and finalization",
+                "action": "Review",
+            })
+        elif p["status"] == "reviewed":
+            alerts.append({
+                "type": "info",
+                "icon": "\u2713",
+                "title": f"Ready to Finalize — {p['period_start']} to {p['period_end']}",
+                "desc": "Payroll reviewed and ready for finalization",
+                "action": "Finalize",
+            })
+
+    if not alerts:
+        # Show all-clear message
+        st.markdown("""
+        <div class="gxp-alert-card gxp-alert-info" style="border-color:#16a34a;background:#f0fdf4">
+            <div class="gxp-alert-icon" style="background:#dcfce7;color:#16a34a">\u2713</div>
+            <div class="gxp-alert-body">
+                <div class="gxp-alert-title" style="color:#166534">All caught up</div>
+                <div class="gxp-alert-desc">No overdue items or pending tasks. You're in good shape.</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
-    display_count = len(month_periods) if pay_frequency == "weekly" else expected_slots
-    card_cols = st.columns(display_count)
+    st.markdown('<div class="gxp-alerts-section">', unsafe_allow_html=True)
+    for a in alerts:
+        st.markdown(f"""
+        <div class="gxp-alert-card gxp-alert-{a['type']}">
+            <div class="gxp-alert-icon">{a['icon']}</div>
+            <div class="gxp-alert-body">
+                <div class="gxp-alert-title">{a['title']}</div>
+                <div class="gxp-alert-desc">{a['desc']}</div>
+            </div>
+            <div class="gxp-alert-action">{a['action']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    for i in range(display_count):
-        with card_cols[i]:
-            slot_label = slot_labels[i] if i < len(slot_labels) else f"Period {i+1}"
-            if i < len(month_periods):
-                p = month_periods[i]
-                entries = _load_payroll_entries(p["id"])
-                count = len(entries)
-                gross = sum(e.get("gross_pay", 0) for e in entries) / 100 if entries else 0
-                net   = sum(e.get("net_pay",   0) for e in entries) / 100 if entries else 0
-                bg, fg, slabel = _STATUS_CARD.get(p["status"], ("#e9ecef", "#495057", p["status"].upper()))
-                net_str   = f"₱{net:,.0f}" if net   else "—"
-                gross_str = f"₱{gross:,.0f}" if gross else "—"
-                st.markdown(f"""
-                <div style="border:1px solid #dee2e6;border-radius:10px;
-                            padding:14px 16px;background:#fafafa;min-height:110px">
-                  <div style="font-size:11px;color:#6c757d;margin-bottom:3px">{slot_label}</div>
-                  <div style="font-size:13px;font-weight:600;margin-bottom:8px">
-                    {p['period_start']} → {p['period_end']}
-                  </div>
-                  <span style="padding:2px 10px;border-radius:12px;font-size:11px;
-                               font-weight:700;background:{bg};color:{fg}">{slabel}</span>
-                  <div style="margin-top:10px;font-size:12px;color:#495057">
-                    {count} employees &nbsp;·&nbsp;
-                    <span style="font-weight:600">Net {net_str}</span>
-                  </div>
-                  <div style="font-size:11px;color:#adb5bd;margin-top:2px">Gross {gross_str}</div>
-                </div>
-                """, unsafe_allow_html=True)
+    # ── Streamlit action button for leave/OT alert (HTML alerts aren't clickable) ──
+    if pending_total > 0:
+        btn_col, _ = st.columns([1.6, 3])
+        with btn_col:
+            if st.button(
+                f"📋  Review {pending_total} Pending Request{'s' if pending_total != 1 else ''}",
+                use_container_width=True,
+                key="dash_review_leave",
+            ):
+                st.session_state["_nav_redirect"] = "Employees"
+                st.rerun()
+
+
+# ============================================================
+# Section 3: Quick Stat Cards
+# ============================================================
+
+def _render_stat_cards(active_count: int, total_count: int,
+                       total_gross: int, total_net: int, total_cost: int,
+                       latest_period: dict | None, history: list[dict]):
+    inactive = total_count - active_count
+    period_label = (
+        f"{latest_period['period_start']} → {latest_period['period_end']}"
+        if latest_period else "No data yet"
+    )
+
+    # Compute previous period values for trend indicators
+    prev_gross = int(history[-2]["gross_pay"] * 100) if len(history) >= 2 else 0
+    prev_net   = int(history[-2]["net_pay"]   * 100) if len(history) >= 2 else 0
+
+    # YTD payroll cost (current calendar year)
+    from datetime import date as _date
+    current_year = _date.today().year
+    ytd_cost = int(sum(
+        row["gross_pay"] for row in history
+        if str(row["period"]).startswith(str(current_year))
+    ) * 100)
+
+    cards = [
+        {
+            "svg":    _SVG["employees"],
+            "icon_bg": "#dbeafe", "icon_color": "#2563eb", "accent": "#2563eb",
+            "label":  "Active Employees",
+            "value":  str(active_count),
+            "sub":    f"{inactive} inactive" if inactive else "All employees active",
+            "trend":  "",
+        },
+        {
+            "svg":    _SVG["gross"],
+            "icon_bg": "#d1fae5", "icon_color": "#059669", "accent": "#059669",
+            "label":  "Gross Pay",
+            "value":  _fmt_short(total_gross),
+            "sub":    period_label,
+            "trend":  _trend_html(total_gross, prev_gross),
+        },
+        {
+            "svg":    _SVG["net"],
+            "icon_bg": "#ede9fe", "icon_color": "#7c3aed", "accent": "#7c3aed",
+            "label":  "Net Pay",
+            "value":  _fmt_short(total_net),
+            "sub":    period_label,
+            "trend":  _trend_html(total_net, prev_net),
+        },
+        {
+            "svg":    _SVG["cost"],
+            "icon_bg": "#fef3c7", "icon_color": "#d97706", "accent": "#d97706",
+            "label":  "Employer Cost",
+            "value":  _fmt_short(total_cost),
+            "sub":    "Gross + employer contributions",
+            "trend":  "",
+        },
+        {
+            "svg":    _SVG["ytd"],
+            "icon_bg": "#fce7f3", "icon_color": "#db2777", "accent": "#db2777",
+            "label":  f"YTD Payroll ({current_year})",
+            "value":  _fmt_short(ytd_cost) if ytd_cost else "—",
+            "sub":    f"{len([r for r in history if str(r['period']).startswith(str(current_year))])} pay runs this year",
+            "trend":  "",
+        },
+    ]
+
+    cols = st.columns(5)
+    for col, card in zip(cols, cards):
+        with col:
+            # Always render trend row div — empty trend leaves a blank line that
+            # breaks Streamlit's markdown parser, causing subsequent divs to render as literal text.
+            trend_content = card["trend"] if card["trend"] else "&nbsp;"
+            html = (
+                f'<div class="gxp-stat-card" style="border-top:3px solid {card["accent"]}">'
+                f'<div class="gxp-stat-icon" style="background:{card["icon_bg"]};color:{card["icon_color"]}">'
+                f'{card["svg"]}</div>'
+                f'<div class="gxp-stat-label">{card["label"]}</div>'
+                f'<div class="gxp-stat-value">{card["value"]}</div>'
+                f'<div class="gxp-stat-trend-row">{trend_content}</div>'
+                f'<div class="gxp-stat-sub">{card["sub"]}</div>'
+                f'</div>'
+            )
+            st.markdown(html, unsafe_allow_html=True)
+
+
+# ============================================================
+# Section 4: Last Payroll Summary
+# ============================================================
+
+def _render_last_payroll_summary(latest_period: dict | None, latest_entries: list[dict]):
+    if not latest_period or not latest_entries:
+        st.markdown("""
+        <div class="gxp-summary-card">
+            <div class="gxp-summary-header">
+                <div class="gxp-summary-title">Last Payroll Run</div>
+            </div>
+            <div style="text-align:center;padding:24px 0;color:#9ca3af;font-size:13px">
+                No finalized payroll yet. Run your first payroll to see the summary here.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+
+    headcount = len(latest_entries)
+    gross = sum(e["gross_pay"] for e in latest_entries)
+    net = sum(e["net_pay"] for e in latest_entries)
+    total_deductions = gross - net
+    badge = status_badge(latest_period["status"])
+
+    st.markdown(f"""
+    <div class="gxp-summary-card">
+        <div class="gxp-summary-header">
+            <div class="gxp-summary-title">Last Payroll Run</div>
+            <div>{badge} &nbsp; <span style="font-size:12px;color:#6b7280">{latest_period['period_start']} to {latest_period['period_end']}</span></div>
+        </div>
+        <div class="gxp-summary-grid">
+            <div class="gxp-summary-item">
+                <div class="gxp-summary-item-label">Employees Paid</div>
+                <div class="gxp-summary-item-value">{headcount}</div>
+            </div>
+            <div class="gxp-summary-item">
+                <div class="gxp-summary-item-label">Total Gross</div>
+                <div class="gxp-summary-item-value">{_fmt(gross)}</div>
+            </div>
+            <div class="gxp-summary-item">
+                <div class="gxp-summary-item-label">Total Net</div>
+                <div class="gxp-summary-item-value" style="color:#059669">{_fmt(net)}</div>
+            </div>
+            <div class="gxp-summary-item">
+                <div class="gxp-summary-item-label">Total Deductions</div>
+                <div class="gxp-summary-item-value" style="color:#dc2626">{_fmt(total_deductions)}</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ============================================================
+# Section 5: Government Remittance + Upcoming Deadlines
+# ============================================================
+
+def _render_remittance_and_deadlines(latest_entries: list[dict], latest_period: dict | None,
+                                      deadlines: list[dict]):
+    col_remit, col_deadlines = st.columns([3, 2])
+
+    with col_remit:
+        st.markdown('<div class="gxp-panel">', unsafe_allow_html=True)
+        st.markdown('<div class="gxp-panel-header"><div class="gxp-panel-title">Government Remittance</div></div>', unsafe_allow_html=True)
+
+        if not latest_entries:
+            st.caption("Remittance data will appear after the first finalized payroll.")
+        else:
+            total_sss_ee = sum(e["sss_employee"]        for e in latest_entries)
+            total_sss_er = sum(e["sss_employer"]        for e in latest_entries)
+            total_ph_ee  = sum(e["philhealth_employee"] for e in latest_entries)
+            total_ph_er  = sum(e["philhealth_employer"] for e in latest_entries)
+            total_pi_ee  = sum(e["pagibig_employee"]    for e in latest_entries)
+            total_pi_er  = sum(e["pagibig_employer"]    for e in latest_entries)
+            total_wht    = sum(e["withholding_tax"]     for e in latest_entries)
+
+            r1, r2 = st.columns(2)
+            with r1:
+                st.markdown(remit_card(
+                    "SSS", GOV_COLORS["SSS"],
+                    [("Employee", _fmt(total_sss_ee)), ("Employer", _fmt(total_sss_er))],
+                    ("Total", _fmt(total_sss_ee + total_sss_er)),
+                ), unsafe_allow_html=True)
+                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+                st.markdown(remit_card(
+                    "Pag-IBIG", GOV_COLORS["Pag-IBIG"],
+                    [("Employee", _fmt(total_pi_ee)), ("Employer", _fmt(total_pi_er))],
+                    ("Total", _fmt(total_pi_ee + total_pi_er)),
+                ), unsafe_allow_html=True)
+            with r2:
+                st.markdown(remit_card(
+                    "PhilHealth", GOV_COLORS["PhilHealth"],
+                    [("Employee", _fmt(total_ph_ee)), ("Employer", _fmt(total_ph_er))],
+                    ("Total", _fmt(total_ph_ee + total_ph_er)),
+                ), unsafe_allow_html=True)
+                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+                all_gov = (
+                    total_sss_ee + total_sss_er + total_ph_ee + total_ph_er
+                    + total_pi_ee + total_pi_er + total_wht
+                )
+                st.markdown(remit_card(
+                    "BIR Withholding", GOV_COLORS["BIR"],
+                    [("Withholding Tax", _fmt(total_wht))],
+                    ("All Gov Total", _fmt(all_gov)),
+                ), unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_deadlines:
+        st.markdown('<div class="gxp-panel">', unsafe_allow_html=True)
+        st.markdown('<div class="gxp-panel-header"><div class="gxp-panel-title">Upcoming Deadlines</div></div>', unsafe_allow_html=True)
+
+        for d in deadlines:
+            days = d["days_until"]
+            deadline_str = d["deadline"].strftime("%b %d, %Y")
+            if d["deadline"] != d["raw_deadline"]:
+                deadline_str += " (adj.)"
+
+            if days < 0:
+                color = "#dc2626"
+                tag = f'<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">OVERDUE</span>'
+            elif days <= 3:
+                color = "#d97706"
+                tag = f'<span style="background:#fffbeb;color:#d97706;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">{days}d left</span>'
+            elif days <= 7:
+                color = "#2563eb"
+                tag = f'<span style="background:#dbeafe;color:#2563eb;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">{days}d left</span>'
             else:
-                st.markdown(f"""
-                <div style="border:1px dashed #dee2e6;border-radius:10px;
-                            padding:14px 16px;background:#f8f9fa;
-                            min-height:110px;text-align:center">
-                  <div style="font-size:11px;color:#adb5bd;margin-top:24px">{slot_label}</div>
-                  <div style="font-size:12px;color:#ced4da">Not created yet</div>
+                color = "#16a34a"
+                tag = f'<span style="background:#f0fdf4;color:#16a34a;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">{days}d</span>'
+
+            st.markdown(f"""
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f3f4f6">
+                <div>
+                    <div style="font-size:13px;font-weight:600;color:#1f2937">{d['agency']}
+                        <span style="font-weight:400;color:#6b7280;font-size:12px">({d['form']})</span>
+                    </div>
+                    <div style="font-size:11px;color:#9ca3af;margin-top:2px">{deadline_str}</div>
                 </div>
-                """, unsafe_allow_html=True)
+                <div>{tag}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ============================================================
-# Card Section Renderers
+# Section 6: Analytics (Trends — Secondary)
 # ============================================================
 
-def _section_kpi(data: dict, container):
-    active_count   = data["active_count"]
-    inactive_count = data["total_count"] - active_count
-    total_gross    = data["total_gross"]
-    total_net      = data["total_net"]
-    total_cost     = data["total_cost"]
-    latest_period  = data["latest_period"]
+def _render_analytics(history: list[dict]):
+    st.markdown('<div class="gxp-panel">', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="gxp-panel-header">
+        <div class="gxp-panel-title">Payroll Analytics</div>
+        <div class="gxp-panel-subtitle">Trends across finalized pay periods</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric(
-            "Active Employees", active_count,
-            delta=f"{inactive_count} inactive" if inactive_count else None,
-            delta_color="off",
-        )
-    with col2:
-        st.metric("Total Gross Pay", _fmt(total_gross))
-    with col3:
-        st.metric("Total Net Pay", _fmt(total_net))
-    with col4:
-        st.metric(
-            "Total Employer Cost", _fmt(total_cost),
-            help="Gross pay + employer SSS, PhilHealth, Pag-IBIG",
-        )
-
-    if latest_period:
-        st.caption(
-            f"Based on latest finalized period: "
-            f"{latest_period['period_start']} to {latest_period['period_end']}"
-        )
-    else:
-        st.caption("No finalized pay periods yet. Totals will appear after your first payroll run.")
-
-
-def _section_trends(data: dict, container):
-    history = data["history"]
     if len(history) < 2:
-        st.info("Charts will appear once you have 2 or more finalized pay periods.")
+        st.info("Analytics will appear once you have 2+ finalized pay periods.")
         return
 
     df = pd.DataFrame(history)
-    col_trend, col_pie = st.columns([3, 2])
+
+    col_trend, col_breakdown = st.columns([3, 2])
 
     with col_trend:
-        fig_trend = px.line(
+        fig_trend = px.area(
             df,
             x="period",
             y=["gross_pay", "net_pay"],
-            labels={"value": "Amount (₱)", "period": "Period", "variable": ""},
-            color_discrete_map={"gross_pay": "#1f77b4", "net_pay": "#2ca02c"},
-            markers=True,
+            labels={"value": "Amount (\u20b1)", "period": "Period", "variable": ""},
+            color_discrete_map={"gross_pay": "#2563eb", "net_pay": "#059669"},
         )
         fig_trend.for_each_trace(
             lambda t: t.update(
@@ -330,274 +641,51 @@ def _section_trends(data: dict, container):
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             margin=dict(l=0, r=0, t=48, b=0),
             hovermode="x unified",
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_trend, width="stretch")
+        fig_trend.update_xaxes(showgrid=False)
+        fig_trend.update_yaxes(gridcolor="#f3f4f6")
+        st.plotly_chart(fig_trend, use_container_width=True)
 
-    with col_pie:
+    with col_breakdown:
         latest = history[-1]
-        fig_pie = px.pie(
-            names=["SSS", "PhilHealth", "Pag-IBIG", "BIR Withholding"],
+        fig_donut = px.pie(
+            names=["SSS", "PhilHealth", "Pag-IBIG", "BIR"],
             values=[latest["sss"], latest["philhealth"], latest["pagibig"], latest["bir"]],
-            title=f"Deductions Breakdown ({latest['period'][:7]})",
-            color_discrete_sequence=px.colors.qualitative.Set2,
-            hole=0.35,
+            title=f"Deductions ({latest['period'][:7]})",
+            color_discrete_sequence=["#7c3aed", "#0891b2", "#059669", "#dc2626"],
+            hole=0.45,
         )
-        fig_pie.update_traces(textposition="inside", textinfo="percent+label")
-        fig_pie.update_layout(showlegend=False, margin=dict(l=0, r=0, t=48, b=0))
-        st.plotly_chart(fig_pie, width="stretch")
+        fig_donut.update_traces(textposition="inside", textinfo="percent+label")
+        fig_donut.update_layout(
+            showlegend=False,
+            margin=dict(l=0, r=0, t=48, b=0),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig_donut, use_container_width=True)
 
-
-def _section_headcount(data: dict, container):
-    history = data["history"]
-    if len(history) < 1:
-        st.info("Charts will appear once you have finalized pay periods.")
-        return
-
-    df = pd.DataFrame(history)
+    # Headcount bar chart
     fig_hc = px.bar(
         df,
         x="period",
         y="headcount",
         labels={"headcount": "Employees Paid", "period": "Period"},
         title="Headcount per Pay Period",
-        color_discrete_sequence=["#ff7f0e"],
+        color_discrete_sequence=["#2563eb"],
         text="headcount",
     )
     fig_hc.update_traces(textposition="outside")
     fig_hc.update_layout(
         margin=dict(l=0, r=0, t=48, b=0),
         yaxis=dict(rangemode="tozero"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig_hc, width="stretch")
-
-
-def _section_periods(data: dict, container):
-    _render_period_timeline(
-        data["periods"],
-        data["company"].get("pay_frequency", "semi-monthly"),
-    )
-
-
-def _section_deadlines(data: dict, container):
-    for d in data["deadlines"]:
-        days_until = d["days_until"]
-        if days_until < 0:
-            icon, status = "🔴", "OVERDUE"
-        elif days_until <= 3:
-            icon, status = "🟡", f"in {days_until} days"
-        else:
-            icon, status = "🟢", f"in {days_until} days"
-
-        deadline_str = d["deadline"].strftime("%b %d")
-        if d["deadline"] != d["raw_deadline"]:
-            deadline_str += " (adjusted)"
-
-        st.markdown(
-            f"{icon} **{d['agency']}** ({d['form']}) — {deadline_str}  \n"
-            f"{d['description']} · *{status}*"
-        )
-
-
-def _section_remittance(data: dict, container):
-    latest_entries = data["latest_entries"]
-    latest_period  = data["latest_period"]
-
-    if not latest_entries:
-        st.info("Remittance summary will appear after the first finalized payroll.")
-        return
-
-    st.caption(f"Period: {latest_period['period_start']} to {latest_period['period_end']}")
-
-    total_sss_ee = sum(e["sss_employee"]        for e in latest_entries)
-    total_sss_er = sum(e["sss_employer"]        for e in latest_entries)
-    total_ph_ee  = sum(e["philhealth_employee"] for e in latest_entries)
-    total_ph_er  = sum(e["philhealth_employer"] for e in latest_entries)
-    total_pi_ee  = sum(e["pagibig_employee"]    for e in latest_entries)
-    total_pi_er  = sum(e["pagibig_employer"]    for e in latest_entries)
-    total_wht    = sum(e["withholding_tax"]     for e in latest_entries)
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.markdown("**SSS**")
-        st.text(f"Employee:  {_fmt(total_sss_ee)}")
-        st.text(f"Employer:  {_fmt(total_sss_er)}")
-        st.markdown(f"**Total:   {_fmt(total_sss_ee + total_sss_er)}**")
-
-    with col2:
-        st.markdown("**PhilHealth**")
-        st.text(f"Employee:  {_fmt(total_ph_ee)}")
-        st.text(f"Employer:  {_fmt(total_ph_er)}")
-        st.markdown(f"**Total:   {_fmt(total_ph_ee + total_ph_er)}**")
-
-    with col3:
-        st.markdown("**Pag-IBIG**")
-        st.text(f"Employee:  {_fmt(total_pi_ee)}")
-        st.text(f"Employer:  {_fmt(total_pi_er)}")
-        st.markdown(f"**Total:   {_fmt(total_pi_ee + total_pi_er)}**")
-
-    with col4:
-        st.markdown("**BIR Withholding Tax**")
-        st.text(f"Total:     {_fmt(total_wht)}")
-        st.markdown("")
-        all_gov = (
-            total_sss_ee + total_sss_er
-            + total_ph_ee + total_ph_er
-            + total_pi_ee + total_pi_er
-            + total_wht
-        )
-        st.markdown(f"**All Gov:  {_fmt(all_gov)}**")
-
-
-_SECTION_RENDERERS = {
-    "kpi":        _section_kpi,
-    "trends":     _section_trends,
-    "headcount":  _section_headcount,
-    "periods":    _section_periods,
-    "deadlines":  _section_deadlines,
-    "remittance": _section_remittance,
-}
-
-
-# ============================================================
-# Edit Panel
-# ============================================================
-
-def _render_edit_panel():
-    layout = st.session_state.dash_layout
-
-    st.markdown(
-        """
-        <div style="background:#f0f4ff;border:1px solid #c5d3f6;border-radius:12px;
-                    padding:18px 20px;margin-bottom:24px">
-          <div style="font-size:15px;font-weight:700;color:#1a3a8f;margin-bottom:4px">
-            ✏️ Dashboard Layout Editor
-          </div>
-          <div style="font-size:12px;color:#6c757d;margin-bottom:14px">
-            Reorder cards with ↑ ↓, change width, or hide sections with 👁.
-            Pair <em>Wide (2/3)</em> + <em>Narrow (1/3)</em>, or two <em>Half Width</em>
-            cards to display side-by-side.
-          </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    for i, card in enumerate(layout):
-        name = _CARD_NAME.get(card["id"], card["id"])
-        vis  = card["visible"]
-
-        c_name, c_width, c_vis, c_up, c_dn = st.columns([3.5, 2, 0.6, 0.5, 0.5])
-
-        with c_name:
-            faded = "" if vis else "opacity:0.4;"
-            st.markdown(
-                f"<div style='padding-top:6px;{faded}font-size:14px'>{name}</div>",
-                unsafe_allow_html=True,
-            )
-
-        with c_width:
-            new_w = st.selectbox(
-                "w",
-                options=_WIDTH_OPTIONS,
-                format_func=lambda x: _WIDTH_LABELS[x],
-                index=_WIDTH_OPTIONS.index(card["width"]),
-                key=f"dw_{card['id']}_{i}",
-                label_visibility="collapsed",
-                disabled=not vis,
-            )
-            if new_w != card["width"]:
-                st.session_state.dash_layout[i]["width"] = new_w
-                st.rerun()
-
-        with c_vis:
-            if st.button("👁" if vis else "🚫", key=f"dv_{i}", help="Show / Hide"):
-                st.session_state.dash_layout[i]["visible"] = not vis
-                st.rerun()
-
-        with c_up:
-            if i > 0:
-                if st.button("↑", key=f"du_{i}"):
-                    layout[i], layout[i - 1] = layout[i - 1], layout[i]
-                    st.rerun()
-
-        with c_dn:
-            if i < len(layout) - 1:
-                if st.button("↓", key=f"dd_{i}"):
-                    layout[i], layout[i + 1] = layout[i + 1], layout[i]
-                    st.rerun()
-
-    _, col_reset = st.columns([5, 1])
-    with col_reset:
-        if st.button("↺ Reset", help="Restore default layout"):
-            del st.session_state.dash_layout
-            st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-# ============================================================
-# Layout Renderer (smart column pairing)
-# ============================================================
-
-def _render_dashboard_layout(data: dict):
-    layout  = st.session_state.dash_layout
-    edit    = st.session_state.dash_edit
-    visible = [c for c in layout if c["visible"]]
-
-    i = 0
-    while i < len(visible):
-        card = visible[i]
-        w    = card["width"]
-        name = _CARD_NAME.get(card["id"], card["id"])
-        renderer = _SECTION_RENDERERS.get(card["id"])
-        if not renderer:
-            i += 1
-            continue
-
-        next_card = visible[i + 1] if i + 1 < len(visible) else None
-        next_w    = next_card["width"] if next_card else None
-
-        # Determine if this card pairs with the next
-        pairs = (
-            (w == "large" and next_w == "small") or
-            (w == "small" and next_w == "large") or
-            (w == "half"  and next_w == "half")
-        )
-
-        if pairs:
-            if w == "large" or (w == "half" and next_w == "half"):
-                ratio = [2, 1] if w == "large" else [1, 1]
-            else:
-                ratio = [1, 2]
-
-            col_a, col_b = st.columns(ratio)
-            next_name     = _CARD_NAME.get(next_card["id"], next_card["id"])
-            next_renderer = _SECTION_RENDERERS.get(next_card["id"])
-
-            with col_a:
-                _draw_card(name, card["id"], edit, renderer, data)
-            with col_b:
-                if next_renderer:
-                    _draw_card(next_name, next_card["id"], edit, next_renderer, data)
-            i += 2
-        else:
-            _draw_card(name, card["id"], edit, renderer, data)
-            i += 1
-
-        st.divider()
-
-
-def _draw_card(title: str, card_id: str, edit_mode: bool, renderer, data: dict):
-    """Render a single card with its styled header."""
-    prefix = "☰ " if edit_mode else ""
-    faded  = "color:#adb5bd;" if edit_mode else "color:#343a40;"
-    st.markdown(
-        f"<div style='font-size:15px;font-weight:700;{faded}"
-        f"margin-bottom:10px;padding-bottom:6px;"
-        f"border-bottom:2px solid #e9ecef;'>{prefix}{title}</div>",
-        unsafe_allow_html=True,
-    )
-    renderer(data, st)
+    fig_hc.update_xaxes(showgrid=False)
+    fig_hc.update_yaxes(gridcolor="#f3f4f6")
+    st.plotly_chart(fig_hc, use_container_width=True)
 
 
 # ============================================================
@@ -605,41 +693,20 @@ def _draw_card(title: str, card_id: str, edit_mode: bool, renderer, data: dict):
 # ============================================================
 
 def render():
-    _init_layout()
+    inject_css()
 
-    company      = _load_company()
-    company_name = company.get("name", "Your Company")
+    # ── Load all data ─────────────────────────────────
+    company             = _load_company()
+    active_count        = _load_active_employee_count()
+    total_count         = _load_all_employee_count()
+    periods             = _load_pay_periods()
+    history             = _load_payroll_history()
+    deadlines           = _get_deadlines()
+    pending_leave, pending_ot = _count_pending_requests()
 
-    # ── Page heading + Edit Dashboard button ──────────────────
-    h_col, btn_col = st.columns([5, 1])
-    with h_col:
-        st.title(f"{company_name} — Dashboard")
-    with btn_col:
-        st.markdown("<div style='padding-top:18px'>", unsafe_allow_html=True)
-        edit_label = "✅ Done" if st.session_state.dash_edit else "✏️ Edit Dashboard"
-        if st.button(edit_label, use_container_width=True):
-            st.session_state.dash_edit = not st.session_state.dash_edit
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # ── Edit panel (shown when edit mode is on) ───────────────
-    if st.session_state.dash_edit:
-        _render_edit_panel()
-
-    # ── Pre-load all data ─────────────────────────────────────
-    active_count  = _load_active_employee_count()
-    total_count   = _load_all_employee_count()
-    periods       = _load_pay_periods()
-    history       = _load_payroll_history()
-    deadlines     = _get_accurate_deadlines()
-
-    latest_period  = None
-    latest_entries = []
-    for p in periods:
-        if p["status"] in ("finalized", "paid"):
-            latest_period  = p
-            latest_entries = _load_payroll_entries(p["id"])
-            break
+    next_period    = _find_next_period(periods)
+    latest_period  = _find_latest_finalized(periods)
+    latest_entries = _load_payroll_entries(latest_period["id"]) if latest_period else []
 
     total_gross = sum(e["gross_pay"] for e in latest_entries) if latest_entries else 0
     total_net   = sum(e["net_pay"]   for e in latest_entries) if latest_entries else 0
@@ -649,20 +716,23 @@ def render():
     ) if latest_entries else 0
     total_cost  = total_gross + total_er
 
-    data = {
-        "company":        company,
-        "active_count":   active_count,
-        "total_count":    total_count,
-        "periods":        periods,
-        "latest_period":  latest_period,
-        "latest_entries": latest_entries,
-        "history":        history,
-        "deadlines":      deadlines,
-        "total_gross":    total_gross,
-        "total_net":      total_net,
-        "total_er":       total_er,
-        "total_cost":     total_cost,
-    }
+    # ── 1. Action Bar ─────────────────────────────────
+    _render_action_bar(company, next_period)
 
-    # ── Render cards in layout order ─────────────────────────
-    _render_dashboard_layout(data)
+    # ── 2. Alerts / To-Do ─────────────────────────────
+    _render_alerts(deadlines, periods, pending_leave, pending_ot)
+
+    # ── 3. Quick Stat Cards ───────────────────────────
+    _render_stat_cards(active_count, total_count, total_gross, total_net, total_cost, latest_period, history)
+
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+
+    # ── 4. Last Payroll Summary ───────────────────────
+    _render_last_payroll_summary(latest_period, latest_entries)
+
+    # ── 5. Remittance + Deadlines ─────────────────────
+    _render_remittance_and_deadlines(latest_entries, latest_period, deadlines)
+
+    # ── 6. Analytics (secondary) ──────────────────────
+    with st.expander("Payroll Analytics", expanded=False):
+        _render_analytics(history)

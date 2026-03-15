@@ -42,6 +42,13 @@ def _get_auth_client() -> Client:
     return create_client(url, key)
 
 
+def _get_admin_auth_client() -> Client:
+    """Service-role client required for admin Auth API (invite, delete user, etc.)."""
+    url = os.environ["SUPABASE_URL"]
+    key = os.environ["SUPABASE_SERVICE_KEY"]
+    return create_client(url, key)
+
+
 # ============================================================
 # Session helpers
 # ============================================================
@@ -61,7 +68,16 @@ def get_current_company_id() -> str:
     return company_id
 
 
-def _store_session(user_id: str, user_email: str, company_id: str):
+def get_current_role() -> str:
+    """Returns the current user's role: 'admin', 'viewer', or 'employee'."""
+    return st.session_state.get("user_role", "admin")
+
+
+def is_employee_role() -> bool:
+    return get_current_role() == "employee"
+
+
+def _store_session(user_id: str, user_email: str, company_id: str, role: str = "admin"):
     """
     Persist session to:
     1. st.session_state (current render)
@@ -71,12 +87,14 @@ def _store_session(user_id: str, user_email: str, company_id: str):
     st.session_state.user_id    = user_id
     st.session_state.user_email = user_email
     st.session_state.company_id = company_id
+    st.session_state.user_role  = role
 
     token = str(uuid.uuid4())
     _session_cache()[token] = {
         "user_id":    user_id,
         "user_email": user_email,
         "company_id": company_id,
+        "user_role":  role,
     }
     st.query_params["sid"] = token
 
@@ -103,6 +121,7 @@ def restore_from_query_params() -> bool:
     st.session_state.user_id    = session["user_id"]
     st.session_state.user_email = session["user_email"]
     st.session_state.company_id = session["company_id"]
+    st.session_state.user_role  = session.get("user_role", "admin")
     return True
 
 
@@ -112,7 +131,7 @@ def logout():
     if sid:
         _session_cache().pop(sid, None)
     st.query_params.clear()
-    for key in ["user_id", "user_email", "company_id"]:
+    for key in ["user_id", "user_email", "company_id", "user_role"]:
         st.session_state.pop(key, None)
 
 
@@ -120,7 +139,43 @@ def logout():
 # Login
 # ============================================================
 
-def login(email: str, password: str) -> tuple[bool, str]:
+def _resolve_login_email(identifier: str) -> tuple[str, str]:
+    """
+    If identifier looks like an email address, return it unchanged.
+    Otherwise treat it as an Employee ID (e.g. "EMP-001"), look up the
+    matching email in the employees table via the service-role client
+    (which bypasses RLS so the lookup works before auth).
+
+    Returns (email, error_message). error_message is "" on success.
+    """
+    if "@" in identifier:
+        return identifier.strip(), ""
+
+    try:
+        from supabase import create_client
+        svc = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
+        result = (
+            svc.table("employees")
+            .select("email")
+            .eq("employee_no", identifier.strip().upper())
+            .execute()
+        )
+        if result.data and result.data[0].get("email"):
+            return result.data[0]["email"], ""
+        return "", (
+            f"No employee found with ID '{identifier.strip().upper()}'. "
+            "Please check your Employee ID or use your email address instead."
+        )
+    except Exception as e:
+        return "", f"Employee lookup error: {e}"
+
+
+def login(identifier: str, password: str) -> tuple[bool, str]:
+    # Resolve Employee ID → email if needed
+    email, lookup_err = _resolve_login_email(identifier)
+    if lookup_err:
+        return False, lookup_err
+
     try:
         client = _get_auth_client()
         response = client.auth.sign_in_with_password({"email": email, "password": password})
@@ -133,15 +188,34 @@ def login(email: str, password: str) -> tuple[bool, str]:
         db = get_db()
         result = (
             db.table("user_company_access")
-            .select("company_id")
+            .select("company_id, role")
             .eq("user_id", str(user.id))
             .execute()
         )
 
         if not result.data:
+            # Check if this email belongs to an invited employee (first login)
+            emp_result = (
+                db.table("employees")
+                .select("id, company_id")
+                .eq("email", user.email)
+                .execute()
+            )
+            if emp_result.data:
+                emp = emp_result.data[0]
+                # Create user_company_access row and link user_id to employee
+                db.table("user_company_access").insert({
+                    "user_id":    str(user.id),
+                    "company_id": emp["company_id"],
+                    "role":       "employee",
+                }).execute()
+                db.table("employees").update({"user_id": str(user.id)}).eq("id", emp["id"]).execute()
+                _store_session(str(user.id), user.email, emp["company_id"], "employee")
+                return True, ""
             return False, "No company linked to this account. Contact support."
 
-        _store_session(str(user.id), user.email, result.data[0]["company_id"])
+        row = result.data[0]
+        _store_session(str(user.id), user.email, row["company_id"], row.get("role", "admin"))
         return True, ""
 
     except Exception as e:
@@ -196,7 +270,7 @@ def signup(
         )
 
         if confirmed:
-            _store_session(str(user.id), user.email, company_id)
+            _store_session(str(user.id), user.email, company_id, "admin")
             return True, ""
         else:
             return True, "CHECK_EMAIL"
@@ -206,3 +280,126 @@ def signup(
         if "already registered" in msg.lower():
             return False, "An account with this email already exists. Please log in."
         return False, f"Signup error: {msg}"
+
+
+# ============================================================
+# Password Reset (Forgot Password)
+# ============================================================
+
+def send_password_reset(email: str) -> tuple[bool, str]:
+    """
+    Send a password-reset email via the public Supabase client.
+    Works for any confirmed or invited user.
+    The link redirects to APP_URL (defaults to http://localhost:8501).
+    """
+    try:
+        app_url = os.environ.get("APP_URL", "http://localhost:8501")
+        client = _get_auth_client()
+        client.auth.reset_password_email(
+            email,
+            options={"redirect_to": app_url},
+        )
+        return True, ""
+    except Exception as e:
+        return False, f"Could not send reset email: {e}"
+
+
+# ============================================================
+# Employee Invite
+# ============================================================
+
+def _find_auth_user_by_email(client, email: str) -> str | None:
+    """Look up an existing Supabase auth user ID by email via admin list_users."""
+    try:
+        all_users = client.auth.admin.list_users()
+        user_list = (
+            all_users if isinstance(all_users, list)
+            else getattr(all_users, "users", [])
+        )
+        for u in user_list:
+            if u.email and u.email.lower() == email.lower():
+                return str(u.id)
+    except Exception:
+        pass
+    return None
+
+
+def invite_employee(employee_email: str) -> tuple[bool, str]:
+    """
+    Create (or update) a Supabase Auth account for an employee with a
+    system-generated temporary password, then email the credentials.
+
+    Flow:
+    1. Generate a random temp password.
+    2. admin.create_user(email, password, email_confirm=True)
+       — creates an immediately usable account (no confirmation link needed).
+    3. If the account already exists, update the password via admin.update_user_by_id.
+    4. Send a branded HTML email containing the portal URL + temp password.
+       — requires SMTP_HOST / SMTP_USER / SMTP_PASSWORD in .env
+       — if SMTP is not configured the caller receives the temp password in the
+         error message so the admin can share it manually.
+
+    Returns:
+        (True,  user_id_str)  — account ready, email sent (or admin notified)
+        (False, error_msg)    — unrecoverable error
+    """
+    from app.email_sender import generate_temp_password, send_temp_password_email
+    from app.db_helper import get_db, get_company_id
+
+    client     = _get_admin_auth_client()
+    temp_pass  = generate_temp_password()
+    user_id: str | None = None
+
+    # ── Step 1: create or update the auth account ─────────────────────────────
+    try:
+        resp = client.auth.admin.create_user({
+            "email":         employee_email,
+            "password":      temp_pass,
+            "email_confirm": True,   # skip the confirmation step — ready to log in
+        })
+        user_id = str(resp.user.id) if resp.user else None
+    except Exception as e:
+        msg = str(e).lower()
+        if "already registered" in msg or "already been registered" in msg or "already exists" in msg or "duplicate" in msg:
+            # Account exists — find it, then reset its password to our temp_pass
+            user_id = _find_auth_user_by_email(client, employee_email)
+            if user_id:
+                try:
+                    client.auth.admin.update_user_by_id(
+                        user_id, {"password": temp_pass}
+                    )
+                except Exception as upd_err:
+                    return False, f"Could not reset existing account password: {upd_err}"
+            else:
+                return False, "Account already exists but could not be located. Contact support."
+        else:
+            return False, f"Could not create account: {e}"
+
+    if not user_id:
+        return False, "Failed to create employee account — please try again."
+
+    # ── Step 2: send the temp-password email ──────────────────────────────────
+    # Fetch company name for the email greeting
+    company_name = "your company"
+    try:
+        db = get_db()
+        row = db.table("companies").select("name").eq("id", get_company_id()).single().execute()
+        if row.data:
+            company_name = row.data["name"]
+    except Exception:
+        pass
+
+    portal_url = os.environ.get("APP_URL", "http://localhost:8501")
+    email_ok, email_err = send_temp_password_email(
+        to_email=employee_email,
+        temp_password=temp_pass,
+        company_name=company_name,
+        portal_url=portal_url,
+    )
+
+    if not email_ok:
+        # SMTP not configured or failed — return success but surface temp password
+        # so the admin can share it manually.
+        return True, f"{user_id}|SMTP_FAILED|{temp_pass}|{email_err}"
+
+    return True, user_id
