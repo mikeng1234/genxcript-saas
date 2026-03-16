@@ -9,7 +9,8 @@ One-time onboarding and settings:
 """
 
 import streamlit as st
-from app.db_helper import get_db, get_company_id
+from datetime import datetime, timezone, timedelta
+from app.db_helper import get_db, get_company_id, log_action
 
 
 # ============================================================
@@ -79,6 +80,23 @@ def _update_template(tmpl_id: str, data: dict) -> dict:
 def _delete_template(tmpl_id: str):
     db = get_db()
     db.table("leave_entitlement_templates").delete().eq("id", tmpl_id).execute()
+
+
+# ============================================================
+# Database operations — Audit Log
+# ============================================================
+
+def _load_audit_logs(limit: int = 200) -> list[dict]:
+    db = get_db()
+    result = (
+        db.table("audit_logs")
+        .select("*")
+        .eq("company_id", get_company_id())
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
 
 
 # ============================================================
@@ -195,7 +213,8 @@ def _render_template_section():
         new_data = _template_form("add_template_form", submit_label="Add Template")
         if new_data is not None:
             try:
-                _create_template(new_data)
+                result = _create_template(new_data)
+                log_action("created", "leave_template", result["id"], new_data["name"])
                 st.session_state.show_add_template = False
                 st.success(f"Template **{new_data['name']}** added.")
                 st.rerun()
@@ -253,6 +272,7 @@ def _render_template_section():
                 if st.button("Confirm Delete", key=f"tmpl_del_yes_{tmpl['id']}", type="primary"):
                     try:
                         _delete_template(tmpl["id"])
+                        log_action("deleted", "leave_template", tmpl["id"], tmpl["name"])
                         st.session_state.pop(f"del_confirm_{tmpl['id']}", None)
                         st.rerun()
                     except Exception as e:
@@ -273,6 +293,7 @@ def _render_template_section():
             if updated is not None:
                 try:
                     _update_template(tmpl["id"], updated)
+                    log_action("updated", "leave_template", tmpl["id"], updated["name"])
                     st.session_state.editing_template_id = None
                     st.success(f"Template **{updated['name']}** updated.")
                     st.rerun()
@@ -291,9 +312,132 @@ def _render_template_section():
 # Main Page Render
 # ============================================================
 
+_ACTION_COLORS = {
+    "created":   ("#16a34a", "#dcfce7"),
+    "updated":   ("#2563eb", "#dbeafe"),
+    "finalized": ("#1e3a5f", "#e0f2fe"),
+    "reviewed":  ("#7c3aed", "#ede9fe"),
+    "paid":      ("#0d9488", "#ccfbf1"),
+    "approved":  ("#16a34a", "#dcfce7"),
+    "rejected":  ("#dc2626", "#fee2e2"),
+    "deleted":   ("#dc2626", "#fee2e2"),
+}
+
+_ENTITY_LABELS = {
+    "employee":         "Employee",
+    "pay_period":       "Pay Period",
+    "payroll_entries":  "Payroll Entries",
+    "leave_request":    "Leave Request",
+    "overtime_request": "OT Request",
+    "company":          "Company",
+    "leave_template":   "Leave Template",
+}
+
+_PH_TZ = timezone(timedelta(hours=8))
+
+
+def _action_badge(action: str) -> str:
+    fg, bg = _ACTION_COLORS.get(action, ("#6b7280", "#f3f4f6"))
+    return (
+        f'<span style="background:{bg};color:{fg};padding:2px 10px;border-radius:12px;'
+        f'font-size:11px;font-weight:700;letter-spacing:.3px;white-space:nowrap">'
+        f'{action.upper()}</span>'
+    )
+
+
+def _log_matches_search(log: dict, q: str) -> bool:
+    """Return True if any searchable field in the log entry contains q (case-insensitive)."""
+    haystack = " ".join([
+        log.get("entity_label") or "",
+        log.get("action") or "",
+        log.get("entity_type") or "",
+        log.get("user_email") or "",
+        " ".join(f"{k} {v}" for k, v in (log.get("details") or {}).items()),
+    ]).lower()
+    return q in haystack
+
+
+def _render_activity_log_tab():
+    logs = _load_audit_logs()
+
+    search_col, type_col, count_col = st.columns([3, 2, 2])
+    with search_col:
+        search_q = st.text_input(
+            "Search",
+            placeholder="Search by name, amount, field changed…",
+            label_visibility="collapsed",
+        ).strip().lower()
+    with type_col:
+        entity_options = ["All"] + list(_ENTITY_LABELS.keys())
+        selected_entity = st.selectbox(
+            "Filter by type",
+            options=entity_options,
+            format_func=lambda x: "All types" if x == "All" else _ENTITY_LABELS.get(x, x),
+            label_visibility="collapsed",
+        )
+
+    # Apply type filter then search filter
+    filtered = logs if selected_entity == "All" else [l for l in logs if l.get("entity_type") == selected_entity]
+    if search_q:
+        filtered = [l for l in filtered if _log_matches_search(l, search_q)]
+
+    with count_col:
+        st.caption(f"{len(filtered)} entr{'y' if len(filtered) == 1 else 'ies'}")
+
+    if not filtered:
+        st.info("No activity logged yet. Actions like saving payroll, approving leave, or editing employees will appear here.")
+        return
+
+    for log in filtered:
+        # Format timestamp in PH time
+        ts_raw = log.get("created_at", "")
+        try:
+            dt = datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).astimezone(_PH_TZ)
+            ts = dt.strftime("%b %d, %Y %I:%M %p")
+        except Exception:
+            ts = ts_raw[:16]
+
+        actor   = log.get("user_email") or "System"
+        action  = log.get("action", "")
+        etype   = _ENTITY_LABELS.get(log.get("entity_type", ""), log.get("entity_type", ""))
+        elabel  = log.get("entity_label") or ""
+        details = log.get("details") or {}
+
+        badge_html = _action_badge(action)
+        details_html = ""
+        if details:
+            parts = []
+            for k, v in details.items():
+                v_str = str(v)
+                if " → " in v_str:
+                    old_val, new_val = v_str.split(" → ", 1)
+                    val_html = (
+                        f'<span style="color:#dc2626">{old_val}</span>'
+                        f'<span style="color:#9ca3af"> → </span>'
+                        f'<span style="color:#16a34a">{new_val}</span>'
+                    )
+                else:
+                    val_html = f'<span style="color:#374151">{v_str}</span>'
+                parts.append(
+                    f'<span style="color:#6b7280">{k}:</span> {val_html}'
+                )
+            items_html = '<span style="color:#d1d5db;margin:0 6px">|</span>'.join(parts)
+            details_html = f'<div style="font-size:11px;margin-top:5px;display:flex;flex-wrap:wrap;gap:4px 0">{items_html}</div>'
+
+        st.markdown(
+            f'<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 14px;margin-bottom:6px">'
+            f'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+            f'<span style="color:#9ca3af;font-size:11px;white-space:nowrap">{ts}</span>'
+            f'{badge_html}'
+            f'<span style="font-size:13px;color:#374151"><strong>{etype}</strong> — {elabel}</span>'
+            f'<span style="margin-left:auto;font-size:11px;color:#9ca3af;white-space:nowrap">{actor}</span>'
+            f'</div>{details_html}</div>',
+            unsafe_allow_html=True,
+        )
+
+
 def render():
     st.title("Company Setup")
-    st.caption("Configure your company details. These appear on payslips and government reports.")
 
     # Show confirmation after save
     if st.session_state.pop("company_saved", False):
@@ -305,95 +449,107 @@ def render():
         st.error("No company found. Please contact your administrator.")
         return
 
-    # ── Main company settings form ────────────────────────────────────────────
-    with st.form("company_setup_form"):
+    tab_settings, tab_templates, tab_log = st.tabs([
+        "⚙️ Company Settings",
+        "🏖 Leave Templates",
+        "📋 Activity Log",
+    ])
 
-        # --- Company Information ---
-        st.subheader("Company Information")
-        col1, col2 = st.columns(2)
+    with tab_settings:
+        st.caption("Configure your company details. These appear on payslips and government reports.")
 
-        with col1:
-            name = st.text_input("Company Name *", value=company.get("name", ""))
-        with col2:
-            region_index = REGIONS.index(company.get("region", "NCR")) if company.get("region", "NCR") in REGIONS else 0
-            region = st.selectbox(
-                "Region *",
-                options=REGIONS,
-                index=region_index,
-                help="Affects minimum wage computation",
+        # ── Main company settings form ──────────────────────────────────────
+        with st.form("company_setup_form"):
+
+            # --- Company Information ---
+            st.subheader("Company Information")
+            col1, col2 = st.columns(2)
+
+            with col1:
+                name = st.text_input("Company Name *", value=company.get("name", ""))
+            with col2:
+                region_index = REGIONS.index(company.get("region", "NCR")) if company.get("region", "NCR") in REGIONS else 0
+                region = st.selectbox(
+                    "Region *",
+                    options=REGIONS,
+                    index=region_index,
+                    help="Affects minimum wage computation",
+                )
+
+            address = st.text_area("Company Address", value=company.get("address", "") or "", height=80)
+
+            freq_index = PAY_FREQUENCIES.index(company.get("pay_frequency", "semi-monthly"))
+            pay_frequency = st.selectbox(
+                "Pay Frequency",
+                options=PAY_FREQUENCIES,
+                index=freq_index,
+                help="How often employees are paid",
             )
 
-        address = st.text_area("Company Address", value=company.get("address", "") or "", height=80)
+            # --- Government Registration Numbers ---
+            st.subheader("Government Registration Numbers")
+            st.caption("These are used in government remittance reports.")
 
-        freq_index = PAY_FREQUENCIES.index(company.get("pay_frequency", "semi-monthly"))
-        pay_frequency = st.selectbox(
-            "Pay Frequency",
-            options=PAY_FREQUENCIES,
-            index=freq_index,
-            help="How often employees are paid",
-        )
+            col1, col2 = st.columns(2)
+            with col1:
+                bir_tin = st.text_input("BIR TIN", value=company.get("bir_tin", "") or "")
+                sss_no = st.text_input("SSS Employer No.", value=company.get("sss_employer_no", "") or "")
+            with col2:
+                philhealth_no = st.text_input("PhilHealth Employer No.", value=company.get("philhealth_employer_no", "") or "")
+                pagibig_no = st.text_input("Pag-IBIG Employer No.", value=company.get("pagibig_employer_no", "") or "")
 
-        # --- Government Registration Numbers ---
-        st.subheader("Government Registration Numbers")
-        st.caption("These are used in government remittance reports.")
+            # --- Leave Policy ---
+            st.subheader("Leave Policy")
+            st.caption(
+                "Set when leave balances reset. "
+                "To configure how many VL/SL/CL days each group of employees gets, "
+                "use the **Leave Templates** tab."
+            )
 
-        col1, col2 = st.columns(2)
-        with col1:
-            bir_tin = st.text_input("BIR TIN", value=company.get("bir_tin", "") or "")
-            sss_no = st.text_input("SSS Employer No.", value=company.get("sss_employer_no", "") or "")
-        with col2:
-            philhealth_no = st.text_input("PhilHealth Employer No.", value=company.get("philhealth_employer_no", "") or "")
-            pagibig_no = st.text_input("Pag-IBIG Employer No.", value=company.get("pagibig_employer_no", "") or "")
+            replenishment_opts = {
+                "annual":      "Annual — resets every January 1",
+                "anniversary": "Anniversary — resets on each employee's hire date",
+            }
+            current_rep = company.get("leave_replenishment", "annual")
+            rep_idx = list(replenishment_opts.keys()).index(current_rep) if current_rep in replenishment_opts else 0
+            leave_replenishment = st.selectbox(
+                "Leave Balance Replenishment Policy",
+                options=list(replenishment_opts.keys()),
+                format_func=lambda k: replenishment_opts[k],
+                index=rep_idx,
+                help=(
+                    "Annual: all employees' leave balances reset to full on 1 January each year.\n"
+                    "Anniversary: each employee's leave resets on their own hire anniversary."
+                ),
+            )
 
-        # --- Leave Policy ---
-        st.subheader("Leave Policy")
-        st.caption(
-            "Set when leave balances reset. "
-            "To configure how many VL/SL/CL days each group of employees gets, "
-            "use the **Leave Entitlement Templates** section below."
-        )
+            # --- Submit ---
+            submitted = st.form_submit_button("Save Company Settings", type="primary", use_container_width=True)
 
-        replenishment_opts = {
-            "annual":      "Annual — resets every January 1",
-            "anniversary": "Anniversary — resets on each employee's hire date",
-        }
-        current_rep = company.get("leave_replenishment", "annual")
-        rep_idx = list(replenishment_opts.keys()).index(current_rep) if current_rep in replenishment_opts else 0
-        leave_replenishment = st.selectbox(
-            "Leave Balance Replenishment Policy",
-            options=list(replenishment_opts.keys()),
-            format_func=lambda k: replenishment_opts[k],
-            index=rep_idx,
-            help=(
-                "Annual: all employees' leave balances reset to full on 1 January each year.\n"
-                "Anniversary: each employee's leave resets on their own hire anniversary."
-            ),
-        )
+            if submitted:
+                if not name.strip():
+                    st.error("Company name is required.")
+                else:
+                    try:
+                        _update_company({
+                            "name": name.strip(),
+                            "address": address.strip(),
+                            "region": region,
+                            "pay_frequency": pay_frequency,
+                            "bir_tin": bir_tin.strip(),
+                            "sss_employer_no": sss_no.strip(),
+                            "philhealth_employer_no": philhealth_no.strip(),
+                            "pagibig_employer_no": pagibig_no.strip(),
+                            "leave_replenishment": leave_replenishment,
+                        })
+                        log_action("updated", "company", get_company_id(), name.strip())
+                        st.session_state.company_saved = True
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error saving: {e}")
 
-        # --- Submit ---
-        submitted = st.form_submit_button("Save Company Settings", type="primary", use_container_width=True)
+    with tab_templates:
+        _render_template_section()
 
-        if submitted:
-            if not name.strip():
-                st.error("Company name is required.")
-            else:
-                try:
-                    _update_company({
-                        "name": name.strip(),
-                        "address": address.strip(),
-                        "region": region,
-                        "pay_frequency": pay_frequency,
-                        "bir_tin": bir_tin.strip(),
-                        "sss_employer_no": sss_no.strip(),
-                        "philhealth_employer_no": philhealth_no.strip(),
-                        "pagibig_employer_no": pagibig_no.strip(),
-                        "leave_replenishment": leave_replenishment,
-                    })
-                    st.session_state.company_saved = True
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error saving: {e}")
-
-    # ── Leave Entitlement Templates (outside main form) ───────────────────────
-    st.divider()
-    _render_template_section()
+    with tab_log:
+        _render_activity_log_tab()

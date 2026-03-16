@@ -241,50 +241,16 @@ def generate_all_payslips_pdf(
     Returns:
         Combined PDF as bytes.
     """
-    from reportlab.platypus import PageBreak
+    from pypdf import PdfWriter
 
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        topMargin=15 * mm,
-        bottomMargin=15 * mm,
-        leftMargin=15 * mm,
-        rightMargin=15 * mm,
-    )
-
-    all_elements = []
-
-    for i, emp in enumerate(employees):
-        if emp["id"] not in entries:
-            continue
-
-        # Generate elements for this employee's payslip
-        # (reuse single payslip logic by generating individual PDF and
-        #  extracting — but simpler to just build elements inline)
-        entry = entries[emp["id"]]
-        single_pdf = generate_payslip_pdf(company, emp, pay_period, entry)
-
-        # For combined PDF, we generate each one separately and merge
-        # Actually, let's use a simpler approach — just concatenate
-        if i > 0:
-            all_elements.append(PageBreak())
-
-        # Re-build the elements for this employee
-        # (We'll call the single generator and merge at the byte level)
-        pass
-
-    # Simpler approach: generate individual PDFs and merge with reportlab
-    # For now, if only one employee, return single. For multiple, merge.
-    from PyPDF2 import PdfMerger
-    merger = PdfMerger()
+    writer = PdfWriter()
 
     for emp in employees:
         if emp["id"] not in entries:
             continue
         single = generate_payslip_pdf(company, emp, pay_period, entries[emp["id"]])
-        merger.append(io.BytesIO(single))
+        writer.append(io.BytesIO(single))
 
     output = io.BytesIO()
-    merger.write(output)
+    writer.write(output)
     return output.getvalue()

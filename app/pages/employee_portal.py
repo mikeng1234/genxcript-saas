@@ -14,6 +14,8 @@ from app.db_helper import get_db, get_company_id
 from app.auth import get_current_user_email
 from app.styles import inject_css, status_badge
 from reports.payslip_pdf import generate_payslip_pdf
+from reports.coe_pdf import generate_coe_pdf
+from reports.bir2316_pdf import generate_bir2316_pdf
 
 
 # ============================================================
@@ -64,6 +66,50 @@ def _load_company() -> dict:
     db = get_db()
     result = db.table("companies").select("*").eq("id", get_company_id()).execute()
     return result.data[0] if result.data else {}
+
+
+_ANNUAL_FIELDS = [
+    "gross_pay", "basic_pay", "overtime_pay", "holiday_pay", "night_differential",
+    "allowances_nontaxable", "allowances_taxable", "commission",
+    "thirteenth_month_accrual",
+    "sss_employee", "philhealth_employee", "pagibig_employee", "withholding_tax",
+]
+
+
+def _load_employee_annual(employee_id: str, year: int) -> dict | None:
+    """Aggregate payroll_entries for one employee across all finalized/paid periods in `year`.
+
+    Returns a summed centavo dict or None if no data.
+    """
+    db = get_db()
+    period_result = (
+        db.table("pay_periods")
+        .select("id")
+        .eq("company_id", get_company_id())
+        .in_("status", ["finalized", "paid"])
+        .gte("period_start", f"{year}-01-01")
+        .lte("period_start", f"{year}-12-31")
+        .execute()
+    )
+    period_ids = [row["id"] for row in period_result.data]
+    if not period_ids:
+        return None
+
+    entry_result = (
+        db.table("payroll_entries")
+        .select("*")
+        .eq("employee_id", employee_id)
+        .in_("pay_period_id", period_ids)
+        .execute()
+    )
+    if not entry_result.data:
+        return None
+
+    agg = {f: 0 for f in _ANNUAL_FIELDS}
+    for row in entry_result.data:
+        for f in _ANNUAL_FIELDS:
+            agg[f] += row.get(f) or 0
+    return agg
 
 
 def _get_employee_record() -> dict | None:
@@ -936,6 +982,110 @@ def _render_time_leave(emp: dict, company: dict):
 
 
 # ============================================================
+# Section 5: Documents Tab
+# ============================================================
+
+def _render_documents(emp: dict, company: dict):
+    st.markdown("##### Available Documents")
+    st.caption(
+        "Download official HR documents. "
+        "These are generated from your current employment record."
+    )
+
+    # ── Certificate of Employment ──────────────────────────────────────────────
+    st.markdown(
+        '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;'
+        'margin-bottom:12px;background:#f9fafb;">'
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+        '<div>'
+        '<div style="font-size:15px;font-weight:700;color:#1f2937">📄 Certificate of Employment</div>'
+        '<div style="font-size:13px;color:#6b7280;margin-top:4px">'
+        'Confirms your current employment status, position, and start date. '
+        'Accepted by banks, government agencies, and embassies.'
+        '</div>'
+        '</div>'
+        '</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    _, btn_col1, btn_col2 = st.columns([2.5, 1, 1])
+    from datetime import date as _date
+    today_str = _date.today().isoformat()
+    with btn_col1:
+        try:
+            coe_bytes = generate_coe_pdf(company, emp, include_salary=True)
+            st.download_button(
+                label="⬇ With Salary",
+                data=coe_bytes,
+                file_name=f"COE_{emp['employee_no']}_{today_str}_with_salary.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                key="dl_coe_salary",
+                help="Includes your basic salary amount",
+            )
+        except Exception as ex:
+            st.error(f"Could not generate COE: {ex}")
+    with btn_col2:
+        try:
+            coe_bytes = generate_coe_pdf(company, emp, include_salary=False)
+            st.download_button(
+                label="⬇ Without Salary",
+                data=coe_bytes,
+                file_name=f"COE_{emp['employee_no']}_{today_str}_no_salary.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                key="dl_coe_no_salary",
+                help="Does not disclose salary information",
+            )
+        except Exception as ex:
+            st.error(f"Could not generate COE: {ex}")
+
+    # ── BIR Form 2316 ─────────────────────────────────────────────────────────
+    st.markdown(
+        '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;'
+        'margin-bottom:12px;background:#f9fafb;">'
+        '<div style="font-size:15px;font-weight:700;color:#1f2937">📋 BIR Form 2316</div>'
+        '<div style="font-size:13px;color:#6b7280;margin-top:4px">'
+        'Certificate of Compensation Payment / Tax Withheld. '
+        'Required for annual income tax return filing.'
+        '</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    year_col, _ = st.columns([2, 5])
+    with year_col:
+        year_options = [date.today().year - i for i in range(0, 3)]
+        sel_year = st.selectbox("Select Year", year_options, key="portal_bir2316_year")
+
+    agg = _load_employee_annual(emp["id"], sel_year)
+
+    if agg is None:
+        st.info(f"No finalized payroll data found for {sel_year}.")
+    else:
+        _, dl_col = st.columns([3, 2])
+        with dl_col:
+            try:
+                pdf_bytes = generate_bir2316_pdf(company, emp, agg, sel_year)
+                st.download_button(
+                    label=f"⬇ Download BIR 2316 ({sel_year})",
+                    data=pdf_bytes,
+                    file_name=f"BIR2316_{emp.get('employee_no', emp['id'])}_{sel_year}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_bir2316",
+                )
+            except Exception as ex:
+                st.error(f"Could not generate BIR 2316: {ex}")
+
+    st.divider()
+    st.caption(
+        "Need a document not listed here? Contact your HR department to request it."
+    )
+
+
+# ============================================================
 # Main Render
 # ============================================================
 
@@ -952,7 +1102,9 @@ def render():
     _render_hero(emp, company)
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    tab_profile, tab_payslips, tab_leave = st.tabs(["My Profile", "My Payslips", "My Time & Leave"])
+    tab_profile, tab_payslips, tab_leave, tab_docs = st.tabs([
+        "My Profile", "My Payslips", "My Time & Leave", "My Documents",
+    ])
 
     with tab_profile:
         profile = _get_profile(emp["id"])
@@ -963,3 +1115,6 @@ def render():
 
     with tab_leave:
         _render_time_leave(emp, company)
+
+    with tab_docs:
+        _render_documents(emp, company)

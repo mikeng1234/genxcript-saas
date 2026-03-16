@@ -387,6 +387,22 @@ def inject_css():
         white-space: nowrap;
     }
 
+    /* ── Global: buttons never wrap text ─────────────── */
+    [data-testid="stBaseButton-primary"] > button,
+    [data-testid="stBaseButton-secondary"] > button {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    /* ── Alert Navigation Buttons (pill style) ───────── */
+    .gxp-alert-nav-btn [data-testid="stBaseButton-secondary"] > button {
+        border-radius: 20px !important;
+        font-size: 11px !important;
+        padding: 4px 14px !important;
+        border-width: 1.5px !important;
+    }
+
     /* ── Quick Action Buttons Row ────────────────────── */
     .gxp-quick-actions {
         margin-top: -12px;

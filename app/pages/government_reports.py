@@ -6,11 +6,14 @@ Generate and download mandatory government remittance reports:
 - PhilHealth RF-1 — Monthly Remittance Report
 - Pag-IBIG MCRF — Monthly Collection Remittance Form
 - BIR 1601-C — Monthly Withholding Tax Remittance
+- BIR 2316  — Annual Certificate per Employee
+- BIR 1604-C — Annual Return + Alphalist
 
 Only shows finalized/paid pay periods (draft periods have incomplete data).
 """
 
 import streamlit as st
+from datetime import date as _date
 from app.db_helper import get_db, get_company_id
 from reports.government_reports_pdf import (
     generate_sss_r3,
@@ -18,6 +21,8 @@ from reports.government_reports_pdf import (
     generate_pagibig_mcrf,
     generate_bir_1601c,
 )
+from reports.bir2316_pdf import generate_bir2316_pdf
+from reports.bir1604c_pdf import generate_bir1604c_pdf, generate_bir1604c_alphalist
 
 
 # ============================================================
@@ -75,6 +80,88 @@ def _load_payroll_entries(pay_period_id: str) -> dict:
         .execute()
     )
     return {row["employee_id"]: row for row in result.data}
+
+
+_ANNUAL_FIELDS = [
+    "gross_pay", "basic_pay", "overtime_pay", "holiday_pay", "night_differential",
+    "allowances_nontaxable", "allowances_taxable", "commission",
+    "thirteenth_month_accrual",
+    "sss_employee", "philhealth_employee", "pagibig_employee", "withholding_tax",
+]
+
+
+def _load_monthly_taxes(year: int) -> dict:
+    """Return {month_number 1-12: total_withholding_centavos} for all
+    finalized/paid pay periods whose period_start falls in `year`."""
+    db = get_db()
+    period_result = (
+        db.table("pay_periods")
+        .select("id, period_start")
+        .eq("company_id", get_company_id())
+        .in_("status", ["finalized", "paid"])
+        .gte("period_start", f"{year}-01-01")
+        .lte("period_start", f"{year}-12-31")
+        .execute()
+    )
+    if not period_result.data:
+        return {}
+
+    period_months = {
+        row["id"]: int(row["period_start"][5:7])
+        for row in period_result.data
+    }
+
+    entry_result = (
+        db.table("payroll_entries")
+        .select("pay_period_id, withholding_tax")
+        .in_("pay_period_id", list(period_months.keys()))
+        .execute()
+    )
+
+    monthly: dict[int, int] = {}
+    for row in entry_result.data:
+        month = period_months[row["pay_period_id"]]
+        monthly[month] = monthly.get(month, 0) + (row.get("withholding_tax") or 0)
+
+    return monthly
+
+
+def _load_annual_entries(year: int) -> dict:
+    """Aggregate payroll_entries for all finalized/paid periods in `year`.
+
+    Returns {employee_id: aggregated_dict} with summed centavo values.
+    Returns {} if no periods found.
+    """
+    db = get_db()
+    period_result = (
+        db.table("pay_periods")
+        .select("id")
+        .eq("company_id", get_company_id())
+        .in_("status", ["finalized", "paid"])
+        .gte("period_start", f"{year}-01-01")
+        .lte("period_start", f"{year}-12-31")
+        .execute()
+    )
+    period_ids = [row["id"] for row in period_result.data]
+    if not period_ids:
+        return {}
+
+    entry_result = (
+        db.table("payroll_entries")
+        .select("*")
+        .in_("pay_period_id", period_ids)
+        .execute()
+    )
+
+    aggregated: dict = {}
+    for row in entry_result.data:
+        eid = row["employee_id"]
+        if eid not in aggregated:
+            aggregated[eid] = {f: 0 for f in _ANNUAL_FIELDS}
+        for f in _ANNUAL_FIELDS:
+            aggregated[eid][f] += row.get(f) or 0
+
+    return aggregated
 
 
 # ============================================================
@@ -270,73 +357,197 @@ PREVIEW_FUNCS = {
 def render():
     st.title("Government Reports")
 
-    # Load finalized pay periods
-    periods = _load_pay_periods()
-
-    if not periods:
-        st.info("No finalized pay periods yet. Finalize a payroll run first to generate reports.")
-        return
-
-    # ---- Controls: Period selector + Report type ----
-    col_period, col_report = st.columns([3, 2])
-
-    with col_period:
-        period_labels = {
-            p["id"]: f"{p['period_start']} to {p['period_end']}  [{p['status'].upper()}]"
-            for p in periods
-        }
-        selected_id = st.selectbox(
-            "Select Pay Period",
-            options=[p["id"] for p in periods],
-            format_func=lambda x: period_labels[x],
-        )
-        period = next(p for p in periods if p["id"] == selected_id)
-
-    with col_report:
-        report_options = {k: f"{v['icon']} {v['title']} — {v['subtitle']}" for k, v in REPORTS.items()}
-        selected_report = st.selectbox(
-            "Select Report",
-            options=list(report_options.keys()),
-            format_func=lambda x: report_options[x],
-        )
-
-    report_info = REPORTS[selected_report]
-    period_label = f"{period['period_start']} to {period['period_end']}"
-
-    st.divider()
-
-    # ---- Load data ----
-    company = _load_company()
+    company      = _load_company()
     all_employees = _load_employees()
-    entries = _load_payroll_entries(period["id"])
 
-    # Filter to employees that have entries for this period
-    employees = [e for e in all_employees if e["id"] in entries]
+    # ============================================================
+    # Tab layout — Monthly vs Annual
+    # ============================================================
+    tab_monthly, tab_annual = st.tabs(["📅 Monthly Reports", "📑 Annual Reports"])
 
-    if not employees:
-        st.warning("No payroll entries found for this period. Compute payroll first.")
-        return
+    # ============================================================
+    # MONTHLY REPORTS TAB
+    # ============================================================
+    with tab_monthly:
+        periods = _load_pay_periods()
 
-    # ---- Report Header ----
-    st.subheader(f"{report_info['icon']} {report_info['title']}")
-    st.caption(f"{report_info['description']}")
-    st.markdown(f"**Period:** {period_label}  |  **Employees:** {len(employees)}")
+        if not periods:
+            st.info("No finalized pay periods yet. Finalize a payroll run first to generate reports.")
+        else:
+            col_period, col_report = st.columns([3, 2])
 
-    # ---- Preview Table ----
-    preview_func = PREVIEW_FUNCS[selected_report]
-    preview_func(employees, entries)
+            with col_period:
+                period_labels = {
+                    p["id"]: f"{p['period_start']} to {p['period_end']}  [{p['status'].upper()}]"
+                    for p in periods
+                }
+                selected_id = st.selectbox(
+                    "Select Pay Period",
+                    options=[p["id"] for p in periods],
+                    format_func=lambda x: period_labels[x],
+                )
+                period = next(p for p in periods if p["id"] == selected_id)
 
-    st.divider()
+            with col_report:
+                report_options = {k: f"{v['icon']} {v['title']} — {v['subtitle']}" for k, v in REPORTS.items()}
+                selected_report = st.selectbox(
+                    "Select Report",
+                    options=list(report_options.keys()),
+                    format_func=lambda x: report_options[x],
+                )
 
-    # ---- Download PDF ----
-    pdf_bytes = report_info["generator"](company, employees, entries, period_label)
-    filename = f"{report_info['filename_prefix']}_{period['period_start']}_to_{period['period_end']}.pdf"
+            report_info  = REPORTS[selected_report]
+            period_label = f"{period['period_start']} to {period['period_end']}"
 
-    st.download_button(
-        label=f"Download {report_info['title']} (PDF)",
-        data=pdf_bytes,
-        file_name=filename,
-        mime="application/pdf",
-        type="primary",
-        width="stretch",
-    )
+            st.divider()
+
+            entries   = _load_payroll_entries(period["id"])
+            employees = [e for e in all_employees if e["id"] in entries]
+
+            if not employees:
+                st.warning("No payroll entries found for this period. Compute payroll first.")
+            else:
+                # ---- Report Header ----
+                st.subheader(f"{report_info['icon']} {report_info['title']}")
+                st.caption(f"{report_info['description']}")
+                st.markdown(f"**Period:** {period_label}  |  **Employees:** {len(employees)}")
+
+                # ---- Preview Table ----
+                preview_func = PREVIEW_FUNCS[selected_report]
+                preview_func(employees, entries)
+
+                st.divider()
+
+                # ---- Download PDF ----
+                pdf_bytes = report_info["generator"](company, employees, entries, period_label)
+                filename  = (
+                    f"{report_info['filename_prefix']}_"
+                    f"{period['period_start']}_to_{period['period_end']}.pdf"
+                )
+                st.download_button(
+                    label=f"Download {report_info['title']} (PDF)",
+                    data=pdf_bytes,
+                    file_name=filename,
+                    mime="application/pdf",
+                    type="primary",
+                    width="stretch",
+                )
+
+    # ============================================================
+    # ANNUAL REPORTS TAB
+    # ============================================================
+    with tab_annual:
+        today = _date.today()
+        col_year, _ = st.columns([2, 5])
+        with col_year:
+            year_options  = [today.year - i for i in range(0, 3)]
+            selected_year = st.selectbox("Tax Year", year_options, index=0)
+
+        annual_entries = _load_annual_entries(selected_year)
+        monthly_taxes  = _load_monthly_taxes(selected_year)
+
+        if not annual_entries:
+            st.info(f"No finalized payroll data found for {selected_year}.")
+        else:
+            emp_in_year = [e for e in all_employees if e["id"] in annual_entries]
+
+            # ── BIR Form 2316 ─────────────────────────────────────────────────
+            st.subheader("📄 BIR Form 2316")
+            st.caption(
+                "Certificate of Compensation Payment / Tax Withheld — "
+                "one PDF per employee, covering the full calendar year."
+            )
+            st.markdown(f"**{len(emp_in_year)} employee(s) with payroll data for {selected_year}**")
+
+            hc = st.columns([3, 2, 2, 2, 1.5])
+            for col, label in zip(hc, ["Employee", "BIR TIN", "Gross Compensation", "Tax Withheld", ""]):
+                col.markdown(f"**{label}**")
+            st.divider()
+
+            for emp in emp_in_year:
+                agg = annual_entries.get(emp["id"])
+                if not agg:
+                    continue
+                c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 2, 1.5])
+                c1.write(f"{emp['last_name']}, {emp['first_name']}")
+                c2.write(emp.get("bir_tin") or "—")
+                c3.write(f"PHP {agg['gross_pay'] / 100:,.2f}")
+                c4.write(f"PHP {agg['withholding_tax'] / 100:,.2f}")
+                with c5:
+                    st.download_button(
+                        "⬇ 2316",
+                        data=generate_bir2316_pdf(company, emp, agg, selected_year),
+                        file_name=f"BIR2316_{emp.get('employee_no', emp['id'])}_{selected_year}.pdf",
+                        mime="application/pdf",
+                        key=f"bir2316_{emp['id']}_{selected_year}",
+                    )
+
+            # ── BIR Form 1604-C ───────────────────────────────────────────────
+            st.divider()
+            st.subheader("📑 BIR Form 1604-C")
+            st.caption(
+                "Annual Information Return of Income Taxes Withheld on Compensation — "
+                "due **January 31** of the following year."
+            )
+
+            total_tw = sum(monthly_taxes.values())
+            st.markdown(
+                f"**{len(emp_in_year)} employee(s)** · "
+                f"**Total taxes withheld {selected_year}: PHP {total_tw / 100:,.2f}**"
+            )
+
+            MONTH_NAMES = [
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December",
+            ]
+            preview_rows = [
+                {
+                    "Month": mname,
+                    "Taxes Withheld": (
+                        f"PHP {monthly_taxes[mi] / 100:,.2f}"
+                        if (mi := i + 1) in monthly_taxes else "—"
+                    ),
+                }
+                for i, mname in enumerate(MONTH_NAMES)
+            ]
+            with st.expander("Monthly Taxes Withheld — Part II preview", expanded=False):
+                st.dataframe(preview_rows, hide_index=True, use_container_width=True)
+                st.caption(
+                    "Remittance dates, bank, and TRA/eROR numbers are left blank — "
+                    "fill those in manually on the printed form."
+                )
+
+            col_form, col_alphalist = st.columns(2)
+
+            with col_form:
+                st.download_button(
+                    label="⬇ Download 1604-C Main Return",
+                    data=generate_bir1604c_pdf(company, selected_year, monthly_taxes),
+                    file_name=f"BIR_1604C_{selected_year}.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                    use_container_width=True,
+                    key=f"bir1604c_form_{selected_year}",
+                )
+                st.caption("Portrait A4 · Pre-filled company info + monthly taxes withheld")
+
+            with col_alphalist:
+                sorted_emps = sorted(emp_in_year, key=lambda e: (
+                    (e.get("last_name") or "").upper(),
+                    (e.get("first_name") or "").upper(),
+                ))
+                st.download_button(
+                    label="⬇ Download Alphalist (Annex A)",
+                    data=generate_bir1604c_alphalist(
+                        company, sorted_emps, annual_entries, selected_year
+                    ),
+                    file_name=f"BIR_1604C_Alphalist_{selected_year}.pdf",
+                    mime="application/pdf",
+                    type="secondary",
+                    use_container_width=True,
+                    key=f"bir1604c_alpha_{selected_year}",
+                )
+                st.caption(
+                    f"Landscape A4 · Schedule 1 — "
+                    f"{len(emp_in_year)} employee(s) sorted A-Z"
+                )

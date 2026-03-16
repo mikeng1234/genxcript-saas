@@ -283,54 +283,67 @@ def _render_alerts(deadlines: list[dict], periods: list[dict],
         ot_part    = f"{pending_ot} overtime request{'s' if pending_ot != 1 else ''}"    if pending_ot    else ""
         desc_parts = [p for p in [leave_part, ot_part] if p]
         alerts.append({
-            "type":  "warning",
-            "icon":  "📋",
-            "title": f"{pending_total} Leave/OT Request{'s' if pending_total != 1 else ''} Awaiting Approval",
-            "desc":  " · ".join(desc_parts) + " — open Employees to review",
-            "action": f"{pending_total} pending",
-            "_is_leave_alert": True,
+            "type":     "warning",
+            "icon":     "📋",
+            "title":    f"{pending_total} Leave/OT Request{'s' if pending_total != 1 else ''} Awaiting Approval",
+            "desc":     " · ".join(desc_parts),
+            "action":   f"{pending_total} pending",
+            "nav_page": "Employees",
+            "btn_label": f"📋  Review {pending_total} Request{'s' if pending_total != 1 else ''}",
+            "btn_key":   "dash_review_leave",
         })
 
     # Check for overdue deadlines
-    for d in deadlines:
+    for i, d in enumerate(deadlines):
         if d["days_until"] < 0:
             alerts.append({
-                "type": "overdue",
-                "icon": "\u26a0",
-                "title": f"{d['agency']} ({d['form']}) — OVERDUE",
-                "desc": f"Due {d['deadline'].strftime('%b %d')} \u2022 {abs(d['days_until'])} days overdue",
-                "action": "Remit now",
+                "type":     "overdue",
+                "icon":     "\u26a0",
+                "title":    f"{d['agency']} ({d['form']}) — OVERDUE",
+                "desc":     f"Due {d['deadline'].strftime('%b %d')} \u2022 {abs(d['days_until'])} days overdue",
+                "action":   "Remit now",
+                "nav_page": "Government Reports",
+                "btn_label": f"⬡  Open Government Reports",
+                "btn_key":   f"dash_gov_overdue_{i}",
             })
         elif d["days_until"] <= 3:
             alerts.append({
-                "type": "warning",
-                "icon": "\u23f0",
-                "title": f"{d['agency']} ({d['form']}) — Due Soon",
-                "desc": f"Due {d['deadline'].strftime('%b %d')} \u2022 {d['days_until']} day{'s' if d['days_until'] != 1 else ''} left",
-                "action": f"Due in {d['days_until']}d",
+                "type":     "warning",
+                "icon":     "\u23f0",
+                "title":    f"{d['agency']} ({d['form']}) — Due Soon",
+                "desc":     f"Due {d['deadline'].strftime('%b %d')} \u2022 {d['days_until']} day{'s' if d['days_until'] != 1 else ''} left",
+                "action":   f"Due in {d['days_until']}d",
+                "nav_page": "Government Reports",
+                "btn_label": "⬡  Open Government Reports",
+                "btn_key":   f"dash_gov_soon_{i}",
             })
 
     # Check for draft periods needing review
-    for p in periods[:3]:
+    for i, p in enumerate(periods[:3]):
         if p["status"] == "draft":
             alerts.append({
-                "type": "info",
-                "icon": "\u270e",
-                "title": f"Payroll Draft — {p['period_start']} to {p['period_end']}",
-                "desc": "Payroll entries need review and finalization",
-                "action": "Review",
+                "type":     "info",
+                "icon":     "\u270e",
+                "title":    f"Payroll Draft — {p['period_start']} to {p['period_end']}",
+                "desc":     "Payroll entries need review and finalization",
+                "action":   "Review",
+                "nav_page": "Payroll Run",
+                "btn_label": "▶  Open Payroll Run",
+                "btn_key":   f"dash_payroll_draft_{i}",
             })
         elif p["status"] == "reviewed":
             alerts.append({
-                "type": "info",
-                "icon": "\u2713",
-                "title": f"Ready to Finalize — {p['period_start']} to {p['period_end']}",
-                "desc": "Payroll reviewed and ready for finalization",
-                "action": "Finalize",
+                "type":     "info",
+                "icon":     "\u2713",
+                "title":    f"Ready to Finalize — {p['period_start']} to {p['period_end']}",
+                "desc":     "Payroll reviewed and ready for finalization",
+                "action":   "Finalize",
+                "nav_page": "Payroll Run",
+                "btn_label": "▶  Open Payroll Run",
+                "btn_key":   f"dash_payroll_reviewed_{i}",
             })
 
     if not alerts:
-        # Show all-clear message
         st.markdown("""
         <div class="gxp-alert-card gxp-alert-info" style="border-color:#16a34a;background:#f0fdf4">
             <div class="gxp-alert-icon" style="background:#dcfce7;color:#16a34a">\u2713</div>
@@ -342,31 +355,26 @@ def _render_alerts(deadlines: list[dict], periods: list[dict],
         """, unsafe_allow_html=True)
         return
 
-    st.markdown('<div class="gxp-alerts-section">', unsafe_allow_html=True)
     for a in alerts:
-        st.markdown(f"""
-        <div class="gxp-alert-card gxp-alert-{a['type']}">
-            <div class="gxp-alert-icon">{a['icon']}</div>
-            <div class="gxp-alert-body">
-                <div class="gxp-alert-title">{a['title']}</div>
-                <div class="gxp-alert-desc">{a['desc']}</div>
+        card_col, btn_col = st.columns([5, 1.6], vertical_alignment="center")
+        with card_col:
+            st.markdown(f"""
+            <div class="gxp-alert-card gxp-alert-{a['type']}">
+                <div class="gxp-alert-icon">{a['icon']}</div>
+                <div class="gxp-alert-body">
+                    <div class="gxp-alert-title">{a['title']}</div>
+                    <div class="gxp-alert-desc">{a['desc']}</div>
+                </div>
+                <div class="gxp-alert-action">{a['action']}</div>
             </div>
-            <div class="gxp-alert-action">{a['action']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # ── Streamlit action button for leave/OT alert (HTML alerts aren't clickable) ──
-    if pending_total > 0:
-        btn_col, _ = st.columns([1.6, 3])
+            """, unsafe_allow_html=True)
         with btn_col:
-            if st.button(
-                f"📋  Review {pending_total} Pending Request{'s' if pending_total != 1 else ''}",
-                use_container_width=True,
-                key="dash_review_leave",
-            ):
-                st.session_state["_nav_redirect"] = "Employees"
-                st.rerun()
+            if a.get("nav_page"):
+                st.markdown('<div class="gxp-alert-nav-btn">', unsafe_allow_html=True)
+                if st.button(a["btn_label"], key=a["btn_key"], use_container_width=True):
+                    st.session_state["_nav_redirect"] = a["nav_page"]
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ============================================================

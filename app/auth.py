@@ -77,24 +77,68 @@ def is_employee_role() -> bool:
     return get_current_role() == "employee"
 
 
-def _store_session(user_id: str, user_email: str, company_id: str, role: str = "admin"):
+def _load_accessible_companies(user_id: str, db) -> list[dict]:
+    """
+    Return all companies the user can access as:
+      [{"id": "...", "name": "...", "role": "admin|viewer|employee"}, ...]
+    Sorted by company name.
+    """
+    access = (
+        db.table("user_company_access")
+        .select("company_id, role")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not access.data:
+        return []
+
+    role_map     = {row["company_id"]: row["role"] for row in access.data}
+    company_ids  = list(role_map.keys())
+
+    companies = (
+        db.table("companies")
+        .select("id, name")
+        .in_("id", company_ids)
+        .order("name")
+        .execute()
+    )
+    return [
+        {"id": row["id"], "name": row["name"], "role": role_map.get(row["id"], "admin")}
+        for row in companies.data
+    ]
+
+
+def _store_session(
+    user_id: str,
+    user_email: str,
+    company_id: str,
+    role: str = "admin",
+    accessible_companies: list | None = None,
+    company_name: str = "",
+):
     """
     Persist session to:
     1. st.session_state (current render)
     2. Server-side cache (survives reruns)
     3. st.query_params["sid"] (survives F5 refresh)
     """
-    st.session_state.user_id    = user_id
-    st.session_state.user_email = user_email
-    st.session_state.company_id = company_id
-    st.session_state.user_role  = role
+    accessible_companies = accessible_companies or []
+
+    st.session_state.user_id               = user_id
+    st.session_state.user_email            = user_email
+    st.session_state.company_id            = company_id
+    st.session_state.user_role             = role
+    st.session_state.accessible_companies  = accessible_companies
+    st.session_state.company_name          = company_name
 
     token = str(uuid.uuid4())
     _session_cache()[token] = {
-        "user_id":    user_id,
-        "user_email": user_email,
-        "company_id": company_id,
-        "user_role":  role,
+        "user_id":               user_id,
+        "user_email":            user_email,
+        "company_id":            company_id,
+        "user_role":             role,
+        "accessible_companies":  accessible_companies,
+        "company_name":          company_name,
     }
     st.query_params["sid"] = token
 
@@ -118,10 +162,12 @@ def restore_from_query_params() -> bool:
         st.query_params.clear()
         return False
 
-    st.session_state.user_id    = session["user_id"]
-    st.session_state.user_email = session["user_email"]
-    st.session_state.company_id = session["company_id"]
-    st.session_state.user_role  = session.get("user_role", "admin")
+    st.session_state.user_id              = session["user_id"]
+    st.session_state.user_email           = session["user_email"]
+    st.session_state.company_id           = session["company_id"]
+    st.session_state.user_role            = session.get("user_role", "admin")
+    st.session_state.accessible_companies = session.get("accessible_companies", [])
+    st.session_state.company_name         = session.get("company_name", "")
     return True
 
 
@@ -131,8 +177,71 @@ def logout():
     if sid:
         _session_cache().pop(sid, None)
     st.query_params.clear()
-    for key in ["user_id", "user_email", "company_id", "user_role"]:
+    for key in ["user_id", "user_email", "company_id", "user_role",
+                "accessible_companies", "company_name", "company_switcher"]:
         st.session_state.pop(key, None)
+
+
+def update_active_company(company_id: str, role: str, company_name: str) -> None:
+    """
+    Switch the active company in session state + server cache.
+    Call this then st.rerun() to reload the page under the new company.
+    """
+    st.session_state.company_id    = company_id
+    st.session_state.user_role     = role
+    st.session_state.company_name  = company_name
+    st.session_state["company_switcher"] = company_id   # keep dropdown in sync
+
+    sid = st.query_params.get("sid")
+    if sid and sid in _session_cache():
+        cache = _session_cache()[sid]
+        cache["company_id"]           = company_id
+        cache["user_role"]            = role
+        cache["company_name"]         = company_name
+        cache["accessible_companies"] = st.session_state.get("accessible_companies", [])
+
+
+def add_accessible_company(company: dict) -> None:
+    """
+    Append a newly created company to the session's accessible list
+    and update the server cache.
+    company: {"id": "...", "name": "...", "role": "admin"}
+    """
+    accessible = list(st.session_state.get("accessible_companies") or [])
+    if not any(c["id"] == company["id"] for c in accessible):
+        accessible.append(company)
+    accessible.sort(key=lambda c: c["name"].upper())
+    st.session_state.accessible_companies = accessible
+
+    sid = st.query_params.get("sid")
+    if sid and sid in _session_cache():
+        _session_cache()[sid]["accessible_companies"] = accessible
+
+
+def ensure_accessible_companies_loaded() -> None:
+    """
+    Lazy-load accessible_companies for sessions created before this feature
+    (e.g. server cache was cleared).  No-op if already populated.
+    """
+    if st.session_state.get("accessible_companies"):
+        return
+    user_id = st.session_state.get("user_id")
+    if not user_id:
+        return
+    try:
+        from app.db_helper import get_db
+        accessible = _load_accessible_companies(user_id, get_db())
+        st.session_state.accessible_companies = accessible
+        current_id = st.session_state.get("company_id")
+        st.session_state.company_name = next(
+            (c["name"] for c in accessible if c["id"] == current_id), ""
+        )
+        sid = st.query_params.get("sid")
+        if sid and sid in _session_cache():
+            _session_cache()[sid]["accessible_companies"] = accessible
+            _session_cache()[sid]["company_name"] = st.session_state.company_name
+    except Exception:
+        pass
 
 
 # ============================================================
@@ -156,16 +265,22 @@ def _resolve_login_email(identifier: str) -> tuple[str, str]:
         svc = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
         result = (
             svc.table("employees")
-            .select("email")
-            .eq("employee_no", identifier.strip().upper())
+            .select("email, is_active")
+            .ilike("employee_no", identifier.strip())
             .execute()
         )
-        if result.data and result.data[0].get("email"):
-            return result.data[0]["email"], ""
-        return "", (
-            f"No employee found with ID '{identifier.strip().upper()}'. "
-            "Please check your Employee ID or use your email address instead."
-        )
+        if not result.data:
+            return "", (
+                f"No employee found with ID **{identifier.strip()}**. "
+                "Please double-check your Employee ID or sign in with your email address instead."
+            )
+        emp = result.data[0]
+        if not emp.get("email"):
+            return "", (
+                f"Employee **{identifier.strip()}** has no portal access set up yet. "
+                "Ask your HR admin to send you a portal invite first."
+            )
+        return emp["email"], ""
     except Exception as e:
         return "", f"Employee lookup error: {e}"
 
@@ -214,8 +329,13 @@ def login(identifier: str, password: str) -> tuple[bool, str]:
                 return True, ""
             return False, "No company linked to this account. Contact support."
 
-        row = result.data[0]
-        _store_session(str(user.id), user.email, row["company_id"], row.get("role", "admin"))
+        row          = result.data[0]
+        accessible   = _load_accessible_companies(str(user.id), db)
+        company_name = next((c["name"] for c in accessible if c["id"] == row["company_id"]), "")
+        _store_session(
+            str(user.id), user.email, row["company_id"],
+            row.get("role", "admin"), accessible, company_name,
+        )
         return True, ""
 
     except Exception as e:
@@ -270,7 +390,9 @@ def signup(
         )
 
         if confirmed:
-            _store_session(str(user.id), user.email, company_id, "admin")
+            accessible = [{"id": company_id, "name": company_name.strip(), "role": "admin"}]
+            _store_session(str(user.id), user.email, company_id, "admin",
+                           accessible, company_name.strip())
             return True, ""
         else:
             return True, "CHECK_EMAIL"

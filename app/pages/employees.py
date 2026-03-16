@@ -12,7 +12,7 @@ Features:
 import streamlit as st
 import datetime
 from datetime import date
-from app.db_helper import get_db, get_company_id
+from app.db_helper import get_db, get_company_id, log_action
 
 
 # ============================================================
@@ -101,12 +101,169 @@ def _update_employee(employee_id: str, data: dict) -> dict:
     return result.data[0]
 
 
+def _employee_diff(old: dict, new: dict, new_dept: str) -> dict:
+    """Return {field_label: 'old → new'} for fields that changed."""
+    TAX_LABELS = {"S": "Single", "ME": "Married", "ME1": "ME+1", "ME2": "ME+2", "ME3": "ME+3", "ME4": "ME+4"}
+    changes = {}
+
+    simple_fields = {
+        "first_name":      "First Name",
+        "last_name":       "Last Name",
+        "position":        "Position",
+        "employment_type": "Employment Type",
+        "salary_type":     "Salary Type",
+        "employee_no":     "Employee No.",
+    }
+    for field, label in simple_fields.items():
+        o = str(old.get(field, "") or "").strip()
+        n = str(new.get(field, "") or "").strip()
+        if o.upper() != n.upper():
+            changes[label] = f"{o or '—'} → {n or '—'}"
+
+    # Tax status — show human label
+    o_tax = old.get("tax_status", "") or ""
+    n_tax = new.get("tax_status", "") or ""
+    if o_tax != n_tax:
+        changes["Tax Status"] = f"{TAX_LABELS.get(o_tax, o_tax) or '—'} → {TAX_LABELS.get(n_tax, n_tax) or '—'}"
+
+    # Salary — centavos to pesos
+    o_sal = old.get("basic_salary", 0) or 0
+    n_sal = new.get("basic_salary", 0) or 0
+    if o_sal != n_sal:
+        changes["Salary"] = f"₱{o_sal/100:,.2f} → ₱{n_sal/100:,.2f}"
+
+    # Department (stored separately, already .upper()'d)
+    o_dept = (old.get("department", "") or "").strip().upper()
+    n_dept = (new_dept or "").strip().upper()
+    if o_dept != n_dept:
+        changes["Department"] = f"{o_dept or '—'} → {n_dept or '—'}"
+
+    return changes
+
+
+def _upsert_employee_department(employee_id: str, department: str) -> None:
+    """Upsert the department field in employee_profiles."""
+    get_db().table("employee_profiles").upsert(
+        {
+            "employee_id": employee_id,
+            "company_id":  get_company_id(),
+            "department":  department.strip(),
+        },
+        on_conflict="employee_id",
+    ).execute()
+
+
+def _load_all_departments() -> dict:
+    """Return {employee_id: department_str} for all employees in this company."""
+    try:
+        db  = get_db()
+        cid = get_company_id()
+        # Get employee_ids that belong to this company first
+        emp_ids_res = (
+            db.table("employees")
+            .select("id")
+            .eq("company_id", cid)
+            .execute()
+        )
+        ids = [r["id"] for r in (emp_ids_res.data or [])]
+        if not ids:
+            return {}
+        profiles = (
+            db.table("employee_profiles")
+            .select("employee_id, department")
+            .in_("employee_id", ids)
+            .execute()
+        )
+        return {
+            p["employee_id"]: (p.get("department") or "")
+            for p in (profiles.data or [])
+        }
+    except Exception:
+        return {}
+
+
 def _centavos_to_pesos(centavos: int) -> float:
     return centavos / 100
 
 
 def _pesos_to_centavos(pesos: float) -> int:
     return int(round(pesos * 100))
+
+
+def _load_all_employee_nos() -> list[str]:
+    """Load all employee numbers (active + inactive) to avoid collisions."""
+    db = get_db()
+    result = (
+        db.table("employees")
+        .select("employee_no")
+        .eq("company_id", get_company_id())
+        .execute()
+    )
+    return [r["employee_no"] for r in result.data]
+
+
+def _next_employee_no(existing_nos: list[str]) -> str:
+    """Suggest next employee number by incrementing the highest numeric suffix found."""
+    if not existing_nos:
+        return "EMP-001"
+    best_num = 0
+    best_prefix = ""
+    best_width = 3
+    for no in existing_nos:
+        stripped = no.rstrip("0123456789")
+        digits = no[len(stripped):]
+        if digits:
+            try:
+                n = int(digits)
+                if n > best_num:
+                    best_num = n
+                    best_prefix = stripped
+                    best_width = max(3, len(digits))
+            except ValueError:
+                pass
+    if best_num > 0:
+        return f"{best_prefix}{best_num + 1:0{best_width}d}"
+    return "EMP-001"
+
+
+def _load_distinct_positions() -> list[str]:
+    """Load sorted unique non-empty positions from this company's employees."""
+    db = get_db()
+    result = (
+        db.table("employees")
+        .select("position")
+        .eq("company_id", get_company_id())
+        .execute()
+    )
+    seen: set[str] = set()
+    positions: list[str] = []
+    for r in result.data:
+        p = (r.get("position") or "").strip().upper()
+        if p and p not in seen:
+            seen.add(p)
+            positions.append(p)
+    return sorted(positions)
+
+
+def _load_distinct_departments() -> list[str]:
+    """Load sorted unique non-empty departments from employee_profiles for this company."""
+    db = get_db()
+    cid = get_company_id()
+    emp_ids = [
+        r["id"] for r in
+        db.table("employees").select("id").eq("company_id", cid).execute().data
+    ]
+    if not emp_ids:
+        return []
+    result = db.table("employee_profiles").select("department").in_("employee_id", emp_ids).execute()
+    seen: set[str] = set()
+    departments: list[str] = []
+    for r in result.data:
+        d = (r.get("department") or "").strip().upper()
+        if d and d not in seen:
+            seen.add(d)
+            departments.append(d)
+    return sorted(departments)
 
 
 def _load_leave_templates() -> list[dict]:
@@ -147,6 +304,10 @@ def _template_label(tmpl: dict) -> str:
 # Employee Form (shared by Add and Edit)
 # ============================================================
 
+_NEW_POSITION_SENTINEL   = "— Add new position —"
+_NEW_DEPT_SENTINEL       = "— Add new department —"
+
+
 def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict | None:
     """
     Render an employee form. Returns the form data dict if submitted, else None.
@@ -155,12 +316,98 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
     is_edit = existing is not None
     defaults = existing or {}
 
-    # Load leave templates outside the form context (safe to call any time)
-    leave_templates = _load_leave_templates()
+    # Load helpers outside form (DB calls are fine here)
+    leave_templates      = _load_leave_templates()
+    distinct_positions   = _load_distinct_positions()
+    distinct_departments = _load_distinct_departments()
+
+    # Auto-suggest employee number only for new employees
+    if not is_edit:
+        all_nos = _load_all_employee_nos()
+        suggested_no = _next_employee_no(all_nos)
+    else:
+        suggested_no = defaults.get("employee_no", "")
+
+    # Resolve initial position selection
+    current_position_raw = (defaults.get("position") or "").strip().upper()
+    if current_position_raw in distinct_positions:
+        pos_dropdown_idx = distinct_positions.index(current_position_raw)
+        pos_new_default  = ""
+    else:
+        pos_dropdown_idx = len(distinct_positions)  # sentinel
+        pos_new_default  = defaults.get("position", "") or ""
+
+    position_options = distinct_positions + [_NEW_POSITION_SENTINEL]
+
+    # Resolve initial department selection
+    current_dept_raw = (defaults.get("department") or "").strip().upper()
+    if current_dept_raw in distinct_departments:
+        dept_dropdown_idx = distinct_departments.index(current_dept_raw)
+        dept_new_default  = ""
+    else:
+        dept_dropdown_idx = len(distinct_departments)  # sentinel
+        dept_new_default  = defaults.get("department", "") or ""
+
+    dept_options = distinct_departments + [_NEW_DEPT_SENTINEL]
+
+    # Session state keys — outside form for immediate reactivity
+    pos_select_key  = f"_pos_select_{form_key}"
+    pos_new_key     = f"_pos_new_{form_key}"
+    dept_select_key = f"_dept_select_{form_key}"
+    dept_new_key    = f"_dept_new_{form_key}"
+
+    if pos_select_key not in st.session_state:
+        st.session_state[pos_select_key]  = position_options[pos_dropdown_idx]
+    if pos_new_key not in st.session_state:
+        st.session_state[pos_new_key]     = pos_new_default
+    if dept_select_key not in st.session_state:
+        st.session_state[dept_select_key] = dept_options[dept_dropdown_idx]
+    if dept_new_key not in st.session_state:
+        st.session_state[dept_new_key]    = dept_new_default
+
+    st.subheader("Employee Information" if not is_edit else f"Edit: {defaults.get('first_name', '')} {defaults.get('last_name', '')}")
+
+    st.markdown(
+        """<style>
+        input[aria-label="New Position"],
+        input[aria-label="New Department"],
+        input[aria-label="Department"] { text-transform: uppercase; }
+        </style>""",
+        unsafe_allow_html=True,
+    )
+
+    # --- Position + Department selectors OUTSIDE the form (immediate reactivity) ---
+    _pc1, _pc2, _pc3, _pc4 = st.columns(4)
+    with _pc1:
+        st.selectbox(
+            "Position",
+            options=position_options,
+            key=pos_select_key,
+            help="Select an existing job title or choose '— Add new position —' to type a new one.",
+        )
+        if st.session_state.get(pos_select_key) == _NEW_POSITION_SENTINEL:
+            st.text_input(
+                "New Position",
+                key=pos_new_key,
+                placeholder="e.g. ACCOUNTING STAFF",
+                label_visibility="collapsed",
+            )
+    with _pc2:
+        st.selectbox(
+            "Department",
+            options=dept_options,
+            key=dept_select_key,
+            help="Select an existing department or choose '— Add new department —' to type a new one.",
+        )
+        if st.session_state.get(dept_select_key) == _NEW_DEPT_SENTINEL:
+            st.text_input(
+                "New Department",
+                key=dept_new_key,
+                placeholder="e.g. FINANCE",
+                label_visibility="collapsed",
+            )
 
     with st.form(key=f"employee_form_{form_key}", clear_on_submit=not is_edit):
-        st.subheader("Employee Information" if not is_edit else f"Edit: {defaults.get('first_name', '')} {defaults.get('last_name', '')}")
-
         # --- Row 1: Name and employee number ---
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -168,16 +415,23 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
         with col2:
             last_name = st.text_input("Last Name *", value=defaults.get("last_name", ""))
         with col3:
-            employee_no = st.text_input("Employee No. *", value=defaults.get("employee_no", ""))
+            employee_no = st.text_input(
+                "Employee No. *",
+                value=suggested_no,
+                help="Auto-suggested based on existing numbers. You can change it." if not is_edit else None,
+            )
 
-        # --- Row 2: Position, type, date hired ---
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            position = st.text_input("Position", value=defaults.get("position", ""))
-        with col2:
-            emp_type_index = EMPLOYMENT_TYPES.index(defaults.get("employment_type", "regular"))
-            employment_type = st.selectbox("Employment Type", EMPLOYMENT_TYPES, index=emp_type_index)
+        # --- Row 2: Employment Type, Date Hired ---
+        col3, col4 = st.columns(2)
         with col3:
+            emp_type_index = EMPLOYMENT_TYPES.index(defaults.get("employment_type", "regular"))
+            employment_type = st.selectbox(
+                "Employment Type",
+                EMPLOYMENT_TYPES,
+                index=emp_type_index,
+                format_func=str.upper,
+            )
+        with col4:
             default_date = defaults.get("date_hired", date.today().isoformat())
             if isinstance(default_date, str):
                 default_date = date.fromisoformat(default_date)
@@ -228,7 +482,7 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
             )
         with col2:
             sal_type_index = SALARY_TYPES.index(defaults.get("salary_type", "monthly"))
-            salary_type = st.selectbox("Salary Type", SALARY_TYPES, index=sal_type_index)
+            salary_type = st.selectbox("Salary Type", SALARY_TYPES, index=sal_type_index, format_func=str.upper)
         with col3:
             tax_index = TAX_STATUSES.index(defaults.get("tax_status", "S"))
             tax_status = st.selectbox(
@@ -283,11 +537,33 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
                 st.error("Basic salary must be greater than zero.")
                 return None
 
+            # Resolve position from session state (widgets live outside the form)
+            _pos_sel = st.session_state.get(pos_select_key, "")
+            if _pos_sel == _NEW_POSITION_SENTINEL:
+                resolved_position = st.session_state.get(pos_new_key, "").strip().upper()
+            else:
+                resolved_position = _pos_sel
+
+            # Resolve department from session state
+            _dept_sel = st.session_state.get(dept_select_key, "")
+            if _dept_sel == _NEW_DEPT_SENTINEL:
+                resolved_department = st.session_state.get(dept_new_key, "").strip().upper()
+            else:
+                resolved_department = _dept_sel
+
+            # Clear outside-form session state for add mode so next open starts fresh
+            if not is_edit:
+                st.session_state.pop(pos_select_key,  None)
+                st.session_state.pop(pos_new_key,     None)
+                st.session_state.pop(dept_select_key, None)
+                st.session_state.pop(dept_new_key,    None)
+
             return {
                 "employee_no":       employee_no.strip(),
                 "first_name":        first_name.strip(),
                 "last_name":         last_name.strip(),
-                "position":          position.strip(),
+                "position":          resolved_position,
+                "department":        resolved_department,
                 "employment_type":   employment_type,
                 "date_hired":        date_hired.isoformat(),
                 "basic_salary":      _pesos_to_centavos(basic_salary),
@@ -418,11 +694,13 @@ def _render_leave_request_row(req: dict):
         with ac:
             if st.button("✓ Approve", key=f"ap_lr_{req['id']}", type="primary", use_container_width=True):
                 _review_leave_request(req["id"], "approved", st.session_state.get(note_key, ""))
+                log_action("approved", "leave_request", req["id"], f"{name} - {lt_lbl}", {"dates": f"{start} to {end}"})
                 st.session_state["_review_toast"] = ("success", f"Leave request for **{name}** approved.")
                 st.rerun()
         with rc:
             if st.button("✗ Reject", key=f"rej_lr_{req['id']}", use_container_width=True):
                 _review_leave_request(req["id"], "rejected", st.session_state.get(note_key, ""))
+                log_action("rejected", "leave_request", req["id"], f"{name} - {lt_lbl}", {"dates": f"{start} to {end}"})
                 st.session_state["_review_toast"] = ("error", f"Leave request for **{name}** rejected.")
                 st.rerun()
 
@@ -469,11 +747,13 @@ def _render_ot_request_row(req: dict):
         with ac:
             if st.button("✓ Approve", key=f"ap_ot_{req['id']}", type="primary", use_container_width=True):
                 _review_ot_request(req["id"], "approved", st.session_state.get(note_key, ""))
+                log_action("approved", "overtime_request", req["id"], f"{name} - {ot_date}", {"hours": hours})
                 st.session_state["_review_toast"] = ("success", f"OT request for **{name}** approved.")
                 st.rerun()
         with rc:
             if st.button("✗ Reject", key=f"rej_ot_{req['id']}", use_container_width=True):
                 _review_ot_request(req["id"], "rejected", st.session_state.get(note_key, ""))
+                log_action("rejected", "overtime_request", req["id"], f"{name} - {ot_date}", {"hours": hours})
                 st.session_state["_review_toast"] = ("error", f"OT request for **{name}** rejected.")
                 st.rerun()
 
@@ -574,7 +854,11 @@ def _render_employees_tab():
         new_data = _employee_form(form_key="add_new")
         if new_data is not None:
             try:
-                _create_employee(new_data)
+                dept = new_data.pop("department", "")
+                result = _create_employee(new_data)
+                if dept:
+                    _upsert_employee_department(result["id"], dept)
+                log_action("created", "employee", result["id"], f"{new_data['first_name']} {new_data['last_name']}")
                 st.session_state.show_add_form = False
                 st.success(f"Added {new_data['first_name']} {new_data['last_name']}")
                 st.rerun()
@@ -585,8 +869,11 @@ def _render_employees_tab():
                 else:
                     st.error(f"Error adding employee: {error_msg}")
 
-    # --- Load employees ---
-    employees = _load_employees(show_inactive=show_inactive)
+    # --- Load employees + departments ---
+    employees   = _load_employees(show_inactive=show_inactive)
+    dept_lookup = _load_all_departments()
+    for emp in employees:
+        emp["department"] = dept_lookup.get(emp["id"], "")
 
     # --- Onboarding summary banner ---
     if employees:
@@ -631,14 +918,14 @@ def _render_employees_tab():
     st.caption(f"Showing {len(filtered)} employee{'s' if len(filtered) != 1 else ''}")
 
     # Table header
-    cols = st.columns([1, 2, 2, 2, 1.5, 1, 1, 2])
-    for col, header in zip(cols, ["No.", "Name", "Position", "Salary", "Type", "IDs", "Status", "Actions"]):
+    cols = st.columns([1, 2.5, 2, 2, 1.5, 1, 1, 3])
+    for col, header in zip(cols, ["No.", "Name", "Position / Dept", "Salary", "Type", "IDs", "Status", "Actions"]):
         col.markdown(f"**{header}**")
 
     # Table rows
     for emp in filtered:
         completed, missing = _onboarding_status(emp)
-        cols = st.columns([1, 2, 2, 2, 1.5, 1, 1, 2])
+        cols = st.columns([1, 2.5, 2, 2, 1.5, 1, 1, 3])
 
         with cols[0]:
             st.text(emp["employee_no"])
@@ -647,7 +934,11 @@ def _render_employees_tab():
             portal_status = " 🔗" if emp.get("user_id") else ""
             st.text(name_display + portal_status)
         with cols[2]:
-            st.text(emp.get("position", "—") or "—")
+            pos  = emp.get("position", "") or "—"
+            dept = emp.get("department", "") or ""
+            st.text(pos)
+            if dept:
+                st.caption(dept)
         with cols[3]:
             salary_display = f"₱{_centavos_to_pesos(emp['basic_salary']):,.2f}/{emp['salary_type'][:2]}"
             st.text(salary_display)
@@ -789,7 +1080,11 @@ def _render_employees_tab():
             updated = _employee_form(existing=emp, form_key=f"edit_{emp['id']}")
             if updated is not None:
                 try:
+                    dept = updated.pop("department", "")
+                    changes = _employee_diff(emp, updated, dept)
                     _update_employee(emp["id"], updated)
+                    _upsert_employee_department(emp["id"], dept)
+                    log_action("updated", "employee", emp["id"], f"{updated['first_name']} {updated['last_name']}", details=changes)
                     st.session_state.editing_id = None
                     st.success(f"Updated {updated['first_name']} {updated['last_name']}")
                     st.rerun()
@@ -821,15 +1116,47 @@ def render():
             else:
                 st.error(msg)
 
-    # ── Pending count for tab label badge ─────────────────────────────────────
+    # ── Pending count for tab notification badge ──────────────────────────────
     pending_lr, pending_ot = _count_pending_admin()
     pending_total = pending_lr + pending_ot
-    approvals_label = (
-        f"📋 Leave & OT Approvals  · {pending_total} pending"
-        if pending_total else "📋 Leave & OT Approvals"
-    )
 
-    tab_emp, tab_approvals = st.tabs(["👥 Employees", approvals_label])
+    if pending_total > 0:
+        st.markdown(
+            f"""<style>
+            /* Notification badge on the Leave & OT Approvals tab (2nd tab) */
+            button[data-baseweb="tab"]:nth-child(2) p {{
+                position: relative !important;
+                padding-right: 20px !important;
+            }}
+            button[data-baseweb="tab"]:nth-child(2) p::after {{
+                content: "{pending_total}";
+                position: absolute;
+                top: -5px;
+                right: 0;
+                background: #ef4444;
+                color: white;
+                border-radius: 9999px;
+                min-width: 16px;
+                height: 16px;
+                font-size: 10px;
+                font-weight: 800;
+                text-align: center;
+                line-height: 16px;
+                padding: 0 3px;
+                box-sizing: border-box;
+            }}
+            /* Exclude inner/nested tabs that are inside a tab-panel */
+            div[data-baseweb="tab-panel"] button[data-baseweb="tab"]:nth-child(2) p {{
+                padding-right: 0 !important;
+            }}
+            div[data-baseweb="tab-panel"] button[data-baseweb="tab"]:nth-child(2) p::after {{
+                display: none !important;
+            }}
+            </style>""",
+            unsafe_allow_html=True,
+        )
+
+    tab_emp, tab_approvals = st.tabs(["👥 Employees", "📋 Leave & OT Approvals"])
 
     with tab_emp:
         _render_employees_tab()

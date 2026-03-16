@@ -12,7 +12,11 @@ import streamlit as st
 from datetime import date, timedelta
 import calendar
 from backend.payroll import compute_payroll
-from app.db_helper import get_db, get_company_id
+from app.db_helper import get_db, get_company_id, log_action
+from app.styles import (
+    inject_css, status_badge, info_bar, fin_table, remit_card,
+    progress_bar, GOV_COLORS,
+)
 import plotly.graph_objects as go
 import pandas as pd
 
@@ -309,12 +313,13 @@ def _render_pay_period_selector() -> dict | None:
                     st.error("Period End must be after Period Start.")
                 else:
                     try:
-                        _create_pay_period({
+                        new_period = _create_pay_period({
                             "period_start": p_start.isoformat(),
                             "period_end":   p_end.isoformat(),
                             "payment_date": p_pay.isoformat(),
                             "status": "draft",
                         })
+                        log_action("created", "pay_period", new_period["id"], f"{p_start} to {p_end}")
                         st.session_state.show_new_period = False
                         for k in ("np_start", "np_end", "np_pay", "np_start_prev"):
                             st.session_state.pop(k, None)
@@ -338,8 +343,10 @@ def _render_employee_payroll(emp: dict, period_id: str, is_finalized: bool, entr
 
     name = f"{emp['first_name']} {emp['last_name']}"
     salary_display = _fmt(emp["basic_salary"])
+    is_computed = emp["id"] in entries
+    check = "[Done]" if is_computed else "[Pending]"
 
-    with st.expander(f"{emp['employee_no']} — {name}  |  Basic: {salary_display}", expanded=False):
+    with st.expander(f"{check}  {emp['employee_no']} — {name}  |  Basic: {salary_display}", expanded=False):
 
         if is_finalized:
             _render_payroll_summary(saved)
@@ -501,6 +508,7 @@ def _render_employee_payroll(emp: dict, period_id: str, is_finalized: bool, entr
             try:
                 saved_entry = _upsert_payroll_entry(period_id, emp["id"], entry_data)
                 entries[emp["id"]] = saved_entry
+                log_action("updated", "payroll_entries", period_id, f"Entry for {name}", {"net_pay": entry_data["net_pay"]})
                 st.success(f"Computed: {name} — Net Pay: {_fmt(entry_data['net_pay'])}")
             except Exception as e:
                 st.error(f"Error saving: {e}")
@@ -520,42 +528,51 @@ def _render_payroll_summary(entry: dict):
     col_earn, col_ded, col_net = st.columns(3)
 
     with col_earn:
-        st.markdown("**Earnings**")
-        st.text(f"Basic Pay:       {_fmt(entry.get('basic_pay', 0))}")
-        st.text(f"Overtime:        {_fmt(entry.get('overtime_pay', 0))}")
-        st.text(f"Holiday Pay:     {_fmt(entry.get('holiday_pay', 0))}")
-        st.text(f"Night Diff:      {_fmt(entry.get('night_differential', 0))}")
-        st.text(f"Allow (NT):      {_fmt(entry.get('allowances_nontaxable', 0))}")
-        st.text(f"Allow (Tax):     {_fmt(entry.get('allowances_taxable', 0))}")
-        st.text(f"Commission:      {_fmt(entry.get('commission', 0))}")
-        st.text(f"13th Month:      {_fmt(entry.get('thirteenth_month_accrual', 0))}")
-        st.markdown(f"**Gross Pay:     {_fmt(entry.get('gross_pay', 0))}**")
+        st.markdown(fin_table(
+            [
+                ("Basic Pay",       _fmt(entry.get("basic_pay", 0))),
+                ("Overtime",        _fmt(entry.get("overtime_pay", 0))),
+                ("Holiday Pay",     _fmt(entry.get("holiday_pay", 0))),
+                ("Night Diff",      _fmt(entry.get("night_differential", 0))),
+                ("Allow (NT)",      _fmt(entry.get("allowances_nontaxable", 0))),
+                ("Allow (Tax)",     _fmt(entry.get("allowances_taxable", 0))),
+                ("Commission",      _fmt(entry.get("commission", 0))),
+                ("13th Month",      _fmt(entry.get("thirteenth_month_accrual", 0))),
+            ],
+            total=("Gross Pay", _fmt(entry.get("gross_pay", 0))),
+        ), unsafe_allow_html=True)
 
     with col_ded:
-        st.markdown("**Deductions**")
-        st.text(f"SSS (EE):        {_fmt(entry.get('sss_employee', 0))}")
-        st.text(f"PhilHealth (EE): {_fmt(entry.get('philhealth_employee', 0))}")
-        st.text(f"Pag-IBIG (EE):   {_fmt(entry.get('pagibig_employee', 0))}")
-        st.text(f"Withholding Tax: {_fmt(entry.get('withholding_tax', 0))}")
-        st.markdown("*Voluntary:*")
-        st.text(f"SSS Loan:        {_fmt(entry.get('sss_loan', 0))}")
-        st.text(f"Pag-IBIG Loan:   {_fmt(entry.get('pagibig_loan', 0))}")
-        st.text(f"Cash Advance:    {_fmt(entry.get('cash_advance', 0))}")
-        st.text(f"Other:           {_fmt(entry.get('other_deductions', 0))}")
-        st.markdown(f"**Total Ded:     {_fmt(entry.get('total_deductions', 0))}**")
+        st.markdown(fin_table(
+            [
+                ("SSS (EE)",        _fmt(entry.get("sss_employee", 0))),
+                ("PhilHealth (EE)", _fmt(entry.get("philhealth_employee", 0))),
+                ("Pag-IBIG (EE)",   _fmt(entry.get("pagibig_employee", 0))),
+                ("Withholding Tax", _fmt(entry.get("withholding_tax", 0))),
+                ("SSS Loan",        _fmt(entry.get("sss_loan", 0))),
+                ("Pag-IBIG Loan",   _fmt(entry.get("pagibig_loan", 0))),
+                ("Cash Advance",    _fmt(entry.get("cash_advance", 0))),
+                ("Other",           _fmt(entry.get("other_deductions", 0))),
+            ],
+            total=("Total Deductions", _fmt(entry.get("total_deductions", 0))),
+        ), unsafe_allow_html=True)
 
     with col_net:
-        st.markdown("**Summary**")
         er_total = entry.get("sss_employer", 0) + entry.get("philhealth_employer", 0) + entry.get("pagibig_employer", 0)
-        st.markdown("")
-        st.markdown("*Employer Cost:*")
-        st.text(f"SSS (ER):        {_fmt(entry.get('sss_employer', 0))}")
-        st.text(f"PhilHealth (ER): {_fmt(entry.get('philhealth_employer', 0))}")
-        st.text(f"Pag-IBIG (ER):   {_fmt(entry.get('pagibig_employer', 0))}")
-        st.text(f"Total ER Cost:   {_fmt(er_total)}")
-        st.markdown("")
+        st.markdown(fin_table(
+            [
+                ("SSS (ER)",        _fmt(entry.get("sss_employer", 0))),
+                ("PhilHealth (ER)", _fmt(entry.get("philhealth_employer", 0))),
+                ("Pag-IBIG (ER)",   _fmt(entry.get("pagibig_employer", 0))),
+                ("Employer Total",  _fmt(er_total)),
+            ],
+        ), unsafe_allow_html=True)
         net = entry.get("net_pay", 0)
-        st.markdown(f"### Net Pay: {_fmt(net)}")
+        st.markdown(
+            f'<div style="margin-top:16px;font-size:20px;font-weight:700;color:#065f46">'
+            f'Net Pay: {_fmt(net)}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 # ============================================================
@@ -597,13 +614,29 @@ def _render_period_totals(entries: dict, employees: list[dict]):
     st.markdown("**Government Remittances Due:**")
     rem_cols = st.columns(4)
     with rem_cols[0]:
-        st.text(f"SSS:       EE {_fmt(total_sss_ee)} + ER {_fmt(total_sss_er)} = {_fmt(total_sss_ee + total_sss_er)}")
+        st.markdown(remit_card(
+            "SSS", GOV_COLORS["SSS"],
+            [("Employee", _fmt(total_sss_ee)), ("Employer", _fmt(total_sss_er))],
+            ("Total", _fmt(total_sss_ee + total_sss_er)),
+        ), unsafe_allow_html=True)
     with rem_cols[1]:
-        st.text(f"PhilHealth: EE {_fmt(total_ph_ee)} + ER {_fmt(total_ph_er)} = {_fmt(total_ph_ee + total_ph_er)}")
+        st.markdown(remit_card(
+            "PhilHealth", GOV_COLORS["PhilHealth"],
+            [("Employee", _fmt(total_ph_ee)), ("Employer", _fmt(total_ph_er))],
+            ("Total", _fmt(total_ph_ee + total_ph_er)),
+        ), unsafe_allow_html=True)
     with rem_cols[2]:
-        st.text(f"Pag-IBIG:  EE {_fmt(total_pi_ee)} + ER {_fmt(total_pi_er)} = {_fmt(total_pi_ee + total_pi_er)}")
+        st.markdown(remit_card(
+            "Pag-IBIG", GOV_COLORS["Pag-IBIG"],
+            [("Employee", _fmt(total_pi_ee)), ("Employer", _fmt(total_pi_er))],
+            ("Total", _fmt(total_pi_ee + total_pi_er)),
+        ), unsafe_allow_html=True)
     with rem_cols[3]:
-        st.text(f"BIR WHT:   {_fmt(total_wht)}")
+        st.markdown(remit_card(
+            "BIR Withholding", GOV_COLORS["BIR"],
+            [("Withholding Tax", _fmt(total_wht))],
+            ("Total", _fmt(total_wht)),
+        ), unsafe_allow_html=True)
 
     computed_count = len(computed)
     total_count = len(employees)
@@ -616,11 +649,12 @@ def _render_period_totals(entries: dict, employees: list[dict]):
 # ============================================================
 
 def render():
+    inject_css()
     st.title("Payroll Run")
 
     # ---- Payroll History Combination Chart (moved to top) ----
     st.divider()
-    st.subheader("📊 Payroll History")
+    st.subheader("Payroll History")
 
     history = _load_all_period_history()
 
@@ -694,17 +728,19 @@ def render():
 
     st.divider()
 
-    # Status badge
-    status_colors = {"draft": "blue", "reviewed": "violet", "finalized": "orange", "paid": "green"}
-    color = status_colors.get(period["status"], "gray")
-    status_line = f"**Period:** {period['period_start']} to {period['period_end']}  &nbsp; | &nbsp;  **Payment Date:** {period['payment_date']}  &nbsp; | &nbsp;  **Status:** :{color}[{period['status'].upper()}]"
-
-    # Show reviewer info if available
+    # Status info bar
+    badge = status_badge(period["status"])
+    reviewer_html = ""
     if period.get("reviewed_by"):
         reviewed_at = period["reviewed_at"][:16].replace("T", " ") if period.get("reviewed_at") else ""
-        status_line += f"  &nbsp; | &nbsp;  **Reviewed by:** {period['reviewed_by']} ({reviewed_at})"
+        reviewer_html = f' &nbsp;·&nbsp; <b>Reviewed by:</b> {period["reviewed_by"]} ({reviewed_at})'
 
-    st.markdown(status_line)
+    st.markdown(info_bar(
+        period["status"],
+        f'<b>Period:</b> {period["period_start"]} to {period["period_end"]}'
+        f' &nbsp;·&nbsp; <b>Payment:</b> {period["payment_date"]}'
+        f' &nbsp;·&nbsp; {badge}{reviewer_html}'
+    ), unsafe_allow_html=True)
 
     if is_locked:
         col_msg, col_btn = st.columns([4, 1])
@@ -717,13 +753,19 @@ def render():
             st.write("")  # spacer
             if st.button("Reopen for Editing", width="stretch"):
                 _update_pay_period(period["id"], {"status": "draft", "reviewed_by": None, "reviewed_at": None})
+                log_action("updated", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}", {"status": "draft (reopened)"})
                 st.rerun()
 
     # --- Load payroll entries for this period ---
     entries = _load_payroll_entries(period["id"])
 
-    # --- Employee payroll entries ---
+    # --- Employee payroll entries with progress ---
+    computed_count = sum(1 for e in employees if e["id"] in entries)
     st.subheader(f"Employees ({len(employees)})")
+    st.markdown(
+        progress_bar(computed_count, len(employees), f"{computed_count} of {len(employees)} computed"),
+        unsafe_allow_html=True,
+    )
 
     for emp in employees:
         _render_employee_payroll(emp, period["id"], is_locked, entries)
@@ -745,6 +787,7 @@ def render():
                 width="stretch",
             ):
                 _update_pay_period(period["id"], {"status": "reviewed"})
+                log_action("reviewed", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}")
                 st.success("Pay period submitted for review.")
                 st.rerun()
 
@@ -768,6 +811,7 @@ def render():
                     "reviewed_by": reviewer_name.strip(),
                     "reviewed_at": datetime.now().isoformat(),
                 })
+                log_action("finalized", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}", {"reviewed_by": reviewer_name.strip()})
                 st.success(f"Approved by {reviewer_name.strip()}. Pay period finalized!")
                 st.rerun()
 
@@ -780,5 +824,6 @@ def render():
         with col3:
             if st.button("Mark as Paid", width="stretch"):
                 _update_pay_period(period["id"], {"status": "paid"})
+                log_action("paid", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}")
                 st.rerun()
 
