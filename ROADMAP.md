@@ -7,35 +7,36 @@
 ---
 
 ## Phase 1: MVP ✅ Complete
+> **What we built:** A fully functional Philippine-compliant payroll engine from scratch — multi-tenant, cloud-hosted, and ready to process real employee payroll from day one.
 
-- [x] Database schema + government rates seed
-- [x] Core payroll computation engine (SSS, PhilHealth, Pag-IBIG, BIR withholding tax)
-- [x] Employee Master File (CRUD, positions, departments)
-- [x] Payroll Run (earnings input, auto-compute, finalize)
-- [x] Payslip Generation (PDF export)
-- [x] Dashboard (KPIs, remittance summary, deadlines)
-- [x] Company Setup
-- [x] Government Report Generation (SSS R3, PhilHealth RF-1, Pag-IBIG MCRF, BIR 1601-C)
-- [x] Auth / Multi-tenant Login (Supabase Auth + Employee ID login)
-- [x] Multi-company management (admin switches between companies)
-- [x] Audit trail (activity log — who changed what and when, before/after diffs)
-- [x] BIR Form 2316 (annual certificate per employee)
-- [x] BIR Form 1604-C (annual alphalist, due Jan 31)
+- [x] **Database schema + government rates seed** — Multi-tenant Supabase schema with 2025 SSS, PhilHealth, Pag-IBIG, and BIR TRAIN Law rates pre-loaded; all monetary values stored as centavos for precision
+- [x] **Core payroll computation engine** — Pure Python engine computing SSS (5%/10%), PhilHealth (2.5% each), Pag-IBIG (tiered 1–2%), and withholding tax via 6-bracket TRAIN Law; zero DB calls for testability
+- [x] **Employee Master File** — Full CRUD with position, department, salary, employment type, and tax status; position/department stored as company-scoped dropdowns with live "Add new" flow
+- [x] **Payroll Run** — Create pay periods, enter per-employee earnings (basic, OT, allowances, holiday pay), auto-compute all contributions and tax, review breakdown, and finalize
+- [x] **Payslip Generation** — Professional PDF payslip export per employee with full earnings and deduction breakdown
+- [x] **Dashboard** — KPI metrics (headcount, total gross, total deductions, net payroll), remittance deadlines, government contribution summaries, and payroll trend charts
+- [x] **Company Setup** — Company profile, government employer numbers, pay frequency configuration
+- [x] **Government Report Generation** — SSS R3, PhilHealth RF-1, Pag-IBIG MCRF, BIR 1601-C monthly remittance forms; BIR 2316 annual certificate per employee; BIR 1604-C annual alphalist (due Jan 31)
+- [x] **Auth / Multi-tenant login** — Supabase Auth with company-scoped RLS; employee login via Employee ID or email; case-insensitive lookup with distinct error messages for "not found" vs "no portal access"
+- [x] **Multi-company management** — Admin can register and switch between multiple companies; all data is strictly scoped per company
+- [x] **Audit trail** — Activity log records every action (who, what, when); employee updates log full before/after field diffs (old value in red, new value in green) with full-text search
 
 ---
 
 ## Phase 2: Enhancements ✅ Mostly Complete
+> **What we built:** Transformed the raw payroll engine into a product — adding self-service, approvals, visibility, and a polished UI that doesn't feel like internal tooling.
 
-- [x] Employee onboarding checklist — track if gov IDs are complete
-- [x] Payroll approval workflow — "Submit for Review → Approve & Finalize" with reviewer tracking
-- [x] Payroll comparison — period-over-period changes (new hires, salary adjustments, OT spikes)
-- [x] Calendar view — visual timeline of pay periods, deadlines, and PH holidays
-- [x] Employee self-service portal — employees view payslips, COE, BIR 2316 via own login
-- [x] Philippine holiday calendar — auto-adjust remittance deadlines to next business day
-- [x] Dashboard charts — payroll cost trend, deductions breakdown, headcount over time
-- [x] Draggable dashboard layout — reorderable, resizable, hideable cards
-- [x] OT Heat Maps — visualize which days/managers drive overtime spikes
-- [ ] PWA cache — offline-capable for areas with unstable internet
+- [x] **Employee onboarding checklist** — Tracks whether each employee's SSS, PhilHealth, Pag-IBIG, and TIN numbers are on file; flags incomplete profiles before payroll runs
+- [x] **Payroll approval workflow** — Two-step flow: HR submits for review → Admin approves and finalizes; prevents accidental premature payroll release; reviewer and timestamp recorded
+- [x] **Payroll comparison** — Period-over-period analysis; immediately surfaces new hires, salary adjustments, and OT spikes so employers can catch anomalies before finalizing
+- [x] **Calendar view** — Visual month grid showing pay period spans, payment dates, government remittance deadlines, and Philippine holidays side-by-side; deadlines auto-shift to next business day when they fall on weekends or holidays
+- [x] **Employee self-service portal** — Employees log in with their Employee ID or email, view their own payslips, download their BIR 2316 and COE, and update personal profile information
+- [x] **Philippine holiday calendar** — 2025–2026 national holidays pre-seeded (regular + special non-working + special working); used by deadline engine and calendar view
+- [x] **Dashboard charts** — Payroll cost trend (line), deductions breakdown (pie), headcount over time (bar); draggable/resizable card layout with show/hide controls per card
+- [x] **UI/UX design pass** — Shared CSS styles module; financial data styled with consistent typography; colored status badges; remittance agency cards with progress indicators
+- [x] **Leave Entitlement Templates** — Named leave tiers (e.g., "0–1 Year", "Regular Staff") with configurable VL/SL/CL days; assignable per employee; defaults to 15/15/5 if unassigned
+- [x] **OT Heat Maps** — Visualize which days and cost centers drive overtime spikes; baseline for Phase 7 BI analytics
+- [ ] **PWA cache** — Offline-capable for areas with unstable internet *(low priority, skip for now)*
 
 ---
 
@@ -43,10 +44,12 @@
 > Prerequisite for Phases 4 and 5. These unlock correct OT multipliers, attendance deductions, and statutory leave compliance.
 
 ### 3A — Holidays Management *(small lift, high compliance impact)*
-- [ ] Holiday type definitions (Regular, Special Non-Working, Special Working)
-- [ ] Annual holiday calendar per company (pre-seeded with PH proclamation holidays)
-- [ ] Holiday pay multiplier rules (200% regular, 130% special, 150% OT on holiday)
-- [ ] Calendar view integration — holidays shown alongside pay periods
+- [x] Holiday type definitions — regular, special non-working, special working *(done in migration 004)*
+- [x] Annual holiday calendar — 2025–2026 PH proclamation holidays pre-seeded *(done in migration 004)*
+- [x] Calendar view integration — holidays shown with colored cell backgrounds alongside pay periods *(done in calendar_view.py)*
+- [x] Remittance deadline adjustment — deadlines auto-shift past weekends and holidays *(done in backend/deadlines.py)*
+- [ ] **Holiday Management UI** — Company Setup "Holidays" tab: view national holidays by year, add company-specific custom holidays (local govt holidays, founding anniversaries), delete own entries
+- [ ] **Holiday pay multiplier reference** — Display DOLE-mandated rates (Regular: 200% worked / 100% not worked; Special NW: 130% worked / 0% not worked) in Company Setup as an always-visible reference for HR staff
 
 ### 3B — Employee Extended Information *(low-hanging fruit, common HR ask)*
 - [ ] Regularization date, resignation date fields

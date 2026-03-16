@@ -6,10 +6,11 @@ One-time onboarding and settings:
 - BIR TIN, SSS/PhilHealth/Pag-IBIG employer numbers
 - Pay frequency + leave replenishment policy
 - Leave Entitlement Templates (named tiers, assignable per employee)
+- Holiday Calendar (national PH holidays + company-specific custom entries)
 """
 
 import streamlit as st
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from app.db_helper import get_db, get_company_id, log_action
 
 
@@ -80,6 +81,50 @@ def _update_template(tmpl_id: str, data: dict) -> dict:
 def _delete_template(tmpl_id: str):
     db = get_db()
     db.table("leave_entitlement_templates").delete().eq("id", tmpl_id).execute()
+
+
+# ============================================================
+# Database operations — Holidays
+# ============================================================
+
+_HOLIDAY_TYPE_LABELS = {
+    "regular":             "Regular Holiday",
+    "special_non_working": "Special Non-Working",
+    "special_working":     "Special Working",
+}
+
+_HOLIDAY_TYPE_COLORS = {
+    "regular":             ("#991b1b", "#fee2e2"),   # red
+    "special_non_working": ("#92400e", "#fef3c7"),   # amber
+    "special_working":     ("#065f46", "#d1fae5"),   # green
+}
+
+
+def _load_holidays(year: int) -> list[dict]:
+    """Load national (company_id IS NULL) + company-specific holidays for a year."""
+    db  = get_db()
+    cid = get_company_id()
+    result = (
+        db.table("holidays")
+        .select("*")
+        .eq("year", year)
+        .or_(f"company_id.is.null,company_id.eq.{cid}")
+        .order("holiday_date")
+        .execute()
+    )
+    return result.data or []
+
+
+def _add_custom_holiday(data: dict) -> dict:
+    db = get_db()
+    data["company_id"] = get_company_id()
+    result = db.table("holidays").insert(data).execute()
+    return result.data[0]
+
+
+def _delete_custom_holiday(holiday_id: str):
+    db = get_db()
+    db.table("holidays").delete().eq("id", holiday_id).execute()
 
 
 # ============================================================
@@ -331,6 +376,7 @@ _ENTITY_LABELS = {
     "overtime_request": "OT Request",
     "company":          "Company",
     "leave_template":   "Leave Template",
+    "holiday":          "Holiday",
 }
 
 _PH_TZ = timezone(timedelta(hours=8))
@@ -436,6 +482,188 @@ def _render_activity_log_tab():
         )
 
 
+def _holiday_type_badge(htype: str) -> str:
+    fg, bg = _HOLIDAY_TYPE_COLORS.get(htype, ("#6b7280", "#f3f4f6"))
+    label  = _HOLIDAY_TYPE_LABELS.get(htype, htype)
+    return (
+        f'<span style="background:{bg};color:{fg};padding:2px 9px;border-radius:12px;'
+        f'font-size:11px;font-weight:700;letter-spacing:.3px;white-space:nowrap">'
+        f'{label}</span>'
+    )
+
+
+def _render_holidays_tab():
+    st.subheader("Holiday Calendar")
+    st.caption(
+        "Philippine national holidays are pre-loaded and updated annually. "
+        "Add company-specific holidays below — local government holidays, company anniversary days, etc."
+    )
+
+    # ── Holiday pay multiplier reference ─────────────────────────────────────
+    with st.expander("📊 DOLE Holiday Pay Multiplier Reference"):
+        st.markdown(
+            """
+| Holiday Type | Not Worked | Worked (Basic) | Worked + OT |
+|---|---|---|---|
+| **Regular Holiday** | 100% of daily rate | **200%** of daily rate | **260%** (200% × 1.30) |
+| **Special Non-Working** | No pay (no work, no pay) | **130%** of daily rate | **169%** (130% × 1.30) |
+| **Special Working** | No premium | **130%** of daily rate | **169%** (130% × 1.30) |
+| **Regular Holiday + Rest Day** | 100% | **260%** (200% × 1.30) | **338%** (260% × 1.30) |
+| **Special Non-Working + Rest Day** | No pay | **150%** of daily rate | **195%** (150% × 1.30) |
+
+*Source: DOLE Labor Advisory & Article 94, Labor Code of the Philippines.*
+            """,
+            unsafe_allow_html=False,
+        )
+
+    st.divider()
+
+    # ── Year selector ─────────────────────────────────────────────────────────
+    current_year = date.today().year
+    year_col, _ = st.columns([1, 3])
+    with year_col:
+        year = st.selectbox(
+            "Year",
+            options=[current_year - 1, current_year, current_year + 1],
+            index=1,
+            label_visibility="collapsed",
+            format_func=lambda y: f"📅  {y}",
+        )
+
+    holidays = _load_holidays(year)
+    national = [h for h in holidays if not h.get("company_id")]
+    custom   = [h for h in holidays if h.get("company_id")]
+
+    # ── Add custom holiday ────────────────────────────────────────────────────
+    add_col, _ = st.columns([1, 3])
+    with add_col:
+        if st.button("+ Add Company Holiday", key="hol_add_btn"):
+            st.session_state.show_add_holiday = True
+
+    if st.session_state.get("show_add_holiday"):
+        st.markdown("**New Company Holiday**")
+        with st.form("add_holiday_form", clear_on_submit=True):
+            fc1, fc2, fc3 = st.columns([2, 2, 2])
+            with fc1:
+                hol_date = st.date_input(
+                    "Date *",
+                    value=date(year, 1, 1),
+                    min_value=date(year, 1, 1),
+                    max_value=date(year, 12, 31),
+                )
+            with fc2:
+                hol_name = st.text_input("Holiday Name *", placeholder="e.g. City Fiesta, Founding Anniversary")
+            with fc3:
+                hol_type = st.selectbox(
+                    "Type *",
+                    options=list(_HOLIDAY_TYPE_LABELS.keys()),
+                    format_func=lambda k: _HOLIDAY_TYPE_LABELS[k],
+                )
+            sub_col, cancel_col, _ = st.columns([1, 1, 3])
+            with sub_col:
+                submitted = st.form_submit_button("Add Holiday", type="primary", width='stretch')
+            with cancel_col:
+                cancelled = st.form_submit_button("Cancel", width='stretch')
+
+        if cancelled:
+            st.session_state.show_add_holiday = False
+            st.rerun()
+
+        if submitted:
+            if not hol_name.strip():
+                st.error("Holiday name is required.")
+            else:
+                try:
+                    result = _add_custom_holiday({
+                        "holiday_date": hol_date.isoformat(),
+                        "name":         hol_name.strip(),
+                        "type":         hol_type,
+                        "year":         year,
+                    })
+                    log_action("created", "holiday", result["id"], hol_name.strip())
+                    st.session_state.show_add_holiday = False
+                    st.success(f"**{hol_name.strip()}** added for {year}.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error adding holiday: {e}")
+
+    st.divider()
+
+    # ── Company-specific holidays ─────────────────────────────────────────────
+    if custom:
+        st.markdown(f"**Company Holidays — {year}** *(editable)*")
+        hdr = st.columns([1.5, 3, 2.5, 1])
+        for col, lbl in zip(hdr, ["Date", "Name", "Type", ""]):
+            col.markdown(f"<span style='font-size:12px;color:#6b7280;font-weight:600'>{lbl}</span>",
+                         unsafe_allow_html=True)
+
+        for h in custom:
+            row = st.columns([1.5, 3, 2.5, 1])
+            try:
+                d = datetime.strptime(h["holiday_date"], "%Y-%m-%d").date()
+                row[0].markdown(
+                    f"<span style='font-size:13px'>{d.strftime('%b %d')}</span>",
+                    unsafe_allow_html=True,
+                )
+            except Exception:
+                row[0].text(h["holiday_date"])
+            row[1].text(h["name"])
+            row[2].markdown(_holiday_type_badge(h["type"]), unsafe_allow_html=True)
+            with row[3]:
+                if st.button("🗑", key=f"hol_del_{h['id']}", help="Delete this holiday"):
+                    st.session_state[f"hol_del_confirm_{h['id']}"] = True
+                    st.rerun()
+
+            if st.session_state.get(f"hol_del_confirm_{h['id']}"):
+                st.warning(f"Delete **{h['name']}**?")
+                dc1, dc2, _ = st.columns([1, 1, 4])
+                with dc1:
+                    if st.button("Confirm", key=f"hol_del_yes_{h['id']}", type="primary"):
+                        try:
+                            _delete_custom_holiday(h["id"])
+                            log_action("deleted", "holiday", h["id"], h["name"])
+                            st.session_state.pop(f"hol_del_confirm_{h['id']}", None)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+                with dc2:
+                    if st.button("Cancel", key=f"hol_del_no_{h['id']}"):
+                        st.session_state.pop(f"hol_del_confirm_{h['id']}", None)
+                        st.rerun()
+        st.divider()
+    else:
+        st.caption(f"No company-specific holidays added for {year}. Click **+ Add Company Holiday** to add one.")
+
+    # ── National holidays (read-only) ─────────────────────────────────────────
+    st.markdown(f"**National Holidays — {year}** *(read-only, PH Proclamation)*")
+    if not national:
+        st.info(f"No national holidays loaded for {year}. Run migration 004 to seed PH holidays.")
+        return
+
+    hdr2 = st.columns([1.5, 4, 2.5])
+    for col, lbl in zip(hdr2, ["Date", "Name", "Type"]):
+        col.markdown(f"<span style='font-size:12px;color:#6b7280;font-weight:600'>{lbl}</span>",
+                     unsafe_allow_html=True)
+
+    for h in national:
+        row = st.columns([1.5, 4, 2.5])
+        try:
+            d = datetime.strptime(h["holiday_date"], "%Y-%m-%d").date()
+            row[0].markdown(
+                f"<span style='font-size:13px'>{d.strftime('%b %d')}</span>",
+                unsafe_allow_html=True,
+            )
+        except Exception:
+            row[0].text(h["holiday_date"])
+        row[1].text(h["name"])
+        row[2].markdown(_holiday_type_badge(h["type"]), unsafe_allow_html=True)
+
+
+# ============================================================
+# Main Page Render
+# ============================================================
+
+
 def render():
     st.title("Company Setup")
 
@@ -449,9 +677,10 @@ def render():
         st.error("No company found. Please contact your administrator.")
         return
 
-    tab_settings, tab_templates, tab_log = st.tabs([
+    tab_settings, tab_templates, tab_holidays, tab_log = st.tabs([
         "⚙️ Company Settings",
         "🏖 Leave Templates",
+        "📅 Holidays",
         "📋 Activity Log",
     ])
 
@@ -550,6 +779,9 @@ def render():
 
     with tab_templates:
         _render_template_section()
+
+    with tab_holidays:
+        _render_holidays_tab()
 
     with tab_log:
         _render_activity_log_tab()
