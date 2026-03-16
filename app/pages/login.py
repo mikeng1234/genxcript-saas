@@ -60,7 +60,7 @@ def _render_signin(col):
     # Forgot password link (below form, before divider)
     fp_col, _ = st.columns([1, 1])
     with fp_col:
-        if st.button("Forgot Password?", key="goto_forgot", use_container_width=True):
+        if st.button("Forgot Password?", key="goto_forgot", width='stretch'):
             st.session_state.login_view = "forgot"
             st.rerun()
 

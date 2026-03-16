@@ -394,7 +394,7 @@ def _render_payslip_detail(entry: dict, emp: dict, company: dict):
                 data=pdf_bytes,
                 file_name=f"payslip_{emp['employee_no']}_{pp.get('period_start', 'unknown')}.pdf",
                 mime="application/pdf",
-                use_container_width=True,
+                width='stretch',
                 key=f"dl_{entry['id']}",
             )
         except Exception as ex:
@@ -620,7 +620,7 @@ def _render_profile_form(emp: dict, profile: dict | None):
                 spouse_employer = st.text_input("Employer", value=p.get("spouse_employer", "") or "")
                 spouse_contact = st.text_input("Contact Number", value=p.get("spouse_contact", "") or "")
 
-        submitted = st.form_submit_button("Save Profile", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Save Profile", type="primary", width='stretch')
 
     if submitted:
         errors = []
@@ -886,7 +886,7 @@ def _render_time_leave(emp: dict, company: dict):
             lv_start = c2.date_input("Start Date", value=today, min_value=today)
             lv_end   = c3.date_input("End Date",   value=today, min_value=today)
             reason   = st.text_area("Reason (optional)", placeholder="Brief reason…")
-            submitted = st.form_submit_button("Submit Leave Request", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("Submit Leave Request", type="primary", width='stretch')
 
         if submitted:
             if lv_end < lv_start:
@@ -922,7 +922,7 @@ def _render_time_leave(emp: dict, company: dict):
             ot_start   = c2.time_input("Start Time", value=datetime.time(17, 0), step=1800)
             ot_end     = c3.time_input("End Time",   value=datetime.time(20, 0), step=1800)
             reason_ot  = st.text_area("Reason", placeholder="Brief reason for overtime…")
-            submitted_ot = st.form_submit_button("Submit OT Request", type="primary", use_container_width=True)
+            submitted_ot = st.form_submit_button("Submit OT Request", type="primary", width='stretch')
 
         if submitted_ot:
             start_dt = datetime.datetime.combine(ot_date, ot_start)
@@ -1020,7 +1020,7 @@ def _render_documents(emp: dict, company: dict):
                 data=coe_bytes,
                 file_name=f"COE_{emp['employee_no']}_{today_str}_with_salary.pdf",
                 mime="application/pdf",
-                use_container_width=True,
+                width='stretch',
                 key="dl_coe_salary",
                 help="Includes your basic salary amount",
             )
@@ -1034,7 +1034,7 @@ def _render_documents(emp: dict, company: dict):
                 data=coe_bytes,
                 file_name=f"COE_{emp['employee_no']}_{today_str}_no_salary.pdf",
                 mime="application/pdf",
-                use_container_width=True,
+                width='stretch',
                 key="dl_coe_no_salary",
                 help="Does not disclose salary information",
             )
@@ -1073,7 +1073,7 @@ def _render_documents(emp: dict, company: dict):
                     data=pdf_bytes,
                     file_name=f"BIR2316_{emp.get('employee_no', emp['id'])}_{sel_year}.pdf",
                     mime="application/pdf",
-                    use_container_width=True,
+                    width='stretch',
                     key="dl_bir2316",
                 )
             except Exception as ex:

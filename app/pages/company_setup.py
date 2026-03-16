@@ -171,7 +171,7 @@ def _template_form(
             cl = st.number_input("Casual / Emergency Leave (CL)", min_value=0, max_value=30,
                                  value=int(d.get("cl_days", 5)), step=1)
 
-        submitted = st.form_submit_button(submit_label, type="primary", use_container_width=True)
+        submitted = st.form_submit_button(submit_label, type="primary", width='stretch')
 
     if submitted:
         if not name.strip():
@@ -247,7 +247,7 @@ def _render_template_section():
 
         act1, act2 = row[5].columns(2)
         with act1:
-            if st.button("Edit", key=f"tmpl_edit_{tmpl['id']}", use_container_width=True):
+            if st.button("Edit", key=f"tmpl_edit_{tmpl['id']}", width='stretch'):
                 # Toggle: if already editing this one, close it
                 if st.session_state.get("editing_template_id") == tmpl["id"]:
                     st.session_state.editing_template_id = None
@@ -256,7 +256,7 @@ def _render_template_section():
                     st.session_state.show_add_template = False
                 st.rerun()
         with act2:
-            if st.button("Del", key=f"tmpl_del_{tmpl['id']}", use_container_width=True,
+            if st.button("Del", key=f"tmpl_del_{tmpl['id']}", width='stretch',
                          help="Delete this template. Employees assigned to it will revert to default."):
                 st.session_state[f"del_confirm_{tmpl['id']}"] = True
                 st.rerun()
@@ -524,7 +524,7 @@ def render():
             )
 
             # --- Submit ---
-            submitted = st.form_submit_button("Save Company Settings", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("Save Company Settings", type="primary", width='stretch')
 
             if submitted:
                 if not name.strip():

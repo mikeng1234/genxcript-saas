@@ -692,13 +692,13 @@ def _render_leave_request_row(req: dict):
         with nc:
             st.text_input("Note", key=note_key, placeholder="Admin note (optional)", label_visibility="collapsed")
         with ac:
-            if st.button("✓ Approve", key=f"ap_lr_{req['id']}", type="primary", use_container_width=True):
+            if st.button("✓ Approve", key=f"ap_lr_{req['id']}", type="primary", width='stretch'):
                 _review_leave_request(req["id"], "approved", st.session_state.get(note_key, ""))
                 log_action("approved", "leave_request", req["id"], f"{name} - {lt_lbl}", {"dates": f"{start} to {end}"})
                 st.session_state["_review_toast"] = ("success", f"Leave request for **{name}** approved.")
                 st.rerun()
         with rc:
-            if st.button("✗ Reject", key=f"rej_lr_{req['id']}", use_container_width=True):
+            if st.button("✗ Reject", key=f"rej_lr_{req['id']}", width='stretch'):
                 _review_leave_request(req["id"], "rejected", st.session_state.get(note_key, ""))
                 log_action("rejected", "leave_request", req["id"], f"{name} - {lt_lbl}", {"dates": f"{start} to {end}"})
                 st.session_state["_review_toast"] = ("error", f"Leave request for **{name}** rejected.")
@@ -745,13 +745,13 @@ def _render_ot_request_row(req: dict):
         with nc:
             st.text_input("Note", key=note_key, placeholder="Admin note (optional)", label_visibility="collapsed")
         with ac:
-            if st.button("✓ Approve", key=f"ap_ot_{req['id']}", type="primary", use_container_width=True):
+            if st.button("✓ Approve", key=f"ap_ot_{req['id']}", type="primary", width='stretch'):
                 _review_ot_request(req["id"], "approved", st.session_state.get(note_key, ""))
                 log_action("approved", "overtime_request", req["id"], f"{name} - {ot_date}", {"hours": hours})
                 st.session_state["_review_toast"] = ("success", f"OT request for **{name}** approved.")
                 st.rerun()
         with rc:
-            if st.button("✗ Reject", key=f"rej_ot_{req['id']}", use_container_width=True):
+            if st.button("✗ Reject", key=f"rej_ot_{req['id']}", width='stretch'):
                 _review_ot_request(req["id"], "rejected", st.session_state.get(note_key, ""))
                 log_action("rejected", "overtime_request", req["id"], f"{name} - {ot_date}", {"hours": hours})
                 st.session_state["_review_toast"] = ("error", f"OT request for **{name}** rejected.")

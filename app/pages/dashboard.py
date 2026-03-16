@@ -250,19 +250,19 @@ def _render_action_bar(company: dict, next_period: dict | None):
     st.markdown('<div class="gxp-quick-actions">', unsafe_allow_html=True)
     qa1, qa2, qa3, qa4 = st.columns(4)
     with qa1:
-        if st.button("▶  Run Payroll", use_container_width=True, type="primary", key="qa_run"):
+        if st.button("▶  Run Payroll", width='stretch', type="primary", key="qa_run"):
             st.session_state["_nav_redirect"] = "Payroll Run"
             st.rerun()
     with qa2:
-        if st.button("＋  Add Employee", use_container_width=True, key="qa_add"):
+        if st.button("＋  Add Employee", width='stretch', key="qa_add"):
             st.session_state["_nav_redirect"] = "Employees"
             st.rerun()
     with qa3:
-        if st.button("⬡  Government Reports", use_container_width=True, key="qa_gov"):
+        if st.button("⬡  Government Reports", width='stretch', key="qa_gov"):
             st.session_state["_nav_redirect"] = "Government Reports"
             st.rerun()
     with qa4:
-        if st.button("⚙  Company Setup", use_container_width=True, key="qa_setup"):
+        if st.button("⚙  Company Setup", width='stretch', key="qa_setup"):
             st.session_state["_nav_redirect"] = "Company Setup"
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -371,7 +371,7 @@ def _render_alerts(deadlines: list[dict], periods: list[dict],
         with btn_col:
             if a.get("nav_page"):
                 st.markdown('<div class="gxp-alert-nav-btn">', unsafe_allow_html=True)
-                if st.button(a["btn_label"], key=a["btn_key"], use_container_width=True):
+                if st.button(a["btn_label"], key=a["btn_key"], width='stretch'):
                     st.session_state["_nav_redirect"] = a["nav_page"]
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)

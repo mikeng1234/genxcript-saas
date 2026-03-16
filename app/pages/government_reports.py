@@ -526,7 +526,7 @@ def render():
                     file_name=f"BIR_1604C_{selected_year}.pdf",
                     mime="application/pdf",
                     type="primary",
-                    use_container_width=True,
+                    width='stretch',
                     key=f"bir1604c_form_{selected_year}",
                 )
                 st.caption("Portrait A4 · Pre-filled company info + monthly taxes withheld")
@@ -544,7 +544,7 @@ def render():
                     file_name=f"BIR_1604C_Alphalist_{selected_year}.pdf",
                     mime="application/pdf",
                     type="secondary",
-                    use_container_width=True,
+                    width='stretch',
                     key=f"bir1604c_alpha_{selected_year}",
                 )
                 st.caption(

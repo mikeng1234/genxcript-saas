@@ -151,7 +151,7 @@ def _add_company_dialog():
 
     col_save, col_cancel = st.columns(2)
     with col_save:
-        if st.button("Create Company", type="primary", use_container_width=True):
+        if st.button("Create Company", type="primary", width='stretch'):
             if not new_name.strip():
                 st.error("Company name is required.")
                 return
@@ -197,12 +197,12 @@ def _add_company_dialog():
                 st.error(f"Error: {exc}")
 
     with col_cancel:
-        if st.button("Cancel", use_container_width=True):
+        if st.button("Cancel", width='stretch'):
             st.rerun()
 
 
 # Show the "Add / Switch Company" button in sidebar (admin/viewer only)
-if st.sidebar.button("➕ Add New Company", use_container_width=True):
+if st.sidebar.button("➕ Add New Company", width='stretch'):
     _add_company_dialog()
 
 st.sidebar.divider()
@@ -250,10 +250,10 @@ def _unsaved_nav_dialog(intended: str) -> None:
     )
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Stay & Keep Editing", type="primary", use_container_width=True):
+        if st.button("Stay & Keep Editing", type="primary", width='stretch'):
             st.rerun()
     with col2:
-        if st.button("Discard & Leave", use_container_width=True):
+        if st.button("Discard & Leave", width='stretch'):
             st.session_state.editing_id   = None
             for _k in [k for k in st.session_state if k.startswith(("_pos_select_edit_", "_pos_new_edit_", "_dept_select_edit_", "_dept_new_edit_"))]:
                 del st.session_state[_k]
