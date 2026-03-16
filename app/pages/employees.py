@@ -138,6 +138,19 @@ def _employee_diff(old: dict, new: dict, new_dept: str) -> dict:
     if o_dept != n_dept:
         changes["Department"] = f"{o_dept or '—'} → {n_dept or '—'}"
 
+    # Dates — regularization and resignation
+    for field, label in (("regularization_date", "Regularization Date"), ("resignation_date", "Resignation Date")):
+        o = str(old.get(field) or "")
+        n = str(new.get(field) or "")
+        if o != n:
+            changes[label] = f"{o or '—'} → {n or '—'}"
+
+    # Classification
+    o_cls = (old.get("classification") or "").strip()
+    n_cls = (new.get("classification") or "").strip()
+    if o_cls != n_cls:
+        changes["Classification"] = f"{o_cls or '—'} → {n_cls or '—'}"
+
     return changes
 
 
@@ -151,6 +164,27 @@ def _upsert_employee_department(employee_id: str, department: str) -> None:
         },
         on_conflict="employee_id",
     ).execute()
+
+
+def _upsert_employee_profile_fields(employee_id: str, data: dict) -> None:
+    """Upsert arbitrary extra fields into employee_profiles (Phase 3B+)."""
+    payload = {
+        "employee_id": employee_id,
+        "company_id":  get_company_id(),
+    }
+    payload.update(data)
+    get_db().table("employee_profiles").upsert(payload, on_conflict="employee_id").execute()
+
+
+def _load_employee_profile(employee_id: str) -> dict:
+    """Load the profile row for a single employee (returns {} if not found)."""
+    result = (
+        get_db().table("employee_profiles")
+        .select("regularization_date, classification")
+        .eq("employee_id", employee_id)
+        .execute()
+    )
+    return result.data[0] if result.data else {}
 
 
 def _load_all_departments() -> dict:
@@ -437,6 +471,32 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
                 default_date = date.fromisoformat(default_date)
             date_hired = st.date_input("Date Hired", value=default_date)
 
+        # --- Row 2b: Regularization Date | Resignation Date | Classification ---
+        _rr1, _rr2, _rr3 = st.columns(3)
+        with _rr1:
+            _reg_raw = defaults.get("regularization_date")
+            _reg_val = date.fromisoformat(_reg_raw) if isinstance(_reg_raw, str) and _reg_raw else None
+            regularization_date = st.date_input(
+                "Regularization Date",
+                value=_reg_val,
+                help="Date employee was regularized. Leave blank if not yet applicable.",
+            )
+        with _rr2:
+            _res_raw = defaults.get("resignation_date")
+            _res_val = date.fromisoformat(_res_raw) if isinstance(_res_raw, str) and _res_raw else None
+            resignation_date = st.date_input(
+                "Resignation Date",
+                value=_res_val,
+                help="Date employee resigned or was separated. Leave blank if still employed.",
+            )
+        with _rr3:
+            classification = st.text_input(
+                "Classification",
+                value=defaults.get("classification") or "",
+                placeholder="e.g. Accountant, Engineer, Nurse",
+                help="Professional classification or job nature.",
+            )
+
         # --- Row 3: Leave Entitlement Template ---
         if leave_templates:
             # Build option list: None = company default, then each template
@@ -559,23 +619,28 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
                 st.session_state.pop(dept_new_key,    None)
 
             return {
-                "employee_no":       employee_no.strip(),
-                "first_name":        first_name.strip(),
-                "last_name":         last_name.strip(),
-                "position":          resolved_position,
-                "department":        resolved_department,
-                "employment_type":   employment_type,
-                "date_hired":        date_hired.isoformat(),
-                "basic_salary":      _pesos_to_centavos(basic_salary),
-                "salary_type":       salary_type,
-                "tax_status":        tax_status,
-                "sss_no":            sss_no.strip(),
-                "philhealth_no":     philhealth_no.strip(),
-                "pagibig_no":        pagibig_no.strip(),
-                "bir_tin":           bir_tin.strip(),
-                "bank_account":      bank_account.strip(),
-                "email":             email.strip() or None,
-                "leave_template_id": selected_tmpl_id,
+                "employee_no":        employee_no.strip(),
+                "first_name":         first_name.strip(),
+                "last_name":          last_name.strip(),
+                "position":           resolved_position,
+                "department":         resolved_department,
+                "employment_type":    employment_type,
+                "date_hired":         date_hired.isoformat(),
+                # Phase 3B — stored in employees table
+                "resignation_date":   resignation_date.isoformat() if resignation_date else None,
+                # Phase 3B — stored in employee_profiles
+                "regularization_date": regularization_date.isoformat() if regularization_date else None,
+                "classification":     classification.strip() or None,
+                "basic_salary":       _pesos_to_centavos(basic_salary),
+                "salary_type":        salary_type,
+                "tax_status":         tax_status,
+                "sss_no":             sss_no.strip(),
+                "philhealth_no":      philhealth_no.strip(),
+                "pagibig_no":         pagibig_no.strip(),
+                "bir_tin":            bir_tin.strip(),
+                "bank_account":       bank_account.strip(),
+                "email":              email.strip() or None,
+                "leave_template_id":  selected_tmpl_id,
             }
 
     return None
@@ -854,10 +919,17 @@ def _render_employees_tab():
         new_data = _employee_form(form_key="add_new")
         if new_data is not None:
             try:
-                dept = new_data.pop("department", "")
+                dept                = new_data.pop("department", "")
+                regularization_date = new_data.pop("regularization_date", None)
+                classification      = new_data.pop("classification", None)
                 result = _create_employee(new_data)
                 if dept:
                     _upsert_employee_department(result["id"], dept)
+                if regularization_date or classification:
+                    _upsert_employee_profile_fields(result["id"], {
+                        "regularization_date": regularization_date,
+                        "classification":      classification,
+                    })
                 log_action("created", "employee", result["id"], f"{new_data['first_name']} {new_data['last_name']}")
                 st.session_state.show_add_form = False
                 st.success(f"Added {new_data['first_name']} {new_data['last_name']}")
@@ -1077,13 +1149,26 @@ def _render_employees_tab():
 
         # --- Edit form ---
         if st.session_state.get("editing_id") == emp["id"]:
-            updated = _employee_form(existing=emp, form_key=f"edit_{emp['id']}")
+            # Merge profile fields (regularization_date, classification) into emp for pre-fill + diff
+            _profile = _load_employee_profile(emp["id"])
+            emp_full = {**emp, **_profile}
+            updated = _employee_form(existing=emp_full, form_key=f"edit_{emp['id']}")
             if updated is not None:
                 try:
-                    dept = updated.pop("department", "")
-                    changes = _employee_diff(emp, updated, dept)
+                    dept               = updated.pop("department", "")
+                    regularization_date = updated.pop("regularization_date", None)
+                    classification      = updated.pop("classification", None)
+                    changes = _employee_diff(
+                        emp_full,
+                        {**updated, "regularization_date": regularization_date, "classification": classification},
+                        dept,
+                    )
                     _update_employee(emp["id"], updated)
                     _upsert_employee_department(emp["id"], dept)
+                    _upsert_employee_profile_fields(emp["id"], {
+                        "regularization_date": regularization_date,
+                        "classification":      classification,
+                    })
                     log_action("updated", "employee", emp["id"], f"{updated['first_name']} {updated['last_name']}", details=changes)
                     st.session_state.editing_id = None
                     st.success(f"Updated {updated['first_name']} {updated['last_name']}")

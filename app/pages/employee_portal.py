@@ -620,6 +620,47 @@ def _render_profile_form(emp: dict, profile: dict | None):
                 spouse_employer = st.text_input("Employer", value=p.get("spouse_employer", "") or "")
                 spouse_contact = st.text_input("Contact Number", value=p.get("spouse_contact", "") or "")
 
+        # --- Additional Contact Information ---
+        st.markdown("#### Additional Contact")
+        _ac1, _ac2, _ac3 = st.columns(3)
+        with _ac1:
+            home_phone = st.text_input("Home Phone", value=p.get("home_phone", "") or "",
+                                       placeholder="e.g. (02) 8123-4567")
+        with _ac2:
+            work_phone = st.text_input("Work Phone", value=p.get("work_phone", "") or "",
+                                       placeholder="e.g. +63 2 1234 5678")
+        with _ac3:
+            personal_email = st.text_input("Personal Email", value=p.get("personal_email", "") or "",
+                                           placeholder="e.g. juan@gmail.com")
+
+        # --- Educational Background ---
+        st.markdown("#### Educational Background")
+        _ed1, _ed2, _ed3 = st.columns([3, 3, 1])
+        with _ed1:
+            education_degree = st.text_input("Degree / Course",
+                                             value=p.get("education_degree", "") or "",
+                                             placeholder="e.g. BS Computer Science, BSBA")
+        with _ed2:
+            education_school = st.text_input("School / University",
+                                             value=p.get("education_school", "") or "",
+                                             placeholder="e.g. University of the Philippines")
+        with _ed3:
+            _yr_raw = p.get("education_year")
+            education_year = st.number_input("Year Graduated",
+                                             min_value=1950, max_value=2030,
+                                             value=int(_yr_raw) if _yr_raw else 2000,
+                                             step=1)
+
+        # --- Social / Online Presence ---
+        st.markdown("#### Social Links *(optional)*")
+        _sl1, _sl2 = st.columns(2)
+        with _sl1:
+            facebook = st.text_input("Facebook", value=p.get("facebook", "") or "",
+                                     placeholder="Profile URL or username")
+        with _sl2:
+            linkedin = st.text_input("LinkedIn", value=p.get("linkedin", "") or "",
+                                     placeholder="Profile URL or username")
+
         submitted = st.form_submit_button("Save Profile", type="primary", width='stretch')
 
     if submitted:
@@ -669,6 +710,15 @@ def _render_profile_form(emp: dict, profile: dict | None):
                 "spouse_occupation":        spouse_occupation.strip() or None,
                 "spouse_employer":          spouse_employer.strip() or None,
                 "spouse_contact":           spouse_contact.strip() or None,
+                # Phase 3B additions
+                "home_phone":               home_phone.strip() or None,
+                "work_phone":               work_phone.strip() or None,
+                "personal_email":           personal_email.strip() or None,
+                "education_degree":         education_degree.strip() or None,
+                "education_school":         education_school.strip() or None,
+                "education_year":           int(education_year) if education_year else None,
+                "facebook":                 facebook.strip() or None,
+                "linkedin":                 linkedin.strip() or None,
             }
             try:
                 _save_profile(emp["id"], profile_data)
