@@ -13,6 +13,7 @@ import streamlit as st
 import datetime
 from datetime import date
 from app.db_helper import get_db, get_company_id, log_action
+from app.styles import inject_css
 
 
 # ============================================================
@@ -334,6 +335,26 @@ def _template_label(tmpl: dict) -> str:
     )
 
 
+def _load_schedules_for_form() -> list[dict]:
+    """Load shift schedules for the schedule dropdown in the employee form."""
+    return (
+        get_db().table("schedules")
+        .select("id, name, start_time, end_time, break_minutes, is_overnight")
+        .eq("company_id", get_company_id())
+        .order("name")
+        .execute()
+    ).data or []
+
+
+def _schedule_label(sched: dict) -> str:
+    """Return a display label for a shift schedule."""
+    start = (sched.get("start_time") or "")[:5]
+    end   = (sched.get("end_time")   or "")[:5]
+    brk   = int(sched.get("break_minutes", 60))
+    night = " 🌙" if sched.get("is_overnight") else ""
+    return f"{sched['name']}  ({start} – {end}, {brk}min break){night}"
+
+
 # ============================================================
 # Employee Form (shared by Add and Edit)
 # ============================================================
@@ -352,6 +373,7 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
 
     # Load helpers outside form (DB calls are fine here)
     leave_templates      = _load_leave_templates()
+    schedules            = _load_schedules_for_form()
     distinct_positions   = _load_distinct_positions()
     distinct_departments = _load_distinct_departments()
 
@@ -529,6 +551,34 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
             )
             selected_tmpl_id = defaults.get("leave_template_id")
 
+        # --- Row 3b: Shift Schedule ---
+        if schedules:
+            sched_ids    = [None] + [s["id"] for s in schedules]
+            sched_labels = ["— No schedule assigned —"] + [_schedule_label(s) for s in schedules]
+            current_sid  = defaults.get("schedule_id")
+            try:
+                sched_idx = sched_ids.index(current_sid)
+            except ValueError:
+                sched_idx = 0
+            selected_sched_label = st.selectbox(
+                "Shift Schedule",
+                options=sched_labels,
+                index=sched_idx,
+                help=(
+                    "Assign the employee's default working shift. "
+                    "Used by the DTR engine to compute late, undertime, and absent. "
+                    "Create schedules in Company Setup → Schedules."
+                ),
+            )
+            selected_sched_id = sched_ids[sched_labels.index(selected_sched_label)]
+        else:
+            st.info(
+                "No shift schedules configured yet. "
+                "Go to **Company Setup → Schedules** to define shift profiles.",
+                icon="ℹ️",
+            )
+            selected_sched_id = defaults.get("schedule_id")
+
         # --- Row 4: Salary ---
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -641,9 +691,101 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
                 "bank_account":       bank_account.strip(),
                 "email":              email.strip() or None,
                 "leave_template_id":  selected_tmpl_id,
+                "schedule_id":        selected_sched_id,
             }
 
     return None
+
+
+# ============================================================
+# Leave Balances Admin View — DB helpers
+# ============================================================
+
+def _load_company_leave_settings() -> dict:
+    """Load leave entitlement defaults + replenishment policy from companies table."""
+    result = (
+        get_db().table("companies")
+        .select("leave_vl_days, leave_sl_days, leave_cl_days, leave_replenishment")
+        .eq("id", get_company_id())
+        .single()
+        .execute()
+    )
+    return result.data or {}
+
+
+def _load_leave_templates_map() -> dict:
+    """Return {template_id: {name, vl_days, sl_days, cl_days}} for all company templates."""
+    result = (
+        get_db().table("leave_entitlement_templates")
+        .select("id, name, vl_days, sl_days, cl_days")
+        .eq("company_id", get_company_id())
+        .execute()
+    )
+    return {r["id"]: r for r in (result.data or [])}
+
+
+def _load_employees_for_balance() -> list[dict]:
+    """Active employees with leave template assignment and department."""
+    employees = (
+        get_db().table("employees")
+        .select("id, first_name, last_name, employee_no, date_hired, leave_template_id")
+        .eq("company_id", get_company_id())
+        .eq("is_active", True)
+        .order("last_name")
+        .execute()
+    ).data or []
+    # Department lives in employee_profiles — merge it in
+    dept_map = _load_all_departments()
+    for emp in employees:
+        emp["department"] = dept_map.get(emp["id"], "")
+    return employees
+
+
+def _load_leave_balance_overrides(year: int) -> dict:
+    """
+    Load leave_balance rows for the given year.
+    Returns {(employee_id, leave_type): opening_balance}.
+    When a row exists it REPLACES the template/default entitlement for that year
+    (the stored value already includes template days + any carried-over days).
+    """
+    result = (
+        get_db().table("leave_balance")
+        .select("employee_id, leave_type, opening_balance")
+        .eq("company_id", get_company_id())
+        .eq("year", year)
+        .execute()
+    )
+    return {
+        (r["employee_id"], r["leave_type"]): float(r["opening_balance"])
+        for r in (result.data or [])
+    }
+
+
+def _load_approved_leave_year(year: int) -> dict:
+    """
+    Load all approved leave_requests for the given calendar year.
+    Returns {employee_id: {"VL": days, "SL": days, "CL": days}}.
+    """
+    start = date(year, 1, 1).isoformat()
+    end   = date(year, 12, 31).isoformat()
+    result = (
+        get_db().table("leave_requests")
+        .select("employee_id, leave_type, days")
+        .eq("company_id", get_company_id())
+        .eq("status", "approved")
+        .gte("start_date", start)
+        .lte("start_date", end)
+        .execute()
+    )
+    usage: dict = {}
+    for r in (result.data or []):
+        eid = r["employee_id"]
+        lt  = r.get("leave_type", "")
+        if eid not in usage:
+            usage[eid] = {"VL": 0.0, "SL": 0.0, "CL": 0.0}
+        if lt in ("VL", "SL", "CL"):
+            usage[eid][lt] += float(r.get("days") or 0)
+    return usage
 
 
 # ============================================================
@@ -889,6 +1031,160 @@ def _render_approvals_tab():
 
 
 # ============================================================
+# Leave Balances Admin View — Render
+# ============================================================
+
+def _render_leave_balances_tab():
+    import pandas as pd
+
+    today    = date.today()
+    cur_year = today.year
+
+    yr_col, _ = st.columns([1, 5])
+    with yr_col:
+        year = st.selectbox(
+            "Year",
+            [cur_year - 1, cur_year, cur_year + 1],
+            index=1,
+            format_func=str,
+            key="lb_year",
+        )
+
+    company   = _load_company_leave_settings()
+    templates = _load_leave_templates_map()
+    employees = _load_employees_for_balance()
+    usage     = _load_approved_leave_year(year)
+    overrides = _load_leave_balance_overrides(year)  # carry-over rows from year-end processing
+
+    if not employees:
+        st.info("No active employees found.")
+        return
+
+    # Company-wide defaults (fallback when no template is assigned)
+    defaults = {
+        "VL": int(company.get("leave_vl_days") or 15),
+        "SL": int(company.get("leave_sl_days") or 15),
+        "CL": int(company.get("leave_cl_days") or 5),
+    }
+
+    # ── Summary metrics ───────────────────────────────────────────────────────
+    total_vl_used = sum(u.get("VL", 0) for u in usage.values())
+    total_sl_used = sum(u.get("SL", 0) for u in usage.values())
+    total_cl_used = sum(u.get("CL", 0) for u in usage.values())
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Active Employees", len(employees))
+    m2.metric(f"VL Used ({year})", f"{total_vl_used:.1f} days")
+    m3.metric(f"SL Used ({year})", f"{total_sl_used:.1f} days")
+    m4.metric(f"CL Used ({year})", f"{total_cl_used:.1f} days")
+
+    st.divider()
+
+    # ── Department filter ──────────────────────────────────────────────────────
+    all_depts = sorted({emp.get("department") or "" for emp in employees} - {""})
+    if all_depts:
+        dept_col, _ = st.columns([2, 4])
+        with dept_col:
+            sel_dept = st.selectbox(
+                "Filter by Department", ["All"] + all_depts, key="lb_dept"
+            )
+    else:
+        sel_dept = "All"
+
+    # ── Build rows ─────────────────────────────────────────────────────────────
+    rows = []
+    for emp in employees:
+        eid     = emp["id"]
+        tmpl_id = emp.get("leave_template_id")
+        tmpl    = templates.get(tmpl_id) if tmpl_id else None
+        dept    = emp.get("department") or "—"
+
+        if sel_dept != "All" and dept != sel_dept:
+            continue
+
+        # Base entitlement from template or company defaults
+        ent = {
+            "VL": int(tmpl["vl_days"]) if tmpl else defaults["VL"],
+            "SL": int(tmpl["sl_days"]) if tmpl else defaults["SL"],
+            "CL": int(tmpl["cl_days"]) if tmpl else defaults["CL"],
+        }
+        # Override with leave_balance row if present (includes carry-over from prior year)
+        has_override = False
+        for lt in ("VL", "SL", "CL"):
+            ob = overrides.get((eid, lt))
+            if ob is not None:
+                ent[lt] = ob
+                has_override = True
+
+        u = usage.get(eid, {"VL": 0.0, "SL": 0.0, "CL": 0.0})
+
+        def _pct(used, total):
+            return min(100.0, round(used / total * 100, 1)) if total > 0 else 0.0
+
+        # Template label — suffix with ↪ if carry-over opening balance is active
+        tmpl_label = (tmpl["name"] if tmpl else "Default") + (" ↪" if has_override else "")
+
+        rows.append({
+            "Employee":  f"{emp['last_name']}, {emp['first_name']}",
+            "Dept":      dept,
+            "Template":  tmpl_label,
+            "VL Left":   max(0.0, ent["VL"] - u["VL"]),
+            "VL Total":  ent["VL"],
+            "VL Used %": _pct(u["VL"], ent["VL"]),
+            "SL Left":   max(0.0, ent["SL"] - u["SL"]),
+            "SL Total":  ent["SL"],
+            "SL Used %": _pct(u["SL"], ent["SL"]),
+            "CL Left":   max(0.0, ent["CL"] - u["CL"]),
+            "CL Total":  ent["CL"],
+            "CL Used %": _pct(u["CL"], ent["CL"]),
+        })
+
+    if not rows:
+        st.info("No employees match the selected filter.")
+        return
+
+    df = pd.DataFrame(rows)
+
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Employee":  st.column_config.TextColumn("Employee", width="medium"),
+            "Dept":      st.column_config.TextColumn("Dept", width="small"),
+            "Template":  st.column_config.TextColumn("Template", width="small"),
+            "VL Left":   st.column_config.NumberColumn("VL Left", format="%.1f d", width="small"),
+            "VL Total":  st.column_config.NumberColumn("VL Total", format="%.0f d", width="small"),
+            "VL Used %": st.column_config.ProgressColumn(
+                "VL Used", min_value=0, max_value=100, format="%.0f%%", width="medium"
+            ),
+            "SL Left":   st.column_config.NumberColumn("SL Left", format="%.1f d", width="small"),
+            "SL Total":  st.column_config.NumberColumn("SL Total", format="%.0f d", width="small"),
+            "SL Used %": st.column_config.ProgressColumn(
+                "SL Used", min_value=0, max_value=100, format="%.0f%%", width="medium"
+            ),
+            "CL Left":   st.column_config.NumberColumn("CL Left", format="%.1f d", width="small"),
+            "CL Total":  st.column_config.NumberColumn("CL Total", format="%.0f d", width="small"),
+            "CL Used %": st.column_config.ProgressColumn(
+                "CL Used", min_value=0, max_value=100, format="%.0f%%", width="medium"
+            ),
+        },
+    )
+
+    replenishment = company.get("leave_replenishment", "annual")
+    policy_note = (
+        "Annual policy — balances shown as approved leave taken Jan 1 – Dec 31."
+        if replenishment == "annual"
+        else "Anniversary policy — balances reflect the calendar year window above. "
+             "Individual reset dates may vary by hire date."
+    )
+    st.caption(
+        f"📅 {policy_note} Entitlement is per assigned template or company defaults. "
+        "↪ = opening balance includes carried-over days from the prior year."
+    )
+
+
+# ============================================================
 # Main Page Render
 # ============================================================
 
@@ -990,14 +1286,14 @@ def _render_employees_tab():
     st.caption(f"Showing {len(filtered)} employee{'s' if len(filtered) != 1 else ''}")
 
     # Table header
-    cols = st.columns([1, 2.5, 2, 2, 1.5, 1, 1, 3])
+    cols = st.columns([1, 2.5, 2, 2, 1.5, 1, 1, 4])
     for col, header in zip(cols, ["No.", "Name", "Position / Dept", "Salary", "Type", "IDs", "Status", "Actions"]):
         col.markdown(f"**{header}**")
 
     # Table rows
     for emp in filtered:
         completed, missing = _onboarding_status(emp)
-        cols = st.columns([1, 2.5, 2, 2, 1.5, 1, 1, 3])
+        cols = st.columns([1, 2.5, 2, 2, 1.5, 1, 1, 4])
 
         with cols[0]:
             st.text(emp["employee_no"])
@@ -1028,29 +1324,31 @@ def _render_employees_tab():
             else:
                 st.markdown(":red[Inactive]")
         with cols[7]:
-            btn_col1, btn_col2, btn_col3, btn_col4 = st.columns(4)
+            btn_col1, btn_col2, btn_col3, btn_col4 = st.columns([2, 2, 1, 1])
             with btn_col1:
-                if st.button("Edit", key=f"edit_{emp['id']}", width="stretch"):
+                if st.button("✏️ Edit", key=f"edit_{emp['id']}", width="stretch",
+                             type="primary"):
                     st.session_state.editing_id = emp["id"]
             with btn_col2:
                 # Invite button logic:
                 #   No email set      → show dash (can't invite)
                 #   Email set, no uid → show "Invite" (first-time invite)
-                #   Email set, uid    → show "Re-send" (re-link / resend flow)
+                #   Email set, uid    → show "Resend" (re-link / resend flow)
                 if not emp.get("email"):
-                    st.markdown("—", help="Add email to enable invite")
+                    st.markdown("<div style='text-align:center;color:#aaa;margin-top:6px' title='Add employee email to enable portal invite'>—</div>",
+                                unsafe_allow_html=True)
                 elif not emp.get("user_id"):
-                    if st.button("Invite", key=f"invite_{emp['id']}", width="stretch",
+                    if st.button("✉️ Invite", key=f"invite_{emp['id']}", width="stretch",
                                  help=f"Send portal invite to {emp['email']}"):
                         st.session_state[f"invite_confirm_{emp['id']}"] = True
                 else:
-                    if st.button("Re-send", key=f"invite_{emp['id']}", width="stretch",
+                    if st.button("✉️ Resend", key=f"invite_{emp['id']}", width="stretch",
                                  help=f"Re-send or re-link portal access for {emp['email']}"):
                         st.session_state[f"invite_confirm_{emp['id']}"] = True
             with btn_col3:
                 # Reset password — only if employee has a linked account
                 if emp.get("email") and emp.get("user_id"):
-                    if st.button("Pwd ↺", key=f"resetpwd_{emp['id']}", width="stretch",
+                    if st.button("🔑", key=f"resetpwd_{emp['id']}", width="stretch",
                                  help=f"Send password reset email to {emp['email']}"):
                         from app.auth import send_password_reset
                         ok, err = send_password_reset(emp["email"])
@@ -1063,14 +1361,17 @@ def _render_employees_tab():
                             st.session_state["_invite_toast"] = ("error", err)
                         st.rerun()
                 else:
-                    st.markdown("—", help="Link portal account first")
+                    st.markdown("<div style='text-align:center;color:#aaa;margin-top:6px' title='Link portal account first to enable password reset'>—</div>",
+                                unsafe_allow_html=True)
             with btn_col4:
                 if emp.get("is_active", True):
-                    if st.button("Off", key=f"deact_{emp['id']}", width="stretch"):
+                    if st.button("🟢", key=f"deact_{emp['id']}", width="stretch",
+                                 help="Click to deactivate this employee"):
                         _update_employee(emp["id"], {"is_active": False})
                         st.rerun()
                 else:
-                    if st.button("On", key=f"react_{emp['id']}", width="stretch"):
+                    if st.button("🔴", key=f"react_{emp['id']}", width="stretch",
+                                 help="Click to reactivate this employee"):
                         _update_employee(emp["id"], {"is_active": True})
                         st.rerun()
 
@@ -1171,7 +1472,7 @@ def _render_employees_tab():
                     })
                     log_action("updated", "employee", emp["id"], f"{updated['first_name']} {updated['last_name']}", details=changes)
                     st.session_state.editing_id = None
-                    st.success(f"Updated {updated['first_name']} {updated['last_name']}")
+                    st.session_state["_edit_toast"] = f"{updated['first_name']} {updated['last_name']} updated successfully."
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error updating employee: {e}")
@@ -1188,9 +1489,13 @@ def _render_employees_tab():
 # ============================================================
 
 def render():
+    inject_css()
     st.title("Employee Master File")
 
     # ── Page-level toasts (shown above tabs so they're always visible) ─────────
+    if "_edit_toast" in st.session_state:
+        st.toast(st.session_state.pop("_edit_toast"), icon="✅")
+
     for toast_key in ("_invite_toast", "_review_toast"):
         if toast_key in st.session_state:
             kind, msg = st.session_state.pop(toast_key)
@@ -1241,10 +1546,17 @@ def render():
             unsafe_allow_html=True,
         )
 
-    tab_emp, tab_approvals = st.tabs(["👥 Employees", "📋 Leave & OT Approvals"])
+    tab_emp, tab_approvals, tab_balances = st.tabs([
+        "👥 Employees",
+        "📋 Leave & OT Approvals",
+        "📊 Leave Balances",
+    ])
 
     with tab_emp:
         _render_employees_tab()
 
     with tab_approvals:
         _render_approvals_tab()
+
+    with tab_balances:
+        _render_leave_balances_tab()

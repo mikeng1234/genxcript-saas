@@ -16,6 +16,7 @@ from datetime import date, timedelta
 import calendar as _cal
 
 from app.db_helper import get_db, get_company_id
+from app.styles import inject_css
 from backend.deadlines import get_remittance_deadlines, load_holiday_set
 
 
@@ -167,30 +168,32 @@ def _build_day_events(
 
 _CALENDAR_CSS = """
 <style>
+/* ── Calendar — dark base (matches config.toml base=dark) ── */
 .gxp-cal-wrap { overflow-x: auto; margin-bottom: 4px; }
 .gxp-cal {
     width: 100%; border-collapse: collapse; table-layout: fixed;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 .gxp-cal th {
-    background: #1e3a5f; color: #fff; padding: 8px 2px;
+    background: #1e3a5f; color: #e2e8f0; padding: 8px 2px;
     text-align: center; font-size: 12px; letter-spacing: 0.4px;
 }
 .gxp-cal td {
-    border: 1px solid #dee2e6; vertical-align: top;
+    border: 1px solid #2d3748; vertical-align: top;
     padding: 4px 4px 2px; height: 90px; width: 14.28%;
     box-sizing: border-box; overflow: hidden;
+    background: #1a2030;
 }
-.gxp-cal .empty-cell { background: #f0f2f5; }
-.gxp-cal .weekend    { background: #f7f8fa; }
-.gxp-cal .hol-reg    { background: #fff0f0 !important; }
-.gxp-cal .hol-spec   { background: #fffaed !important; }
+.gxp-cal .empty-cell { background: #131920 !important; }
+.gxp-cal .weekend    { background: #161d28 !important; }
+.gxp-cal .hol-reg    { background: #3b1515 !important; }
+.gxp-cal .hol-spec   { background: #3b2f0a !important; }
 .day-num {
-    font-size: 12px; font-weight: 700; color: #343a40;
+    font-size: 12px; font-weight: 700; color: #e2e8f0;
     display: inline-block; margin-bottom: 2px; line-height: 1;
 }
 .day-num.is-today {
-    background: #0d6efd; color: #fff; border-radius: 50%;
+    background: #3b82f6; color: #fff; border-radius: 50%;
     width: 20px; height: 20px;
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 11px;
@@ -203,10 +206,22 @@ _CALENDAR_CSS = """
 .evt-hol-reg             { background: #dc3545; color: #fff; }
 .evt-hol-spec            { background: #fd7e14; color: #fff; }
 .evt-payment             { background: #198754; color: #fff; }
-.evt-deadline-sss        { background: #6f42c1; color: #fff; }
-.evt-deadline-philhealth { background: #0dcaf0; color: #000; }
-.evt-deadline-pagibig    { background: #d63384; color: #fff; }
-.evt-deadline-bir        { background: #343a40; color: #fff; }
+.evt-deadline-sss        { background: #7c3aed; color: #fff; }
+.evt-deadline-philhealth { background: #0891b2; color: #fff; }
+.evt-deadline-pagibig    { background: #db2777; color: #fff; }
+.evt-deadline-bir        { background: #dc2626; color: #fff; }
+
+/* ── Light mode overrides ── */
+@media (prefers-color-scheme: light) {
+    .gxp-cal td          { background: #ffffff; border-color: #dee2e6; }
+    .gxp-cal .empty-cell { background: #f0f2f5 !important; }
+    .gxp-cal .weekend    { background: #f7f8fa !important; }
+    .gxp-cal .hol-reg    { background: #fff0f0 !important; }
+    .gxp-cal .hol-spec   { background: #fffaed !important; }
+    .day-num             { color: #343a40; }
+    .day-num.is-today    { background: #0d6efd; color: #fff; }
+    .evt-deadline-philhealth { color: #000; }
+}
 </style>
 """
 
@@ -347,6 +362,7 @@ def _render_holiday_table(holidays: list[dict]):
 # ============================================================
 
 def render():
+    inject_css()
     st.title("Calendar")
 
     today = date.today()

@@ -10,6 +10,7 @@ Features:
 
 import streamlit as st
 from app.db_helper import get_db, get_company_id
+from app.styles import inject_css
 from reports.payslip_pdf import generate_payslip_pdf, generate_all_payslips_pdf
 
 
@@ -86,6 +87,7 @@ def _load_payroll_entries(pay_period_id: str) -> dict:
 # ============================================================
 
 def render():
+    inject_css()
     st.title("Payslips")
 
     # Load pay periods (show all, but note which are finalized)

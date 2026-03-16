@@ -1,6 +1,6 @@
 # GenXcript Payroll — Product Roadmap
 
-> Last updated: 2026-03-16
+> Last updated: 2026-03-17
 > Strategy: Payroll-first → HR Compliance → Attendance → Advanced Payroll → Portal → BI → Scale
 > Each phase unlocks the next. Features within a phase are ordered by dependency.
 
@@ -33,7 +33,7 @@
 - [x] **Employee self-service portal** — Employees log in with their Employee ID or email, view their own payslips, download their BIR 2316 and COE, and update personal profile information
 - [x] **Philippine holiday calendar** — 2025–2026 national holidays pre-seeded (regular + special non-working + special working); used by deadline engine and calendar view
 - [x] **Dashboard charts** — Payroll cost trend (line), deductions breakdown (pie), headcount over time (bar); draggable/resizable card layout with show/hide controls per card
-- [x] **UI/UX design pass** — Shared CSS styles module; financial data styled with consistent typography; colored status badges; remittance agency cards with progress indicators
+- [x] **UI/UX design pass** — Shared CSS styles module with full inject_css() coverage across all pages; financial data styled with consistent typography; colored status badges; remittance agency cards with progress indicators; uniform h1 sizing via native st.title() on all pages
 - [x] **Leave Entitlement Templates** — Named leave tiers (e.g., "0–1 Year", "Regular Staff") with configurable VL/SL/CL days; assignable per employee; defaults to 15/15/5 if unassigned
 - [x] **OT Heat Maps** — Visualize which days and cost centers drive overtime spikes; baseline for Phase 7 BI analytics
 - [ ] **PWA cache** — Offline-capable for areas with unstable internet *(low priority, skip for now)*
@@ -43,39 +43,39 @@
 ## Phase 3: Core HR Completion
 > Prerequisite for Phases 4 and 5. These unlock correct OT multipliers, attendance deductions, and statutory leave compliance.
 
-### 3A — Holidays Management *(small lift, high compliance impact)*
+### 3A — Holidays Management ✅ Complete
 - [x] Holiday type definitions — regular, special non-working, special working *(done in migration 004)*
 - [x] Annual holiday calendar — 2025–2026 PH proclamation holidays pre-seeded *(done in migration 004)*
 - [x] Calendar view integration — holidays shown with colored cell backgrounds alongside pay periods *(done in calendar_view.py)*
 - [x] Remittance deadline adjustment — deadlines auto-shift past weekends and holidays *(done in backend/deadlines.py)*
-- [ ] **Holiday Management UI** — Company Setup "Holidays" tab: view national holidays by year, add company-specific custom holidays (local govt holidays, founding anniversaries), delete own entries
-- [ ] **Holiday pay multiplier reference** — Display DOLE-mandated rates (Regular: 200% worked / 100% not worked; Special NW: 130% worked / 0% not worked) in Company Setup as an always-visible reference for HR staff
+- [x] **Holiday Management UI** — Company Setup "Holidays" tab: national holidays read-only list with type badges, company-specific custom holiday CRUD *(migration 009)*
+- [x] **Holiday pay multiplier reference** — DOLE-mandated rate table (Regular 200%/260% OT, Special NW 130%/169% OT, rest day combos) in Company Setup as expandable reference for HR staff
 
-### 3B — Employee Extended Information *(low-hanging fruit, common HR ask)*
-- [ ] Regularization date, resignation date fields
-- [ ] Birthday (affects birthday leave in some companies)
-- [ ] Classification / profession type (Engineer, Lawyer, etc.)
-- [ ] Educational background (degree, school, year graduated)
-- [ ] Additional contact info (personal email, home/mobile/work phone, Facebook, LinkedIn)
-- [ ] Permanent vs current address distinction
+### 3B — Employee Extended Information ✅ Complete
+- [x] Regularization date, resignation date fields *(migration 010)*
+- [ ] Birthday leave trigger *(deferred — low priority, company-specific)*
+- [x] Classification / profession type *(migration 010)*
+- [x] Educational background (degree, school, year graduated) *(migration 010)*
+- [x] Additional contact info (personal email, home/mobile/work phone, Facebook, LinkedIn) *(migration 010)*
+- [x] Permanent vs current address distinction *(done in Phase 2 employee portal)*
 
-### 3C — Leave Foundation *(dependency: leave deductions in payroll need this first)*
-- [ ] Leave types (SL, VL, EL, ML, PL, SPL — configurable per company)
-- [ ] Leave profiles (rules: accrual rate, carry-over cap, convertible to cash, who qualifies)
-- [ ] Leave credits & running balance per employee
-- [ ] Leave deductions in payroll (unpaid absences auto-deduct from gross pay)
-- [ ] Leave summary report (admin view: all employees, type, used, remaining)
+### 3C — Leave Foundation ✅ Mostly Complete
+- [x] Leave types (VL, SL, CL) with request flow *(migration 007)*
+- [x] Leave profiles — named entitlement templates with year-end policy: carry-over cap, cash convertible flag, conversion rate *(migrations 008, 011)*
+- [x] Leave credits & running balance per employee — computed from approved requests; `leave_balance` table stores carry-over opening balances *(migration 011)*
+- [ ] Leave deductions in payroll — unpaid absences auto-deduct from gross pay *(deferred: requires Phase 4B DTR first)*
+- [x] Leave summary report — admin "📊 Leave Balances" tab: all employees, VL/SL/CL used/remaining with progress bars, year selector, dept filter *(employees.py)*
 
 ---
 
 ## Phase 4: Attendance & Time
 > Depends on Phase 3C (leave rules) and 3A (holidays). Without schedule templates, DTR has no basis for computing late/undertime.
 
-### 4A — Scheduling *(prerequisite for DTR computation)*
-- [ ] Shift schedule profiles (e.g. "Morning 8am–5pm", "Night 10pm–6am")
-- [ ] Per-employee schedule assignment (calendar view, checkbox multi-select)
-- [ ] Single-day schedule override (one-off adjustments)
-- [ ] Compensatory Time-off (CTO) — earned OT converted to leave balance
+### 4A — Scheduling ✅ Mostly Complete
+- [x] Shift schedule profiles — name, start/end time, break duration, working days, overnight flag *(migration 012, Company Setup → Schedules tab)*
+- [x] Per-employee schedule assignment — dropdown in employee form; `employees.schedule_id` FK *(migration 012)*
+- [x] Single-day schedule override table — `schedule_overrides` with rest-day flag and reason *(migration 012, UI deferred to Phase 4B DTR page)*
+- [ ] Compensatory Time-off (CTO) — OT hours converted to leave credits *(deferred: needs DTR computation first)*
 
 ### 4B — DTR / Time Logs *(depends on 4A for late/undertime thresholds)*
 - [ ] Manual time log entry (daily punch-in / punch-out per employee)
@@ -84,13 +84,13 @@
 - [ ] DTR correction requests (employee submits → supervisor approves)
 - [ ] BTR correction request history
 
-### 4C — OT & Leave Request Workflows *(depends on 4B and 3C)*
-- [ ] Overtime request form (employee submits → 2-level approval)
-- [ ] Leave request form (employee submits → auto-deducts from leave credits on approval)
-- [ ] 2-level approval system (Supervisor → HR/Admin) for all requests
-- [ ] Auto-email notifications to supervisor on Leave/OT request submission
-  *(infra already exists in `email_sender.py` — just needs workflow wiring)*
-- [ ] Request history list (employee sees own requests + statuses)
+### 4C — OT & Leave Request Workflows *(partially done; depends on 4B for full DTR-backed computation)*
+- [x] Overtime request form — employee portal submits OT request with date/time/hours *(employee_portal.py)*
+- [x] Leave request form — employee portal submits leave with balance check warning *(employee_portal.py)*
+- [x] Admin approval — single-level approve/reject with notes; Leave & OT Approvals tab *(employees.py)*
+- [x] Request history list — employee sees own requests + statuses *(employee_portal.py)*
+- [ ] 2-level approval (Supervisor → HR/Admin) *(deferred: requires schedule/reporting structure)*
+- [ ] Auto-email notifications to supervisor on submission *(deferred: needs 2-level approval first)*
 
 ---
 
@@ -129,6 +129,7 @@
 ## Phase 6: Employee Portal Expansion
 > Connects all Phase 3–5 features to the self-service portal. Employees become active users, not just recipients.
 
+- [x] **Preferences tab** — Personalise appearance, date formats, display settings, and notifications from within the employee portal (embedded as 5th tab alongside Profile / Payslips / Time & Leave / Documents)
 - [ ] View daily time record (DTR) per period
 - [ ] View full time log history
 - [ ] Submit leave request (with leave balance shown)

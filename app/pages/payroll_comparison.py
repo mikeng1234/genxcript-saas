@@ -9,6 +9,7 @@ Compares two finalized/paid pay periods side by side, highlighting:
 
 import streamlit as st
 from app.db_helper import get_db, get_company_id
+from app.styles import inject_css
 
 
 # ============================================================
@@ -124,6 +125,7 @@ def _classify_change(gross_a: int, gross_b: int) -> str:
 # ============================================================
 
 def render():
+    inject_css()
     st.title("Payroll Comparison")
     st.caption("Compare two finalized pay periods to spot changes in pay, headcount, and government contributions.")
 

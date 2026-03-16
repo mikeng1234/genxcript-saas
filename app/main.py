@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(
     page_title="GenXcript Payroll",
@@ -22,6 +23,7 @@ from app.auth import (
     restore_from_query_params, is_employee_role,
     update_active_company, add_accessible_company,
     ensure_accessible_companies_loaded,
+    change_own_password, get_current_display_name, update_own_display_name,
 )
 
 # Hide Streamlit's auto-generated page navigation (it scans the pages/
@@ -124,8 +126,12 @@ if len(accessible) > 1:
     st.sidebar.divider()
 
 elif len(accessible) == 1:
-    # Single company — show name as a caption, no dropdown needed
-    st.sidebar.caption(f"🏢 {accessible[0]['name']}")
+    # Single company — show name as a label, not a tiny caption
+    st.sidebar.markdown(
+        f"<div style='font-size:13px;font-weight:600;padding:2px 0 4px 0;'>"
+        f"🏢 {accessible[0]['name']}</div>",
+        unsafe_allow_html=True,
+    )
     st.sidebar.divider()
 
 
@@ -221,6 +227,7 @@ PAGES = [
     "Government Reports",
     "Calendar",
     "Company Setup",
+    "Preferences",
 ]
 
 # current_page = what is actually rendered (source of truth)
@@ -280,16 +287,245 @@ if _dirty_nav:
 st.session_state.current_page = st.session_state.nav_page
 page = st.session_state.nav_page
 
+# ── Collapsed-sidebar top navigation bar ───────────────────────
+# Rendered as a 0-height component so the JS executes without
+# taking up any visual space. The script injects a fixed top bar
+# into the *parent* page (window.parent.document) and shows/hides
+# it based on the sidebar's aria-expanded attribute.
+_NAV_ICONS = {
+    "Dashboard": "📊", "Employees": "👥", "Payroll Run": "💸",
+    "Payslips": "📄", "Payroll Comparison": "📈", "OT Analytics": "🔥",
+    "Government Reports": "🏛️", "Calendar": "📅",
+    "Company Setup": "🏢", "Preferences": "⚙️",
+}
+_nav_json = ", ".join(
+    '{{"n":"{n}","i":"{i}"}}'.format(n=p, i=_NAV_ICONS.get(p, ""))
+    for p in PAGES
+)
+components.html(f"""
+<script>
+(function(){{
+  var PAGES=[{_nav_json}], ACTIVE="{page}", ID='gxp-topnav', H=48;
+  var d=window.parent.document;
+
+  function gc(n,fb){{
+    try{{var v=getComputedStyle(d.documentElement).getPropertyValue(n).trim();return v||fb;}}
+    catch(e){{return fb;}}
+  }}
+
+  function isSidebarCollapsed(){{
+    var sb=d.querySelector('[data-testid="stSidebar"]');
+    if(!sb) return false;
+    // Primary: aria-expanded attribute
+    var ae=sb.getAttribute('aria-expanded');
+    if(ae==='false') return true;
+    if(ae==='true')  return false;
+    // Fallback: measure actual rendered width (collapsed sidebar ~0-80px)
+    var w=sb.getBoundingClientRect().width;
+    if(w>0) return w<100;
+    // Fallback: check collapse button aria state
+    var btn=d.querySelector('[data-testid="stSidebarCollapseButton"] button,[aria-label="Close sidebar"],[aria-label="Collapse sidebar"]');
+    if(btn) return false; // button present means it's open
+    return false;
+  }}
+
+  function clickNav(name){{
+    // First try to expand sidebar and click the radio
+    var sb=d.querySelector('[data-testid="stSidebar"]');
+    if(!sb) return;
+    var labels=sb.querySelectorAll('label');
+    for(var i=0;i<labels.length;i++){{
+      if(labels[i].textContent.trim()===name){{
+        var inp=labels[i].querySelector('input[type="radio"]');
+        if(inp){{ inp.click(); return; }}
+        labels[i].click(); return;
+      }}
+    }}
+  }}
+
+  function getStHeaderHeight(){{
+    var h=d.querySelector('[data-testid="stHeader"]');
+    return h ? h.getBoundingClientRect().height : 0;
+  }}
+
+  function setMainPad(collapsed){{
+    var extra=collapsed?(getStHeaderHeight()+H+4):0;
+    var selectors=[
+      '[data-testid="stMainBlockContainer"]',
+      '.stMainBlockContainer',
+      '[data-testid="block-container"]',
+      '.block-container'
+    ];
+    for(var i=0;i<selectors.length;i++){{
+      var el=d.querySelector(selectors[i]);
+      if(el){{ el.style.paddingTop=extra?extra+'px':''; break; }}
+    }}
+  }}
+
+  function build(){{
+    var old=d.getElementById(ID); if(old) old.remove();
+    var sf=gc('--gxp-surface','#1e2530'), br=gc('--gxp-border','#2d3748'),
+        tx=gc('--gxp-text','#e2e8f0'),   t2=gc('--gxp-text2','#94a3b8'),
+        ac=gc('--gxp-accent','#3b82f6'), ab=gc('--gxp-accent-bg','#1e3a5f');
+    var hh=getStHeaderHeight();
+
+    var nav=d.createElement('div'); nav.id=ID;
+    nav.style.cssText=
+      'position:fixed;top:'+hh+'px;left:0;right:0;z-index:99990;'+
+      'background:'+sf+';border-bottom:1px solid '+br+';'+
+      'display:none;align-items:center;gap:2px;'+
+      'padding:0 14px;height:'+H+'px;'+
+      'overflow-x:auto;white-space:nowrap;'+
+      'box-shadow:0 2px 12px rgba(0,0,0,0.28);scrollbar-width:none;';
+
+    // Logo
+    var logo=d.createElement('div');
+    logo.innerHTML='<span style="font-size:17px">💰</span>'+
+      '<span style="font-size:14px;font-weight:700;color:'+tx+';margin-left:5px;letter-spacing:-0.3px">GenXcript</span>';
+    logo.style.cssText='display:flex;align-items:center;flex-shrink:0;margin-right:12px;';
+    nav.appendChild(logo);
+
+    var sep=d.createElement('div');
+    sep.style.cssText='width:1px;height:20px;background:'+br+';margin-right:8px;flex-shrink:0;';
+    nav.appendChild(sep);
+
+    PAGES.forEach(function(p){{
+      var isA=(p.n===ACTIVE);
+      var btn=d.createElement('button');
+      btn.textContent=(p.i?p.i+'\u00a0':'')+p.n;
+      btn.style.cssText=
+        'border:1px solid '+(isA?ac:'transparent')+';'+
+        'background:'+(isA?ab:'transparent')+';'+
+        'color:'+(isA?ac:t2)+';cursor:pointer;'+
+        'padding:5px 11px;border-radius:6px;font-size:12px;'+
+        'font-weight:'+(isA?'600':'400')+';'+
+        'white-space:nowrap;flex-shrink:0;font-family:inherit;'+
+        'transition:background 0.12s,color 0.12s;outline:none;';
+      if(!isA){{
+        btn.onmouseenter=function(){{this.style.background=gc('--gxp-surface2','#161d28');this.style.color=tx;}};
+        btn.onmouseleave=function(){{this.style.background='transparent';this.style.color=t2;}};
+      }}
+      btn.onclick=function(){{ clickNav(p.n); }};
+      nav.appendChild(btn);
+    }});
+
+    d.body.appendChild(nav);
+  }}
+
+  function sync(){{
+    var collapsed=isSidebarCollapsed();
+    var nav=d.getElementById(ID);
+    if(!nav){{ build(); nav=d.getElementById(ID); }}
+    // Always recompute top offset in case Streamlit header rendered late
+    nav.style.top=getStHeaderHeight()+'px';
+    nav.style.display=collapsed?'flex':'none';
+    setMainPad(collapsed);
+  }}
+
+  var _sbObs=null;
+  function watchSidebar(){{
+    var sb=d.querySelector('[data-testid="stSidebar"]');
+    if(!sb) return;
+    if(_sbObs) _sbObs.disconnect();
+    _sbObs=new MutationObserver(sync);
+    _sbObs.observe(sb,{{attributes:true,attributeFilter:['aria-expanded','class','style']}});
+  }}
+
+  function start(){{
+    build(); sync(); watchSidebar();
+    // Re-watch if sidebar element is replaced (Streamlit hot-reload)
+    new MutationObserver(function(ml){{
+      for(var i=0;i<ml.length;i++){{
+        var added=ml[i].addedNodes;
+        for(var j=0;j<added.length;j++){{
+          if(added[j].getAttribute&&added[j].getAttribute('data-testid')==='stSidebar'){{
+            watchSidebar(); sync(); return;
+          }}
+        }}
+      }}
+    }}).observe(d.body,{{childList:true,subtree:false}});
+    // Polling fallback — covers any cases MutationObserver misses
+    setInterval(sync, 600);
+  }}
+
+  if(d.readyState==='loading') d.addEventListener('DOMContentLoaded',start);
+  else setTimeout(start, 120);
+}})();
+</script>
+""", height=0, scrolling=False)
+
 # Keep URL in sync so F5 refresh lands on the right page.
+
 if st.query_params.get("page") != page:
     st.query_params["page"] = page
 
 st.sidebar.divider()
 st.sidebar.caption("GenXcript Payroll SaaS v0.1.0")
 
+if st.sidebar.button("👤 My Account", width="stretch"):
+    st.session_state["_show_my_account"] = True
+    st.rerun()
+
 if st.sidebar.button("Sign Out", width="stretch"):
     logout()
     st.rerun()
+
+# ============================================================
+# My Account dialog
+# ============================================================
+
+@st.dialog("👤 My Account")
+def _my_account_dialog():
+    email = get_current_user_email()
+    display_name = get_current_display_name()
+
+    st.markdown(f"**Email** &nbsp; `{email}`")
+    st.divider()
+
+    # ── Display name ─────────────────────────────────────────
+    st.markdown("#### Display Name")
+    new_name = st.text_input(
+        "Name shown in the sidebar",
+        value=display_name,
+        placeholder="e.g. Juan dela Cruz",
+        key="ma_display_name",
+    )
+    if st.button("Update Name", key="ma_save_name", type="primary"):
+        if not new_name.strip():
+            st.error("Display name cannot be empty.")
+        else:
+            ok, err = update_own_display_name(new_name)
+            if ok:
+                st.toast("Display name updated!", icon="✅")
+                st.rerun()
+            else:
+                st.error(err)
+
+    st.divider()
+
+    # ── Change password ───────────────────────────────────────
+    st.markdown("#### Change Password")
+    cur_pw  = st.text_input("Current password",  type="password", key="ma_cur_pw")
+    new_pw  = st.text_input("New password",       type="password", key="ma_new_pw",
+                             help="Minimum 6 characters")
+    conf_pw = st.text_input("Confirm new password", type="password", key="ma_conf_pw")
+
+    if st.button("Change Password", key="ma_change_pw"):
+        if not cur_pw:
+            st.error("Enter your current password.")
+        elif len(new_pw) < 6:
+            st.error("New password must be at least 6 characters.")
+        elif new_pw != conf_pw:
+            st.error("New passwords do not match.")
+        else:
+            ok, err = change_own_password(cur_pw, new_pw)
+            if ok:
+                st.success("Password changed successfully!")
+            else:
+                st.error(err)
+
+if st.session_state.pop("_show_my_account", False):
+    _my_account_dialog()
 
 # ============================================================
 # Page Router
@@ -330,3 +566,7 @@ elif page == "Calendar":
 elif page == "Company Setup":
     from app.pages.company_setup import render as render_company
     render_company()
+
+elif page == "Preferences":
+    from app.pages.preferences import render as render_preferences
+    render_preferences()

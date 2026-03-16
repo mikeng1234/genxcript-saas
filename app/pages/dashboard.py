@@ -213,6 +213,9 @@ def _render_action_bar(company: dict, next_period: dict | None):
     today = date.today()
     today_str = today.strftime("%A, %B %d, %Y")
 
+    # Company name as native Streamlit heading (h1 with anchor link on hover)
+    st.title(company_name)
+
     # Next payroll info block
     if next_period:
         next_date = next_period["period_end"]
@@ -236,8 +239,10 @@ def _render_action_bar(company: dict, next_period: dict | None):
     st.markdown(
         '<div class="gxp-action-bar">'
         '<div class="gxp-action-bar-left">'
-        f'<div class="gxp-action-bar-greeting">{company_name}</div>'
-        f'<div class="gxp-action-bar-sub">Today is <strong>{today_str}</strong></div>'
+        '<div style="text-align:left;">'
+        f'<div class="gxp-action-bar-next-label">Today</div>'
+        f'<div class="gxp-action-bar-next-date">{today_str}</div>'
+        '</div>'
         '</div>'
         '<div class="gxp-action-bar-right">'
         f'{next_html}'

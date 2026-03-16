@@ -806,6 +806,21 @@ def _get_leave_balance(employee_id: str, company: dict, emp: dict) -> tuple[dict
             "CL": int(company.get("leave_cl_days", _COMPANY_DEFAULTS["CL"])),
         }
 
+    # ── Override with leave_balance row if HR has set a carry-over opening balance ──
+    # leave_balance stores the FULL allocation for the year (template days + carry-over),
+    # so it replaces the template/default value entirely when present.
+    lb_result = (
+        get_db().table("leave_balance")
+        .select("leave_type, opening_balance")
+        .eq("employee_id", employee_id)
+        .eq("year", start.year)
+        .execute()
+    )
+    for row in (lb_result.data or []):
+        lt = row.get("leave_type", "")
+        if lt in entitlement:
+            entitlement[lt] = float(row["opening_balance"])
+
     # ── Query approved leave taken in current period ──────────────────────────
     db = get_db()
     result = (
@@ -1152,8 +1167,8 @@ def render():
     _render_hero(emp, company)
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    tab_profile, tab_payslips, tab_leave, tab_docs = st.tabs([
-        "My Profile", "My Payslips", "My Time & Leave", "My Documents",
+    tab_profile, tab_payslips, tab_leave, tab_docs, tab_prefs = st.tabs([
+        "My Profile", "My Payslips", "My Time & Leave", "My Documents", "Preferences",
     ])
 
     with tab_profile:
@@ -1168,3 +1183,7 @@ def render():
 
     with tab_docs:
         _render_documents(emp, company)
+
+    with tab_prefs:
+        from app.pages.preferences import render as render_preferences
+        render_preferences(standalone=False)

@@ -15,6 +15,7 @@ import pandas as pd
 from datetime import date
 
 from app.db_helper import get_db, get_company_id
+from app.styles import inject_css
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -83,7 +84,8 @@ def _load_employee_map() -> dict:
 # ── Page ─────────────────────────────────────────────────────────────────────
 
 def render() -> None:
-    st.title("🔥 OT Heat Maps")
+    inject_css()
+    st.title("OT Heat Maps")
     st.caption("Visualize which days and employees drive overtime spikes.")
 
     # ── Year selector ─────────────────────────────────────────────────────────

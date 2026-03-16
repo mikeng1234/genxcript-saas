@@ -12,6 +12,7 @@ One-time onboarding and settings:
 import streamlit as st
 from datetime import date, datetime, timezone, timedelta
 from app.db_helper import get_db, get_company_id, log_action
+from app.styles import inject_css
 
 
 # ============================================================
@@ -216,6 +217,47 @@ def _template_form(
             cl = st.number_input("Casual / Emergency Leave (CL)", min_value=0, max_value=30,
                                  value=int(d.get("cl_days", 5)), step=1)
 
+        # ── Year-End Policy ───────────────────────────────────────────────────
+        st.markdown("**Year-End Policy**")
+        st.caption(
+            "What happens to unused leave days at year-end. "
+            "Carry-over and cash conversion are applied when HR runs the year-end processing action (Phase 5). "
+            "DOLE note: Service Incentive Leave (SIL) unused days are legally convertible to cash."
+        )
+        p1, p2, p3 = st.columns(3)
+        with p1:
+            carry_over_cap = st.number_input(
+                "Carry-Over Cap (days)",
+                min_value=0, max_value=60,
+                value=int(d.get("carry_over_cap", 0)),
+                step=1,
+                help=(
+                    "Maximum unused days (per leave type) that roll over to next year. "
+                    "0 = no carry-over. Applies to VL, SL, and CL."
+                ),
+            )
+        with p2:
+            convertible_to_cash = st.checkbox(
+                "Convert unused to cash",
+                value=bool(d.get("convertible_to_cash", False)),
+                help=(
+                    "Unused days beyond the carry-over cap are paid out as salary. "
+                    "Applies at year-end processing."
+                ),
+            )
+        with p3:
+            conversion_rate = st.number_input(
+                "Conversion Rate (× daily rate)",
+                min_value=0.10, max_value=2.00,
+                value=float(d.get("conversion_rate", 1.00)),
+                step=0.10,
+                format="%.2f",
+                help=(
+                    "1.00 = 1 unused day = 1 day's basic pay. "
+                    "Ignored when 'Convert unused to cash' is off."
+                ),
+            )
+
         submitted = st.form_submit_button(submit_label, type="primary", width='stretch')
 
     if submitted:
@@ -226,12 +268,15 @@ def _template_form(
             st.error("Max. service must be ≥ Min. service (or 0 for no upper limit).")
             return None
         return {
-            "name":               name.strip(),
-            "min_service_months": int(min_mo),
-            "max_service_months": None if max_mo == 0 else int(max_mo),
-            "vl_days":            int(vl),
-            "sl_days":            int(sl),
-            "cl_days":            int(cl),
+            "name":                name.strip(),
+            "min_service_months":  int(min_mo),
+            "max_service_months":  None if max_mo == 0 else int(max_mo),
+            "vl_days":             int(vl),
+            "sl_days":             int(sl),
+            "cl_days":             int(cl),
+            "carry_over_cap":      int(carry_over_cap),
+            "convertible_to_cash": bool(convertible_to_cash),
+            "conversion_rate":     float(conversion_rate),
         }
     return None
 
@@ -278,19 +323,32 @@ def _render_template_section():
         return
 
     # ── Templates table ──────────────────────────────────────────────────────
-    hdr = st.columns([2.5, 2, 1, 1, 1, 1.8])
-    for col, lbl in zip(hdr, ["Name", "Service Range", "VL", "SL", "CL", "Actions"]):
+    hdr = st.columns([2.5, 2, 1, 1, 1, 2.5, 1.8])
+    for col, lbl in zip(hdr, ["Name", "Service Range", "VL", "SL", "CL", "Year-End Policy", "Actions"]):
         col.markdown(f"**{lbl}**")
 
     for tmpl in templates:
-        row = st.columns([2.5, 2, 1, 1, 1, 1.8])
+        row = st.columns([2.5, 2, 1, 1, 1, 2.5, 1.8])
         row[0].text(tmpl["name"])
         row[1].text(_service_range_label(tmpl["min_service_months"], tmpl["max_service_months"]))
         row[2].text(str(tmpl["vl_days"]))
         row[3].text(str(tmpl["sl_days"]))
         row[4].text(str(tmpl["cl_days"]))
 
-        act1, act2 = row[5].columns(2)
+        # Policy summary
+        co_cap = int(tmpl.get("carry_over_cap", 0) or 0)
+        convertible = bool(tmpl.get("convertible_to_cash", False))
+        rate = float(tmpl.get("conversion_rate", 1.00) or 1.00)
+        policy_parts = []
+        if co_cap > 0:
+            policy_parts.append(f"↪ {co_cap}d carry-over")
+        if convertible:
+            policy_parts.append(f"💵 cash ×{rate:.2f}")
+        if not policy_parts:
+            policy_parts.append("Forfeit unused")
+        row[5].caption(" · ".join(policy_parts))
+
+        act1, act2 = row[6].columns(2)
         with act1:
             if st.button("Edit", key=f"tmpl_edit_{tmpl['id']}", width='stretch'):
                 # Toggle: if already editing this one, close it
@@ -660,11 +718,280 @@ def _render_holidays_tab():
 
 
 # ============================================================
+# Database operations — Schedules
+# ============================================================
+
+_DAYS_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+_DAYS_LABEL = {
+    "Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday",
+    "Thu": "Thursday", "Fri": "Friday", "Sat": "Saturday", "Sun": "Sunday",
+}
+
+
+def _load_schedules() -> list[dict]:
+    return (
+        get_db().table("schedules")
+        .select("*")
+        .eq("company_id", get_company_id())
+        .order("name")
+        .execute()
+    ).data or []
+
+
+def _create_schedule(data: dict) -> dict:
+    data["company_id"] = get_company_id()
+    result = get_db().table("schedules").insert(data).execute()
+    return result.data[0]
+
+
+def _update_schedule(sched_id: str, data: dict) -> dict:
+    result = (
+        get_db().table("schedules")
+        .update(data)
+        .eq("id", sched_id)
+        .execute()
+    )
+    return result.data[0]
+
+
+def _delete_schedule(sched_id: str):
+    get_db().table("schedules").delete().eq("id", sched_id).execute()
+
+
+def _hours_per_day(start: str, end: str, break_min: int, overnight: bool) -> float:
+    """Compute net hours worked per day from shift times."""
+    from datetime import datetime as _dt
+    fmt = "%H:%M"
+    try:
+        s = _dt.strptime(start, fmt)
+        e = _dt.strptime(end, fmt)
+        diff = (e - s).total_seconds() / 3600
+        if overnight or diff <= 0:
+            diff += 24
+        return max(0.0, diff - break_min / 60)
+    except Exception:
+        return 0.0
+
+
+def _schedule_form(
+    form_key: str,
+    defaults: dict | None = None,
+    submit_label: str = "Save Schedule",
+) -> dict | None:
+    """Render add/edit form for a shift schedule. Returns data dict on submit."""
+    d = defaults or {}
+
+    raw_days = d.get("work_days", ["Mon", "Tue", "Wed", "Thu", "Fri"])
+    if isinstance(raw_days, str):
+        raw_days = [x.strip().strip('"') for x in raw_days.strip("{}").split(",")]
+    existing_days = set(raw_days)
+
+    with st.form(form_key, clear_on_submit=(defaults is None)):
+        n1, _ = st.columns([3, 1])
+        with n1:
+            name = st.text_input(
+                "Schedule Name *",
+                value=d.get("name", ""),
+                placeholder="e.g. Regular 8–5, Night Shift, Field Work",
+            )
+
+        st.markdown("**Shift Hours**")
+        t1, t2, t3 = st.columns(3)
+        with t1:
+            raw_start = d.get("start_time", "08:00")
+            if isinstance(raw_start, str):
+                raw_start = raw_start[:5]
+            from datetime import time as _time
+            try:
+                sh, sm = map(int, raw_start.split(":"))
+            except Exception:
+                sh, sm = 8, 0
+            start_time = st.time_input("Start Time", value=_time(sh, sm), step=1800)
+        with t2:
+            raw_end = d.get("end_time", "17:00")
+            if isinstance(raw_end, str):
+                raw_end = raw_end[:5]
+            try:
+                eh, em = map(int, raw_end.split(":"))
+            except Exception:
+                eh, em = 17, 0
+            end_time = st.time_input("End Time", value=_time(eh, em), step=1800)
+        with t3:
+            break_minutes = st.number_input(
+                "Break (minutes)",
+                min_value=0, max_value=240,
+                value=int(d.get("break_minutes", 60)),
+                step=15,
+                help="Unpaid break deducted from hours worked.",
+            )
+
+        is_overnight = st.checkbox(
+            "Overnight shift (crosses midnight — e.g. 10 PM → 6 AM)",
+            value=bool(d.get("is_overnight", False)),
+            help="Check this if end time is on the next calendar day.",
+        )
+
+        st.markdown("**Working Days**")
+        day_cols = st.columns(7)
+        selected_days = []
+        for col, day in zip(day_cols, _DAYS_ORDER):
+            if col.checkbox(day, value=(day in existing_days), key=f"{form_key}_day_{day}"):
+                selected_days.append(day)
+
+        submitted = st.form_submit_button(submit_label, type="primary", width="stretch")
+
+    if submitted:
+        if not name.strip():
+            st.error("Schedule name is required.")
+            return None
+        if not selected_days:
+            st.error("Select at least one working day.")
+            return None
+        net_hrs = _hours_per_day(
+            start_time.strftime("%H:%M"),
+            end_time.strftime("%H:%M"),
+            int(break_minutes),
+            bool(is_overnight),
+        )
+        if net_hrs <= 0:
+            st.error("Net hours must be > 0. Check start/end times and break.")
+            return None
+        return {
+            "name":          name.strip(),
+            "start_time":    start_time.strftime("%H:%M"),
+            "end_time":      end_time.strftime("%H:%M"),
+            "break_minutes": int(break_minutes),
+            "is_overnight":  bool(is_overnight),
+            "work_days":     selected_days,
+        }
+    return None
+
+
+def _render_schedules_tab():
+    st.subheader("Shift Schedule Profiles")
+    st.caption(
+        "Define your company's shift schedules (e.g. Regular 8–5, Night Shift). "
+        "Assign one to each employee so the DTR engine knows their expected working hours. "
+        "Employees without an assigned schedule will be treated as unscheduled."
+    )
+
+    add_col, _ = st.columns([1, 3])
+    with add_col:
+        if st.button("+ Add Schedule", key="sched_add_btn"):
+            st.session_state.show_add_schedule = True
+
+    if st.session_state.get("show_add_schedule"):
+        st.markdown("**New Schedule**")
+        new_data = _schedule_form("add_schedule_form", submit_label="Add Schedule")
+        if new_data is not None:
+            try:
+                result = _create_schedule(new_data)
+                log_action("created", "schedule", result["id"], new_data["name"])
+                st.session_state.show_add_schedule = False
+                st.success(f"Schedule **{new_data['name']}** added.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
+        cancel_col, _ = st.columns([1, 4])
+        with cancel_col:
+            if st.button("Cancel", key="sched_add_cancel"):
+                st.session_state.show_add_schedule = False
+                st.rerun()
+
+    schedules = _load_schedules()
+
+    if not schedules:
+        st.info("No schedules defined yet. Click **+ Add Schedule** to create your first shift profile.")
+        return
+
+    hdr = st.columns([2.5, 1.5, 1.5, 1, 2.5, 1.8])
+    for col, lbl in zip(hdr, ["Name", "Net Hrs/Day", "Times", "Break", "Working Days", "Actions"]):
+        col.markdown(f"**{lbl}**")
+
+    for sched in schedules:
+        row = st.columns([2.5, 1.5, 1.5, 1, 2.5, 1.8])
+        net_hrs = _hours_per_day(
+            sched.get("start_time", "")[:5],
+            sched.get("end_time", "")[:5],
+            int(sched.get("break_minutes", 60)),
+            bool(sched.get("is_overnight", False)),
+        )
+        overnight_tag = " 🌙" if sched.get("is_overnight") else ""
+        raw_days = sched.get("work_days", [])
+        if isinstance(raw_days, str):
+            raw_days = [x.strip().strip('"') for x in raw_days.strip("{}").split(",")]
+        days_str = " · ".join(raw_days) if raw_days else "—"
+
+        row[0].text(sched["name"] + overnight_tag)
+        row[1].text(f"{net_hrs:.1f} hrs")
+        row[2].text(f"{sched.get('start_time','')[:5]} – {sched.get('end_time','')[:5]}")
+        row[3].text(f"{sched.get('break_minutes', 60)} min")
+        row[4].caption(days_str)
+
+        act1, act2 = row[5].columns(2)
+        with act1:
+            if st.button("Edit", key=f"sched_edit_{sched['id']}", width="stretch"):
+                if st.session_state.get("editing_schedule_id") == sched["id"]:
+                    st.session_state.editing_schedule_id = None
+                else:
+                    st.session_state.editing_schedule_id = sched["id"]
+                    st.session_state.show_add_schedule = False
+                st.rerun()
+        with act2:
+            if st.button("Del", key=f"sched_del_{sched['id']}", width="stretch",
+                         help="Employees assigned to this schedule will become unscheduled."):
+                st.session_state[f"sched_del_confirm_{sched['id']}"] = True
+                st.rerun()
+
+        if st.session_state.get(f"sched_del_confirm_{sched['id']}"):
+            st.warning(f"Delete **{sched['name']}**? Assigned employees will become unscheduled.")
+            dc1, dc2, _ = st.columns([1, 1, 3])
+            with dc1:
+                if st.button("Confirm Delete", key=f"sched_del_yes_{sched['id']}", type="primary"):
+                    try:
+                        _delete_schedule(sched["id"])
+                        log_action("deleted", "schedule", sched["id"], sched["name"])
+                        st.session_state.pop(f"sched_del_confirm_{sched['id']}", None)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            with dc2:
+                if st.button("Cancel", key=f"sched_del_no_{sched['id']}"):
+                    st.session_state.pop(f"sched_del_confirm_{sched['id']}", None)
+                    st.rerun()
+
+        if st.session_state.get("editing_schedule_id") == sched["id"]:
+            st.markdown(f"**Editing: {sched['name']}**")
+            updated = _schedule_form(
+                f"edit_schedule_{sched['id']}",
+                defaults=sched,
+                submit_label="Save Changes",
+            )
+            if updated is not None:
+                try:
+                    _update_schedule(sched["id"], updated)
+                    log_action("updated", "schedule", sched["id"], updated["name"])
+                    st.session_state.editing_schedule_id = None
+                    st.success(f"Schedule **{updated['name']}** updated.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+            cancel2, _ = st.columns([1, 4])
+            with cancel2:
+                if st.button("Cancel Edit", key=f"sched_edit_cancel_{sched['id']}"):
+                    st.session_state.editing_schedule_id = None
+                    st.rerun()
+
+        st.divider()
+
+
+# ============================================================
 # Main Page Render
 # ============================================================
 
 
 def render():
+    inject_css()
     st.title("Company Setup")
 
     # Show confirmation after save
@@ -677,10 +1004,11 @@ def render():
         st.error("No company found. Please contact your administrator.")
         return
 
-    tab_settings, tab_templates, tab_holidays, tab_log = st.tabs([
+    tab_settings, tab_templates, tab_holidays, tab_schedules, tab_log = st.tabs([
         "⚙️ Company Settings",
         "🏖 Leave Templates",
         "📅 Holidays",
+        "🕐 Schedules",
         "📋 Activity Log",
     ])
 
@@ -782,6 +1110,9 @@ def render():
 
     with tab_holidays:
         _render_holidays_tab()
+
+    with tab_schedules:
+        _render_schedules_tab()
 
     with tab_log:
         _render_activity_log_tab()

@@ -15,6 +15,7 @@ Only shows finalized/paid pay periods (draft periods have incomplete data).
 import streamlit as st
 from datetime import date as _date
 from app.db_helper import get_db, get_company_id
+from app.styles import inject_css
 from reports.government_reports_pdf import (
     generate_sss_r3,
     generate_philhealth_rf1,
@@ -355,6 +356,7 @@ PREVIEW_FUNCS = {
 # ============================================================
 
 def render():
+    inject_css()
     st.title("Government Reports")
 
     company      = _load_company()
