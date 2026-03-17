@@ -1276,9 +1276,43 @@ def _render_clock_widget(
     if snapshot:
         st.image(snapshot, width=180, caption="Preview")
 
+    # ── Location section with map + retry ───────────────────────
     st.markdown("**Step 2 — Share your location 📍**")
-    st.caption("Allow location when your browser asks — required to verify you're on-site.")
-    loc_data = get_location(key=f"{key_prefix}_geo_{action}")
+
+    # Use a retry counter as part of the component key so "Retry" forces
+    # the browser to re-run navigator.geolocation.getCurrentPosition()
+    _geo_retry_key = f"{key_prefix}_geo_retry_{action}"
+    if _geo_retry_key not in st.session_state:
+        st.session_state[_geo_retry_key] = 0
+    _geo_comp_key = f"{key_prefix}_geo_{action}_{st.session_state[_geo_retry_key]}"
+    loc_data = get_location(key=_geo_comp_key)
+
+    if loc_data is None:
+        # Component not yet responded
+        st.caption("⏳ Fetching your location… tap Retry if it takes too long.")
+        if st.button("🔄 Retry Location", key=f"{key_prefix}_geo_retry_btn_{action}",
+                     use_container_width=True):
+            st.session_state[_geo_retry_key] += 1
+            st.rerun()
+
+    elif loc_data.get("error"):
+        st.warning(f"📍 Location unavailable: {loc_data['error']}")
+        st.caption("Make sure location is enabled in your browser/device settings.")
+        if st.button("🔄 Retry Location", key=f"{key_prefix}_geo_retry_btn_{action}",
+                     use_container_width=True):
+            st.session_state[_geo_retry_key] += 1
+            st.rerun()
+
+    else:
+        _lat, _lng = loc_data["lat"], loc_data["lng"]
+        _acc = loc_data.get("accuracy") or 0
+        st.success(f"📍 Location captured — accuracy ±{_acc:.0f} m")
+        import pandas as _pd
+        st.map(
+            _pd.DataFrame({"lat": [_lat], "lon": [_lng]}),
+            zoom=15,
+            use_container_width=True,
+        )
 
     if st.button(
         f"✅ Confirm Clock {'In' if action == 'in' else 'Out'}",
@@ -1289,12 +1323,18 @@ def _render_clock_widget(
         now_utc  = datetime.datetime.now(timezone.utc)
         now_time = datetime.datetime.now().time().replace(microsecond=0)
 
-        # Upload snapshot
+        # Upload snapshot — surface error instead of silently dropping
         snapshot_url = None
         if snapshot is not None:
-            snapshot_url = _upload_snapshot(
-                get_company_id(), emp_id, today, action, snapshot.getvalue()
-            )
+            with st.spinner("Uploading photo…"):
+                snapshot_url = _upload_snapshot(
+                    get_company_id(), emp_id, today, action, snapshot.getvalue()
+                )
+            if snapshot_url is None:
+                st.warning(
+                    "⚠️ Photo upload failed — clock-in will save without photo. "
+                    "Check that the **dtr-snapshots** storage bucket exists and is set to **Public**."
+                )
 
         # Process location
         clat = clng = cdist = cloc_id = None
@@ -1620,17 +1660,26 @@ def _upload_snapshot(company_id: str, employee_id: str, work_date: date,
     """
     Upload a face snapshot to Supabase Storage bucket 'dtr-snapshots'.
     Returns the public URL or None on failure.
-    Bucket must be created in Supabase dashboard (Storage → New bucket → 'dtr-snapshots', public).
+    Bucket must be created in Supabase dashboard:
+      Storage → New bucket → name: dtr-snapshots → Public = ON
     """
     try:
-        path = f"{company_id}/{employee_id}/{work_date}_{suffix}.jpg"
+        # Detect PNG vs JPEG from magic bytes
+        is_png = img_bytes[:4] == b'\x89PNG'
+        ext     = "png" if is_png else "jpg"
+        ctype   = "image/png" if is_png else "image/jpeg"
+        path    = f"{company_id}/{employee_id}/{work_date}_{suffix}.{ext}"
+
         get_db().storage.from_("dtr-snapshots").upload(
             path=path,
             file=img_bytes,
-            file_options={"content-type": "image/jpeg", "upsert": "true"},
+            file_options={"content-type": ctype, "upsert": "true"},
         )
         return get_db().storage.from_("dtr-snapshots").get_public_url(path)
-    except Exception:
+    except Exception as e:
+        # Caller checks for None and surfaces the warning
+        import sys
+        print(f"[dtr] snapshot upload failed: {e}", file=sys.stderr)
         return None
 
 
