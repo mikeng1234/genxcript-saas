@@ -1276,43 +1276,71 @@ def _render_clock_widget(
     if snapshot:
         st.image(snapshot, width=180, caption="Preview")
 
-    # ── Location section with map + retry ───────────────────────
-    st.markdown("**Step 2 — Share your location 📍**")
+    # ── Location section: auto-detect → fallback to manual pick ─
+    st.markdown("**Step 2 — Verify your location 📍**")
 
-    # Use a retry counter as part of the component key so "Retry" forces
-    # the browser to re-run navigator.geolocation.getCurrentPosition()
-    _geo_retry_key = f"{key_prefix}_geo_retry_{action}"
+    # Session keys
+    _geo_retry_key  = f"{key_prefix}_geo_retry_{action}"
+    _manual_loc_key = f"{key_prefix}_manual_loc_{action}"
     if _geo_retry_key not in st.session_state:
         st.session_state[_geo_retry_key] = 0
+
+    # Try automatic geolocation first (requires HTTPS on real devices)
     _geo_comp_key = f"{key_prefix}_geo_{action}_{st.session_state[_geo_retry_key]}"
     loc_data = get_location(key=_geo_comp_key)
 
-    if loc_data is None:
-        # Component not yet responded
-        st.caption("⏳ Fetching your location… tap Retry if it takes too long.")
-        if st.button("🔄 Retry Location", key=f"{key_prefix}_geo_retry_btn_{action}",
-                     use_container_width=True):
-            st.session_state[_geo_retry_key] += 1
-            st.rerun()
+    _geo_failed = loc_data is not None and bool(loc_data.get("error"))
+    _geo_ok     = loc_data is not None and not loc_data.get("error")
 
-    elif loc_data.get("error"):
-        st.warning(f"📍 Location unavailable: {loc_data['error']}")
-        st.caption("Make sure location is enabled in your browser/device settings.")
-        if st.button("🔄 Retry Location", key=f"{key_prefix}_geo_retry_btn_{action}",
-                     use_container_width=True):
-            st.session_state[_geo_retry_key] += 1
-            st.rerun()
-
-    else:
+    if _geo_ok:
+        # ── Auto-detect succeeded ─────────────────────────────
         _lat, _lng = loc_data["lat"], loc_data["lng"]
         _acc = loc_data.get("accuracy") or 0
-        st.success(f"📍 Location captured — accuracy ±{_acc:.0f} m")
+        st.success(f"📍 Location captured automatically — accuracy ±{_acc:.0f} m")
         import pandas as _pd
         st.map(
             _pd.DataFrame({"lat": [_lat], "lon": [_lng]}),
             zoom=15,
             use_container_width=True,
         )
+        # Clear any manual selection since auto succeeded
+        st.session_state.pop(_manual_loc_key, None)
+
+    else:
+        # ── Auto-detect pending or failed ─────────────────────
+        if loc_data is None:
+            st.caption("⏳ Fetching location automatically…")
+        else:
+            # Explain the HTTPS requirement clearly
+            st.warning(
+                "📍 **Automatic location blocked by browser.**\n\n"
+                "This happens on local networks (HTTP). "
+                "**Select your office location below** to continue, "
+                "or use **ngrok / HTTPS** for full GPS capture.",
+            )
+
+        col_retry, col_manual = st.columns([1, 1])
+        with col_retry:
+            if st.button("🔄 Retry Auto-detect",
+                         key=f"{key_prefix}_geo_retry_btn_{action}",
+                         use_container_width=True):
+                st.session_state[_geo_retry_key] += 1
+                st.session_state.pop(_manual_loc_key, None)
+                st.rerun()
+
+        # Manual location picker — choose from company locations
+        loc_options = {loc["name"]: loc for loc in locations}
+        loc_names   = ["— Select office location —"] + list(loc_options.keys())
+        with col_manual:
+            _sel = st.selectbox(
+                "Select location",
+                loc_names,
+                key=f"{key_prefix}_loc_select_{action}",
+                label_visibility="collapsed",
+            )
+        if _sel and _sel != "— Select office location —":
+            st.session_state[_manual_loc_key] = loc_options[_sel]
+            st.info(f"📍 Manual location selected: **{_sel}**")
 
     if st.button(
         f"✅ Confirm Clock {'In' if action == 'in' else 'Out'}",
@@ -1336,18 +1364,23 @@ def _render_clock_widget(
                     "Check that the **dtr-snapshots** storage bucket exists and is set to **Public**."
                 )
 
-        # Process location
+        # Process location — prefer auto-detect, fall back to manual pick
         clat = clng = cdist = cloc_id = None
         is_oor = False
-        if loc_data and not loc_data.get("error"):
+        _manual_loc = st.session_state.get(_manual_loc_key)
+
+        if _geo_ok:
+            # GPS coordinates available
             clat, clng = loc_data["lat"], loc_data["lng"]
             nearest = nearest_location(clat, clng, locations)
             if nearest:
                 cdist   = nearest["distance_m"]
                 cloc_id = nearest["id"]
                 is_oor  = cdist > nearest["radius_m"]
-        elif loc_data and loc_data.get("error"):
-            st.warning(f"Location: {loc_data['error']}")
+        elif _manual_loc:
+            # Manual office selection — store location id, mark in-range
+            cloc_id = _manual_loc["id"]
+            is_oor  = False   # trusted because employee consciously chose their site
 
         # Resolve schedule
         schedules, overrides = _load_employee_schedules(emp)
