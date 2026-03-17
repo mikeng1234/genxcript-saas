@@ -1188,6 +1188,196 @@ def _mini_calendar_html(year: int, month: int,
     )
 
 
+def _render_clock_widget(
+    emp: dict,
+    today_log: dict | None,
+    locations: list[dict],
+    key_prefix: str,
+) -> None:
+    """
+    Reusable Clock In / Clock Out widget.
+    Renders a status card + inline camera/geolocation flow.
+    key_prefix differentiates session-state keys when the widget
+    is placed on both the Dashboard and the Attendance tab.
+    """
+    today    = date.today()
+    emp_id   = emp["id"]
+    has_in   = today_log and today_log.get("time_in")
+    has_out  = today_log and today_log.get("time_out")
+
+    # ── Status badge ────────────────────────────────────────────
+    if has_in and has_out:
+        status_html = (
+            f'<span style="color:#16a34a;font-weight:600;">✅ Clocked in '
+            f'{_fmt_time_portal(today_log["time_in"])} · '
+            f'Out {_fmt_time_portal(today_log["time_out"])}</span>'
+        )
+        action = None
+    elif has_in:
+        status_html = (
+            f'<span style="color:#2563eb;font-weight:600;">'
+            f'🟢 Clocked in at {_fmt_time_portal(today_log["time_in"])} '
+            f'— remember to clock out!</span>'
+        )
+        action = "out"
+    else:
+        status_html = '<span style="color:#9ca3af;">⚪ Not clocked in yet today</span>'
+        action = "in"
+
+    # ── Card header ─────────────────────────────────────────────
+    st.markdown(
+        f'<div style="background:var(--gx-card-bg,#fff);'
+        f'border:1px solid var(--gx-border,#e5e7eb);border-radius:12px;'
+        f'padding:14px 18px;margin-bottom:4px;">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+        f'<div style="font-size:12px;font-weight:700;color:#6b7280;">🕐 TODAY\'S ATTENDANCE</div>'
+        f'<div style="font-size:12px;color:#9ca3af;">{today.strftime("%a, %B %d")}</div>'
+        f'</div>'
+        f'<div style="font-size:13px;margin-top:8px;">{status_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if not action:
+        return   # both punches done — nothing more to show
+
+    # ── Permission notice + button ───────────────────────────────
+    st.info(
+        "📷 **Camera** and 📍 **Location** access required — "
+        "tap the button below, then tap **Allow** in both browser prompts "
+        "for photo verification and on-site confirmation.",
+        icon="ℹ️",
+    )
+
+    btn_label = "🕐 Clock In" if action == "in" else "🕐 Clock Out"
+    show_key  = f"{key_prefix}_show_clock_{action}"
+
+    if st.button(btn_label, type="primary", key=f"{key_prefix}_clock_{action}_btn",
+                 use_container_width=True):
+        st.session_state[show_key] = True
+
+    if not st.session_state.get(show_key):
+        return
+
+    # ── Expanded clock flow ──────────────────────────────────────
+    st.markdown("---")
+    st.markdown("**Step 1 — Take a selfie 📷**")
+    snapshot = st.camera_input(
+        "Face snapshot for verification",
+        key=f"{key_prefix}_cam_{action}",
+        label_visibility="collapsed",
+    )
+
+    st.markdown("**Step 2 — Share your location 📍**")
+    st.caption("Tap **Allow** when your browser asks for location permission.")
+    loc_data = get_location(key=f"{key_prefix}_geo_{action}")
+
+    if st.button(
+        f"✅ Confirm Clock {'In' if action == 'in' else 'Out'}",
+        type="primary",
+        key=f"{key_prefix}_confirm_{action}",
+        use_container_width=True,
+    ):
+        now_utc  = datetime.datetime.now(timezone.utc)
+        now_time = datetime.datetime.now().time().replace(microsecond=0)
+
+        # Upload snapshot
+        snapshot_url = None
+        if snapshot is not None:
+            snapshot_url = _upload_snapshot(
+                get_company_id(), emp_id, today, action, snapshot.getvalue()
+            )
+
+        # Process location
+        clat = clng = cdist = cloc_id = None
+        is_oor = False
+        if loc_data and not loc_data.get("error"):
+            clat, clng = loc_data["lat"], loc_data["lng"]
+            nearest = nearest_location(clat, clng, locations)
+            if nearest:
+                cdist   = nearest["distance_m"]
+                cloc_id = nearest["id"]
+                is_oor  = cdist > nearest["radius_m"]
+        elif loc_data and loc_data.get("error"):
+            st.warning(f"Location: {loc_data['error']}")
+
+        # Resolve schedule
+        schedules, overrides = _load_employee_schedules(emp)
+        sched = resolve_schedule_for_date(emp, schedules, overrides, today)
+
+        if action == "in":
+            log_row: dict = {
+                "employee_id":          emp_id,
+                "work_date":            str(today),
+                "time_in":              str(now_time),
+                "time_in_at":           now_utc.isoformat(),
+                "time_in_method":       "portal",
+                "time_in_lat":          clat,
+                "time_in_lng":          clng,
+                "time_in_distance_m":   cdist,
+                "time_in_location_id":  cloc_id,
+                "time_in_snapshot_url": snapshot_url,
+                "is_out_of_range":      is_oor,
+            }
+            if sched:
+                log_row.update({
+                    "schedule_id":    sched["id"],
+                    "expected_start": str(_parse_time(sched["start_time"])),
+                    "expected_end":   str(_parse_time(sched["end_time"])),
+                    "expected_hours": schedule_expected_hours(sched),
+                })
+        else:
+            result = None
+            if today_log and today_log.get("time_in") and sched:
+                result = compute_dtr(
+                    _parse_time(today_log["time_in"]),
+                    now_time,
+                    _parse_time(sched["start_time"]),
+                    _parse_time(sched["end_time"]),
+                    schedule_expected_hours(sched),
+                    int(sched.get("break_minutes", 60)),
+                    bool(sched.get("is_overnight", False)),
+                )
+            log_row = {
+                "employee_id":           emp_id,
+                "work_date":             str(today),
+                "time_out":              str(now_time),
+                "time_out_at":           now_utc.isoformat(),
+                "time_out_method":       "portal",
+                "time_out_lat":          clat,
+                "time_out_lng":          clng,
+                "time_out_distance_m":   cdist,
+                "time_out_snapshot_url": snapshot_url,
+            }
+            if result:
+                log_row.update({
+                    "gross_hours":       result.gross_hours,
+                    "late_minutes":      result.late_minutes,
+                    "undertime_minutes": result.undertime_minutes,
+                    "ot_hours":          result.ot_hours,
+                    "status":            result.status,
+                })
+
+        try:
+            _upsert_portal_time_log(log_row)
+            if is_oor:
+                st.warning(
+                    f"⚠️ Clocked {'in' if action == 'in' else 'out'} at "
+                    f"**{now_time.strftime('%H:%M')}**, but you are **{cdist}m** "
+                    f"from the nearest office (allowed: {locations[0]['radius_m']}m). "
+                    "HR will be notified."
+                )
+            else:
+                st.success(
+                    f"✅ Clocked {'in' if action == 'in' else 'out'} at "
+                    f"**{now_time.strftime('%H:%M')}**."
+                )
+            st.session_state.pop(show_key, None)
+            st.rerun()
+        except Exception as ex:
+            st.error(f"Error saving time log: {ex}")
+
+
 def _render_dashboard(emp: dict, company: dict):
     """Employee portal landing dashboard."""
     today = date.today()
@@ -1198,10 +1388,24 @@ def _render_dashboard(emp: dict, company: dict):
     st.markdown(
         f'<div style="font-size:20px;font-weight:700;margin-bottom:4px;">'
         f'{greeting}, {first_name}! 👋</div>'
-        f'<div style="font-size:13px;color:#6b7280;margin-bottom:20px;">'
+        f'<div style="font-size:13px;color:#6b7280;margin-bottom:16px;">'
         f'{today.strftime("%A, %B %d, %Y")}</div>',
         unsafe_allow_html=True,
     )
+
+    # ── Clock In / Clock Out widget ────────────────────────────
+    _dash_locations = _load_active_locations()
+    if _dash_locations:
+        _dash_today_log_rows = (
+            get_db().table("time_logs")
+            .select("*")
+            .eq("employee_id", emp["id"])
+            .eq("work_date", str(today))
+            .execute()
+        ).data or []
+        _dash_today_log = _dash_today_log_rows[0] if _dash_today_log_rows else None
+        _render_clock_widget(emp, _dash_today_log, _dash_locations, key_prefix="dash")
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
     # ── Row 1: Leave balance cards + upcoming holiday ─────────
     col_vl, col_sl, col_cl, col_holiday = st.columns([1, 1, 1, 1.4])
@@ -1480,158 +1684,15 @@ def _render_employee_dtr(emp: dict, company: dict):
     locations = _load_active_locations()
     if locations:
         st.markdown("#### Clock In / Clock Out")
-        # Check if there's already a log for today
-        today_log = (
+        today_log_rows = (
             get_db().table("time_logs")
             .select("*")
             .eq("employee_id", emp_id)
             .eq("work_date", str(today))
             .execute()
-        ).data
-        today_log = today_log[0] if today_log else None
-
-        has_in  = today_log and today_log.get("time_in")
-        has_out = today_log and today_log.get("time_out")
-
-        if has_in and has_out:
-            st.success(
-                f"✅ You've clocked in at **{_fmt_time_portal(today_log['time_in'])}** "
-                f"and out at **{_fmt_time_portal(today_log['time_out'])}** today."
-            )
-        elif has_in:
-            st.info(f"Clocked in at **{_fmt_time_portal(today_log['time_in'])}**. Remember to clock out!")
-        else:
-            st.info("You haven't clocked in yet today.")
-
-        action = None
-        if not has_in:
-            action = "in"
-        elif has_in and not has_out:
-            action = "out"
-
-        if action:
-            btn_label = "🕐 Clock In" if action == "in" else "🕐 Clock Out"
-            if st.button(btn_label, type="primary", key=f"dtr_clock_{action}"):
-                st.session_state[f"dtr_show_clock_{action}"] = True
-
-            if st.session_state.get(f"dtr_show_clock_{action}"):
-                st.markdown(f"**Step 1 — Take a photo**")
-                snapshot = st.camera_input("Face snapshot for verification",
-                                           key=f"dtr_cam_{action}",
-                                           label_visibility="collapsed")
-
-                st.markdown("**Step 2 — Allow location access**")
-                st.caption("Click Allow when your browser asks for location permission.")
-                loc_data = get_location(key=f"dtr_geo_{action}")
-
-                # Allow submit even without snapshot/location (graceful degradation)
-                can_submit = True  # always allow, data stored if available
-                if st.button("Confirm Clock " + ("In" if action == "in" else "Out"),
-                             type="primary", key=f"dtr_confirm_{action}"):
-                    now_utc = datetime.datetime.now(timezone.utc)
-                    now_time = datetime.datetime.now().time()
-
-                    # Upload snapshot
-                    snapshot_url = None
-                    if snapshot is not None:
-                        img_bytes = snapshot.getvalue()
-                        snapshot_url = _upload_snapshot(
-                            get_company_id(), emp_id, today, action, img_bytes
-                        )
-
-                    # Process location
-                    clat = clng = cdist = None
-                    cloc_id = None
-                    is_oor = False
-                    if loc_data and not loc_data.get("error"):
-                        clat = loc_data["lat"]
-                        clng = loc_data["lng"]
-                        nearest = nearest_location(clat, clng, locations)
-                        if nearest:
-                            cdist    = nearest["distance_m"]
-                            cloc_id  = nearest["id"]
-                            is_oor   = cdist > nearest["radius_m"]
-                    elif loc_data and loc_data.get("error"):
-                        st.warning(f"Location not available: {loc_data['error']}")
-
-                    # Resolve schedule for DTR computation
-                    schedules, overrides = _load_employee_schedules(emp)
-                    sched = resolve_schedule_for_date(emp, schedules, overrides, today)
-
-                    if action == "in":
-                        log_row: dict = {
-                            "employee_id":      emp_id,
-                            "work_date":        str(today),
-                            "time_in":          str(now_time.replace(microsecond=0)),
-                            "time_in_at":       now_utc.isoformat(),
-                            "time_in_method":   "portal",
-                            "time_in_lat":      clat,
-                            "time_in_lng":      clng,
-                            "time_in_distance_m": cdist,
-                            "time_in_location_id": cloc_id,
-                            "time_in_snapshot_url": snapshot_url,
-                            "is_out_of_range":  is_oor,
-                        }
-                        if sched:
-                            log_row.update({
-                                "schedule_id":    sched["id"],
-                                "expected_start": str(_parse_time(sched["start_time"])),
-                                "expected_end":   str(_parse_time(sched["end_time"])),
-                                "expected_hours": schedule_expected_hours(sched),
-                            })
-                    else:
-                        # Clock out — compute DTR
-                        result = None
-                        if today_log and today_log.get("time_in") and sched:
-                            exp_h = schedule_expected_hours(sched)
-                            result = compute_dtr(
-                                _parse_time(today_log["time_in"]),
-                                now_time.replace(microsecond=0),
-                                _parse_time(sched["start_time"]),
-                                _parse_time(sched["end_time"]),
-                                exp_h,
-                                int(sched.get("break_minutes", 60)),
-                                bool(sched.get("is_overnight", False)),
-                            )
-                        log_row = {
-                            "employee_id":       emp_id,
-                            "work_date":         str(today),
-                            "time_out":          str(now_time.replace(microsecond=0)),
-                            "time_out_at":       now_utc.isoformat(),
-                            "time_out_method":   "portal",
-                            "time_out_lat":      clat,
-                            "time_out_lng":      clng,
-                            "time_out_distance_m": cdist,
-                            "time_out_snapshot_url": snapshot_url,
-                        }
-                        if result:
-                            log_row.update({
-                                "gross_hours":        result.gross_hours,
-                                "late_minutes":       result.late_minutes,
-                                "undertime_minutes":  result.undertime_minutes,
-                                "ot_hours":           result.ot_hours,
-                                "status":             result.status,
-                            })
-
-                    try:
-                        _upsert_portal_time_log(log_row)
-                        if is_oor:
-                            st.warning(
-                                f"⚠️ Clocked {'in' if action == 'in' else 'out'} successfully, "
-                                f"but you are **{cdist}m** from the nearest office location "
-                                f"(allowed: {locations[0]['radius_m']}m). "
-                                "HR will be notified."
-                            )
-                        else:
-                            st.success(
-                                f"✅ Clocked {'in' if action == 'in' else 'out'} at "
-                                f"**{now_time.strftime('%H:%M')}**."
-                            )
-                        st.session_state.pop(f"dtr_show_clock_{action}", None)
-                        st.rerun()
-                    except Exception as ex:
-                        st.error(f"Error saving time log: {ex}")
-
+        ).data or []
+        today_log = today_log_rows[0] if today_log_rows else None
+        _render_clock_widget(emp, today_log, locations, key_prefix="dtr")
         st.divider()
 
     # ── DTR History Table ─────────────────────────────────────────────────────
