@@ -24,7 +24,7 @@ from app.auth import (
     update_active_company, add_accessible_company,
     ensure_accessible_companies_loaded,
     change_own_password, get_current_display_name, update_own_display_name,
-    exchange_recovery_code, set_new_password,
+    exchange_recovery_code, set_new_password, get_user_from_access_token,
 )
 
 # Hide Streamlit's auto-generated page navigation (it scans the pages/
@@ -64,7 +64,7 @@ if _recovery_code and not is_logged_in() and "pw_reset_user" not in st.session_s
 
 if not is_logged_in():
     if st.session_state.get("pw_reset_user"):
-        # Show Set New Password form (after clicking reset email link)
+        # ── Set New Password form ─────────────────────────────
         _, _col, _ = st.columns([1, 1.5, 1])
         with _col:
             st.markdown("## GenXcript Payroll")
@@ -95,6 +95,26 @@ if not is_logged_in():
         from app.pages.register import render as render_register
         render_register()
     else:
+        # ── Implicit-flow hash reader (invisible, height=0) ───
+        # Supabase puts the recovery token in the URL *hash* which the
+        # server never sees. This JS component reads window.location.hash
+        # and sends {type, access_token} back to Python.
+        if "pw_reset_hash_checked" not in st.session_state:
+            from app.components.hash_auth import read_hash_auth
+            _hash_result = read_hash_auth(key="hash_auth_reader", default=None)
+            if _hash_result and _hash_result.get("type") == "recovery":
+                _token = _hash_result.get("access_token", "")
+                if _token:
+                    _recovery_user = get_user_from_access_token(_token)
+                    if _recovery_user:
+                        st.session_state["pw_reset_user"] = _recovery_user
+                        st.session_state["pw_reset_hash_checked"] = True
+                        st.rerun()
+            elif _hash_result is not None:
+                # Hash was read but not a recovery token — mark done so
+                # we don't re-render the component on every rerun
+                st.session_state["pw_reset_hash_checked"] = True
+
         from app.pages.login import render as render_login
         render_login()
     st.stop()

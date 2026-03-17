@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<script>
+  // Parse URL hash into a key/value object
+  function parseHash(hash) {
+    if (!hash || hash.length < 2) return {};
+    return hash.slice(1).split("&").reduce(function(obj, pair) {
+      var parts = pair.split("=");
+      obj[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1] || "");
+      return obj;
+    }, {});
+  }
+
+  function init() {
+    var params = parseHash(window.location.hash);
+
+    if (params.type === "recovery" && params.access_token) {
+      // Clear the hash so a page refresh doesn't re-trigger this
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+
+      // Send the recovery token up to Streamlit
+      window.parent.Streamlit.setComponentValue({
+        type: "recovery",
+        access_token:  params.access_token,
+        refresh_token: params.refresh_token || ""
+      });
+    } else {
+      // Nothing to handle — send null so Streamlit doesn't wait forever
+      window.parent.Streamlit.setComponentValue(null);
+    }
+  }
+
+  // Wait for Streamlit to be ready before calling setComponentValue
+  window.addEventListener("message", function(event) {
+    if (event.data && event.data.type === "streamlit:render") {
+      init();
+    }
+  });
+
+  // Fallback: if the render event already fired, call init directly
+  if (document.readyState === "complete") {
+    setTimeout(init, 100);
+  }
+</script>
+</body>
+</html>
