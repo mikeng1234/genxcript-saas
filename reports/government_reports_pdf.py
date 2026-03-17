@@ -20,16 +20,12 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from reports.pdf_fonts import FONT, FONT_BOLD, peso as _fmt
 
 
 # ============================================================
 # Shared Helpers
 # ============================================================
-
-def _fmt(centavos: int) -> str:
-    """Format centavos as peso string."""
-    return f"₱{centavos / 100:,.2f}"
-
 
 def _fmt_plain(centavos: int) -> str:
     """Format centavos as plain number (no peso sign) for table cells."""
@@ -42,30 +38,30 @@ def _get_styles():
 
     title_style = ParagraphStyle(
         "ReportTitle", parent=styles["Heading1"],
-        fontSize=14, alignment=TA_CENTER, spaceAfter=2 * mm,
+        fontName=FONT_BOLD, fontSize=14, alignment=TA_CENTER, spaceAfter=2 * mm,
     )
     subtitle_style = ParagraphStyle(
         "ReportSubtitle", parent=styles["Normal"],
-        fontSize=10, alignment=TA_CENTER, textColor=colors.grey,
+        fontName=FONT, fontSize=10, alignment=TA_CENTER, textColor=colors.grey,
         spaceAfter=1 * mm,
     )
     company_style = ParagraphStyle(
         "CompanyName", parent=styles["Heading2"],
-        fontSize=12, alignment=TA_CENTER, spaceAfter=1 * mm,
+        fontName=FONT_BOLD, fontSize=12, alignment=TA_CENTER, spaceAfter=1 * mm,
     )
     section_style = ParagraphStyle(
         "SectionHeader", parent=styles["Heading3"],
-        fontSize=10, spaceAfter=2 * mm, spaceBefore=4 * mm,
+        fontName=FONT_BOLD, fontSize=10, spaceAfter=2 * mm, spaceBefore=4 * mm,
         textColor=colors.HexColor("#333333"),
     )
     note_style = ParagraphStyle(
         "Note", parent=styles["Normal"],
-        fontSize=8, textColor=colors.grey, alignment=TA_CENTER,
+        fontName=FONT, fontSize=8, textColor=colors.grey, alignment=TA_CENTER,
         spaceBefore=6 * mm,
     )
     small_style = ParagraphStyle(
         "Small", parent=styles["Normal"],
-        fontSize=8, textColor=colors.HexColor("#555555"),
+        fontName=FONT, fontSize=8, textColor=colors.HexColor("#555555"),
     )
 
     return {
@@ -100,8 +96,8 @@ def _build_company_info_row(elements, styles, company, agency_field, agency_labe
     info_table = Table(info_data, colWidths=[80, 200, 100, 120])
     info_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
+        ("FONTNAME", (2, 0), (2, -1), FONT_BOLD),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -120,7 +116,7 @@ def _standard_table_style():
         # Header row
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2563eb")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
         ("FONTSIZE", (0, 0), (-1, 0), 8),
         ("ALIGN", (0, 0), (-1, 0), "CENTER"),
 
@@ -147,7 +143,7 @@ def _totals_row_style(row_index, col_count):
     """Return style commands for the totals row."""
     return [
         ("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor("#e8f0fe")),
-        ("FONTNAME", (0, row_index), (-1, row_index), "Helvetica-Bold"),
+        ("FONTNAME", (0, row_index), (-1, row_index), FONT_BOLD),
         ("LINEABOVE", (0, row_index), (-1, row_index), 1.5, colors.HexColor("#2563eb")),
     ]
 
@@ -244,11 +240,11 @@ def generate_sss_r3(company, employees, entries, period_label):
     summary_table = Table(summary_data, colWidths=[150, 100])
     summary_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("FONTNAME", (0, -2), (-1, -2), "Helvetica-Bold"),
+        ("FONTNAME", (0, -2), (-1, -2), FONT_BOLD),
         ("LINEABOVE", (0, -2), (-1, -2), 1, colors.black),
         ("LINEBELOW", (0, -2), (-1, -2), 1, colors.black),
     ]))
@@ -349,11 +345,11 @@ def generate_philhealth_rf1(company, employees, entries, period_label):
     summary_table = Table(summary_data, colWidths=[150, 100])
     summary_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("FONTNAME", (0, -2), (-1, -2), "Helvetica-Bold"),
+        ("FONTNAME", (0, -2), (-1, -2), FONT_BOLD),
         ("LINEABOVE", (0, -2), (-1, -2), 1, colors.black),
         ("LINEBELOW", (0, -2), (-1, -2), 1, colors.black),
     ]))
@@ -453,11 +449,11 @@ def generate_pagibig_mcrf(company, employees, entries, period_label):
     summary_table = Table(summary_data, colWidths=[160, 100])
     summary_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("FONTNAME", (0, -2), (-1, -2), "Helvetica-Bold"),
+        ("FONTNAME", (0, -2), (-1, -2), FONT_BOLD),
         ("LINEABOVE", (0, -2), (-1, -2), 1, colors.black),
         ("LINEBELOW", (0, -2), (-1, -2), 1, colors.black),
     ]))
@@ -578,12 +574,12 @@ def generate_bir_1601c(company, employees, entries, period_label):
     summary_table = Table(summary_data, colWidths=[190, 100])
     summary_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("FONTNAME", (0, -3), (-1, -3), "Helvetica-Bold"),
-        ("FONTNAME", (0, -2), (-1, -2), "Helvetica-Bold"),
+        ("FONTNAME", (0, -3), (-1, -3), FONT_BOLD),
+        ("FONTNAME", (0, -2), (-1, -2), FONT_BOLD),
         ("LINEABOVE", (0, -3), (-1, -3), 1, colors.black),
         ("LINEBELOW", (0, -2), (-1, -2), 1, colors.black),
     ]))

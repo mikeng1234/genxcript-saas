@@ -12,12 +12,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
-
-
-def _fmt(centavos: int) -> str:
-    """Format centavos as peso string."""
-    pesos = centavos / 100
-    return f"₱{pesos:,.2f}"
+from reports.pdf_fonts import FONT, FONT_BOLD, peso as _fmt
 
 
 def generate_payslip_pdf(
@@ -51,20 +46,20 @@ def generate_payslip_pdf(
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
         "PayslipTitle", parent=styles["Heading1"],
-        fontSize=16, alignment=TA_CENTER, spaceAfter=2 * mm,
+        fontName=FONT_BOLD, fontSize=16, alignment=TA_CENTER, spaceAfter=2 * mm,
     )
     subtitle_style = ParagraphStyle(
         "PayslipSubtitle", parent=styles["Normal"],
-        fontSize=10, alignment=TA_CENTER, textColor=colors.grey, spaceAfter=4 * mm,
+        fontName=FONT, fontSize=10, alignment=TA_CENTER, textColor=colors.grey, spaceAfter=4 * mm,
     )
     section_style = ParagraphStyle(
         "SectionHeader", parent=styles["Heading3"],
-        fontSize=11, spaceAfter=2 * mm, spaceBefore=4 * mm,
+        fontName=FONT_BOLD, fontSize=11, spaceAfter=2 * mm, spaceBefore=4 * mm,
         textColor=colors.HexColor("#333333"),
     )
     note_style = ParagraphStyle(
         "Note", parent=styles["Normal"],
-        fontSize=8, textColor=colors.grey, alignment=TA_CENTER, spaceBefore=6 * mm,
+        fontName=FONT, fontSize=8, textColor=colors.grey, alignment=TA_CENTER, spaceBefore=6 * mm,
     )
 
     elements = []
@@ -76,7 +71,7 @@ def generate_payslip_pdf(
     # ---- Payslip Title ----
     elements.append(Paragraph("PAYSLIP", ParagraphStyle(
         "PSTitle", parent=styles["Heading2"],
-        fontSize=14, alignment=TA_CENTER, spaceAfter=4 * mm,
+        fontName=FONT_BOLD, fontSize=14, alignment=TA_CENTER, spaceAfter=4 * mm,
     )))
 
     # ---- Employee Info + Pay Period ----
@@ -89,8 +84,9 @@ def generate_payslip_pdf(
     info_table = Table(info_data, colWidths=[70, 170, 80, 140])
     info_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, -1), FONT),
+        ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
+        ("FONTNAME", (2, 0), (2, -1), FONT_BOLD),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -133,8 +129,9 @@ def generate_payslip_pdf(
     earn_table = Table(earnings_rows, colWidths=[140, 80])
     earn_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, -1), FONT),
+        ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+        ("FONTNAME", (0, -1), (-1, -1), FONT_BOLD),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
@@ -149,8 +146,9 @@ def generate_payslip_pdf(
     ded_table = Table(deductions_rows, colWidths=[140, 80])
     ded_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, -1), FONT),
+        ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+        ("FONTNAME", (0, -1), (-1, -1), FONT_BOLD),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
@@ -177,7 +175,7 @@ def generate_payslip_pdf(
     net_table = Table(net_data, colWidths=[360, 100])
     net_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 14),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, -1), FONT_BOLD),
         ("ALIGN", (1, 0), (1, 0), "RIGHT"),
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#2563eb")),
         ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
@@ -203,11 +201,12 @@ def generate_payslip_pdf(
     er_table = Table(er_data, colWidths=[160, 80])
     er_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("FONTNAME", (0, 0), (-1, -1), FONT),
         ("TEXTCOLOR", (0, 0), (-1, -1), colors.grey),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, -1), (-1, -1), FONT_BOLD),
         ("LINEABOVE", (0, -1), (-1, -1), 0.5, colors.grey),
     ]))
     elements.append(er_table)
