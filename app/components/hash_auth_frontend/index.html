@@ -3,28 +3,48 @@
 <head><meta charset="utf-8"></head>
 <body>
 <script>
-  // Run immediately — no need to wait for streamlit:render.
-  // This iframe is same-origin so it can redirect the parent window.
-  (function() {
-    var hash = window.top.location.hash;
-    if (!hash || hash.length < 2) return;
-
-    // Parse hash into key/value pairs
-    var params = {};
-    hash.slice(1).split("&").forEach(function(pair) {
+  function parseHash(hash) {
+    if (!hash || hash.length < 2) return {};
+    return hash.slice(1).split("&").reduce(function(obj, pair) {
       var parts = pair.split("=");
-      params[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1] || "");
-    });
+      obj[decodeURIComponent(parts[0])] = decodeURIComponent((parts[1] || "").replace(/\+/g, " "));
+      return obj;
+    }, {});
+  }
 
-    if (params.type === "recovery" && params.access_token) {
-      // Move the token from hash → query param so Streamlit's server can read it.
-      // We use short param names (_rec, _tok) to keep the URL tidy.
-      window.top.location.replace(
-        window.top.location.pathname +
-        "?_rec=1&_tok=" + encodeURIComponent(params.access_token)
-      );
+  function sendResult() {
+    try {
+      // declare_component iframes are same-origin so we can read parent's hash
+      var hash = window.parent.location.hash;
+      var params = parseHash(hash);
+
+      if (params.type === "recovery" && params.access_token) {
+        window.parent.Streamlit.setComponentValue({
+          type:         "recovery",
+          access_token: params.access_token
+        });
+      } else if (params.error) {
+        // e.g. otp_expired — tell Python so it can show a friendly message
+        window.parent.Streamlit.setComponentValue({
+          type:  "error",
+          error: params.error,
+          desc:  params.error_description || ""
+        });
+      } else {
+        window.parent.Streamlit.setComponentValue(null);
+      }
+    } catch(e) {
+      // Cross-origin guard — should not happen on localhost
+      window.parent.Streamlit.setComponentValue(null);
     }
-  })();
+  }
+
+  // Streamlit sends this event when the component iframe is ready
+  window.addEventListener("message", function(event) {
+    if (event.data && event.data.type === "streamlit:render") {
+      sendResult();
+    }
+  });
 </script>
 </body>
 </html>

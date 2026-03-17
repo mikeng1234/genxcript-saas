@@ -43,19 +43,8 @@ st.markdown(
 
 restore_from_query_params()
 
-# ============================================================
-# Password-reset callback handlers (runs before auth gate)
-#
-# Two flows depending on Supabase project settings:
-#   PKCE flow   → ?code=TOKEN  (server-readable query param)
-#   Implicit flow → #access_token=TOKEN (hash, server never sees it)
-#
-# For implicit flow the hash_auth iframe JS redirects the browser to
-# /?_rec=1&_tok=TOKEN so Python can read it here on the next request.
-# ============================================================
-
+# ── PKCE flow: ?code=TOKEN ────────────────────────────────────────────────────
 if not is_logged_in() and "pw_reset_user" not in st.session_state:
-    # PKCE flow
     _code = st.query_params.get("code")
     if _code:
         _ru = exchange_recovery_code(_code)
@@ -63,15 +52,6 @@ if not is_logged_in() and "pw_reset_user" not in st.session_state:
             st.session_state["pw_reset_user"] = _ru
             st.query_params.clear()
             st.rerun()
-
-    # Implicit flow (hash redirected to query param by hash_auth iframe)
-    _tok = st.query_params.get("_tok")
-    if _tok and st.query_params.get("_rec"):
-        _ru = get_user_from_access_token(_tok)
-        if _ru:
-            st.session_state["pw_reset_user"] = _ru
-        st.query_params.clear()
-        st.rerun()
 
 # ============================================================
 # Auth Gate
@@ -110,18 +90,40 @@ if not is_logged_in():
         from app.pages.register import render as render_register
         render_register()
     else:
-        # Render invisible hash reader on every login page load.
-        # If Supabase used implicit flow, the iframe JS will detect
-        # #access_token=...&type=recovery and redirect the parent window
-        # to /?_rec=1&_tok=TOKEN — handled above on the next request.
-        import streamlit.components.v1 as _cv1
-        _cv1.html(
-            open(__import__("os").path.join(
-                __import__("os").path.dirname(__file__),
-                "components", "hash_auth_frontend", "index.html"
-            )).read(),
-            height=0,
-        )
+        # ── Implicit flow: #access_token=TOKEN in URL hash ────
+        # declare_component iframes have allow-same-origin so JS can
+        # read window.parent.location.hash and call setComponentValue.
+        # The component fires on every login page render; on recovery
+        # it returns {type, access_token} triggering a rerun.
+        if not st.session_state.get("_hash_checked"):
+            from app.components.hash_auth import read_hash_auth
+            _hash_val = read_hash_auth(key="hash_auth_reader", default=None)
+            if isinstance(_hash_val, dict):
+                if _hash_val.get("type") == "recovery":
+                    _token = _hash_val.get("access_token", "")
+                    _ru = get_user_from_access_token(_token) if _token else None
+                    st.session_state["_hash_checked"] = True
+                    if _ru:
+                        st.session_state["pw_reset_user"] = _ru
+                    st.rerun()
+                elif _hash_val.get("type") == "error":
+                    st.session_state["_hash_checked"] = True
+                    st.session_state["_hash_error"] = _hash_val.get("desc", "Link expired")
+                    st.rerun()
+                else:
+                    st.session_state["_hash_checked"] = True
+
+        if st.session_state.get("_hash_error"):
+            _err_msg = st.session_state.pop("_hash_error")
+            st.session_state.pop("_hash_checked", None)
+            _, _col, _ = st.columns([1, 1.5, 1])
+            with _col:
+                st.markdown("## GenXcript Payroll")
+                st.error(f"⚠️ Reset link expired or invalid — {_err_msg}\n\nPlease request a new password reset link.")
+                if st.button("← Back to Sign In", use_container_width=True):
+                    st.rerun()
+            st.stop()
+
         from app.pages.login import render as render_login
         render_login()
     st.stop()
