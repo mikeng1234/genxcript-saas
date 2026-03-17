@@ -1243,9 +1243,8 @@ def _render_clock_widget(
 
     # ── Permission notice + button ───────────────────────────────
     st.info(
-        "📷 **Camera** and 📍 **Location** access required — "
-        "tap the button below, then tap **Allow** in both browser prompts "
-        "for photo verification and on-site confirmation.",
+        "📷 Tap **Clock In/Out** below — you'll be asked to take a photo "
+        "and allow location access for on-site verification.",
         icon="ℹ️",
     )
 
@@ -1261,15 +1260,24 @@ def _render_clock_widget(
 
     # ── Expanded clock flow ──────────────────────────────────────
     st.markdown("---")
+
+    # Photo — use file_uploader instead of camera_input so it works on
+    # iOS Chrome over HTTP (st.camera_input requires HTTPS on non-localhost).
+    # On mobile, tapping the upload button shows "Take Photo" natively.
     st.markdown("**Step 1 — Take a selfie 📷**")
-    snapshot = st.camera_input(
-        "Face snapshot for verification",
+    st.caption("Tap the button below → choose **Take Photo** (front camera) for verification.")
+    snapshot = st.file_uploader(
+        "Selfie for verification",
+        type=["jpg", "jpeg", "png"],
         key=f"{key_prefix}_cam_{action}",
         label_visibility="collapsed",
+        accept_multiple_files=False,
     )
+    if snapshot:
+        st.image(snapshot, width=180, caption="Preview")
 
     st.markdown("**Step 2 — Share your location 📍**")
-    st.caption("Tap **Allow** when your browser asks for location permission.")
+    st.caption("Allow location when your browser asks — required to verify you're on-site.")
     loc_data = get_location(key=f"{key_prefix}_geo_{action}")
 
     if st.button(
