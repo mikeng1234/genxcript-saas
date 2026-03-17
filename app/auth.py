@@ -525,3 +525,61 @@ def invite_employee(employee_email: str) -> tuple[bool, str]:
         return True, f"{user_id}|SMTP_FAILED|{temp_pass}|{email_err}"
 
     return True, user_id
+
+
+# ============================================================
+# My Account — change own password / display name
+# ============================================================
+
+def change_own_password(current_password: str, new_password: str) -> tuple[bool, str]:
+    """
+    Verify the current password by re-authenticating, then update to the new one.
+    Returns (True, "") on success or (False, error_message) on failure.
+    """
+    email = get_current_user_email()
+    if not email:
+        return False, "No active session email found."
+
+    # Step 1: verify current password
+    try:
+        pub = _get_auth_client()
+        pub.auth.sign_in_with_password({"email": email, "password": current_password})
+    except Exception as e:
+        msg = str(e).lower()
+        if "invalid" in msg or "credentials" in msg or "password" in msg:
+            return False, "Current password is incorrect."
+        return False, f"Could not verify current password: {e}"
+
+    # Step 2: update to new password via admin client
+    try:
+        user_id = st.session_state.get("user_id")
+        adm = _get_admin_auth_client()
+        adm.auth.admin.update_user_by_id(user_id, {"password": new_password})
+        return True, ""
+    except Exception as e:
+        return False, f"Failed to update password: {e}"
+
+
+def get_current_display_name() -> str:
+    """Return the display_name stored in user_metadata, or empty string."""
+    try:
+        user_id = st.session_state.get("user_id")
+        adm = _get_admin_auth_client()
+        user = adm.auth.admin.get_user_by_id(user_id)
+        return (user.user.user_metadata or {}).get("display_name", "")
+    except Exception:
+        return ""
+
+
+def update_own_display_name(display_name: str) -> tuple[bool, str]:
+    """Update the display_name in user_metadata for the current user."""
+    try:
+        user_id = st.session_state.get("user_id")
+        adm = _get_admin_auth_client()
+        adm.auth.admin.update_user_by_id(
+            user_id,
+            {"user_metadata": {"display_name": display_name.strip()}},
+        )
+        return True, ""
+    except Exception as e:
+        return False, f"Failed to update display name: {e}"
