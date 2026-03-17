@@ -168,23 +168,39 @@ def _fmt_mins(m: int) -> str:
 # ============================================================
 
 def _render_daily_entry():
+    # ── Persistent save message (survives st.rerun) ───────────
+    if "dtr_save_msg" in st.session_state:
+        kind, msg = st.session_state.pop("dtr_save_msg")
+        if kind == "success":
+            st.success(msg)
+        elif kind == "info":
+            st.info(msg)
+        else:
+            st.error(msg)
+
     # ── Date navigation ──────────────────────────────────────
+    # The date_input widget owns its value via key="dtr_date_input".
+    # Buttons must update st.session_state["dtr_date_input"] directly —
+    # updating a *different* key has no effect on the widget after first render.
     col_prev, col_date, col_next, col_today = st.columns([1, 3, 1, 1.5])
     with col_date:
-        work_date = st.date_input("Date", value=st.session_state.get("dtr_date", date.today()),
-                                  key="dtr_date_input", label_visibility="collapsed")
-        st.session_state.dtr_date = work_date
+        work_date = st.date_input(
+            "Date",
+            value=st.session_state.get("dtr_date_input", date.today()),
+            key="dtr_date_input",
+            label_visibility="collapsed",
+        )
     with col_prev:
-        if st.button("◀ Prev", key="dtr_prev", width="stretch"):
-            st.session_state.dtr_date = work_date - timedelta(days=1)
+        if st.button("◀ Prev", key="dtr_prev", use_container_width=True):
+            st.session_state["dtr_date_input"] = work_date - timedelta(days=1)
             st.rerun()
     with col_next:
-        if st.button("Next ▶", key="dtr_next", width="stretch"):
-            st.session_state.dtr_date = work_date + timedelta(days=1)
+        if st.button("Next ▶", key="dtr_next", use_container_width=True):
+            st.session_state["dtr_date_input"] = work_date + timedelta(days=1)
             st.rerun()
     with col_today:
-        if st.button("Today", key="dtr_today", width="stretch"):
-            st.session_state.dtr_date = date.today()
+        if st.button("📅 Today", key="dtr_today", use_container_width=True):
+            st.session_state["dtr_date_input"] = date.today()
             st.rerun()
 
     st.caption(f"**{work_date.strftime('%A, %B %d, %Y')}**")
@@ -313,12 +329,19 @@ def _render_daily_entry():
             except Exception as ex:
                 errors.append(str(ex))
         if errors:
-            st.error(f"Saved {saved} rows with {len(errors)} error(s): {errors[0]}")
+            st.session_state["dtr_save_msg"] = (
+                "error",
+                f"Saved {saved} rows with {len(errors)} error(s): {errors[0]}",
+            )
         else:
             log_action("batch_saved", "time_logs", get_company_id(),
                        f"{work_date} — {saved} records")
-            st.success(f"✅ Saved {saved} attendance record(s) for {work_date.strftime('%B %d, %Y')}.")
-            st.rerun()
+            label = work_date.strftime('%A, %B %d, %Y')
+            st.session_state["dtr_save_msg"] = (
+                "success",
+                f"✅ Saved {saved} attendance record(s) for **{label}**.",
+            )
+        st.rerun()
 
     # ── Mark All Absent ───────────────────────────────────────
     if mark_absent:
@@ -352,7 +375,11 @@ def _render_daily_entry():
                 pass
         log_action("batch_absent", "time_logs", get_company_id(),
                    f"{work_date} — {saved} absent records")
-        st.success(f"Marked {saved} employee(s) as Absent for {work_date.strftime('%B %d, %Y')}.")
+        label = work_date.strftime('%A, %B %d, %Y')
+        st.session_state["dtr_save_msg"] = (
+            "info",
+            f"🚫 Marked {saved} employee(s) as Absent for **{label}**.",
+        )
         st.rerun()
 
 
@@ -364,11 +391,18 @@ def _render_summary():
     today = date.today()
     month_start = today.replace(day=1)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        range_start = st.date_input("From", value=month_start, key="dtr_sum_start")
-    with col2:
-        range_end = st.date_input("To", value=today, key="dtr_sum_end")
+    # Range picker — first click sets "from", second click sets "to"
+    date_range = st.date_input(
+        "Select date range",
+        value=(month_start, today),
+        key="dtr_sum_range",
+        help="Click a start date, then click an end date",
+    )
+    # date_input returns a tuple when a range is selected; guard for partial picks
+    if not isinstance(date_range, (list, tuple)) or len(date_range) < 2:
+        st.info("Pick a start and end date to view the summary.")
+        return
+    range_start, range_end = date_range[0], date_range[1]
 
     if range_start > range_end:
         st.error("Start date must be before end date.")

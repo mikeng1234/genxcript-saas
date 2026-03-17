@@ -1057,6 +1057,284 @@ def _render_time_leave(emp: dict, company: dict):
 
 
 # ============================================================
+# Section 0: Employee Dashboard
+# ============================================================
+
+import calendar as _calendar
+
+def _load_upcoming_holidays(company_id: str, n: int = 5) -> list[dict]:
+    today = date.today()
+    return (
+        get_db().table("holidays")
+        .select("name, date, holiday_type")
+        .eq("company_id", company_id)
+        .gte("date", str(today))
+        .order("date")
+        .limit(n)
+        .execute()
+    ).data or []
+
+
+def _load_approved_vl_this_month(employee_id: str) -> set[str]:
+    """Return set of date strings (YYYY-MM-DD) for approved VL days this month."""
+    today = date.today()
+    first = today.replace(day=1)
+    last  = today.replace(day=_calendar.monthrange(today.year, today.month)[1])
+    rows = (
+        get_db().table("leave_requests")
+        .select("leave_type, start_date, end_date")
+        .eq("employee_id", employee_id)
+        .eq("status", "approved")
+        .gte("start_date", str(first))
+        .lte("start_date", str(last))
+        .execute()
+    ).data or []
+    vl_dates: set[str] = set()
+    for r in rows:
+        s = date.fromisoformat(r["start_date"])
+        e = date.fromisoformat(r["end_date"]) if r.get("end_date") else s
+        d = s
+        while d <= e:
+            vl_dates.add(str(d))
+            d += timedelta(days=1)
+    return vl_dates
+
+
+def _load_holidays_this_month(company_id: str) -> dict[str, str]:
+    """Return {date_str: holiday_name} for holidays this month."""
+    today = date.today()
+    first = today.replace(day=1)
+    last  = today.replace(day=_calendar.monthrange(today.year, today.month)[1])
+    rows = (
+        get_db().table("holidays")
+        .select("date, name, holiday_type")
+        .eq("company_id", company_id)
+        .gte("date", str(first))
+        .lte("date", str(last))
+        .execute()
+    ).data or []
+    return {r["date"]: r["name"] for r in rows}
+
+
+def _mini_calendar_html(year: int, month: int,
+                         vl_dates: set[str],
+                         holiday_dates: dict[str, str],
+                         today: date) -> str:
+    """Render a month mini-calendar as HTML. VL = green, Holiday = purple, Today = blue ring."""
+    cal = _calendar.Calendar(firstweekday=0)  # Monday first
+    weeks = cal.monthdatescalendar(year, month)
+    month_name = date(year, month, 1).strftime("%B %Y")
+
+    rows = ""
+    for week in weeks:
+        row = ""
+        for d in week:
+            ds = str(d)
+            is_today    = d == today
+            is_vl       = ds in vl_dates
+            is_holiday  = ds in holiday_dates
+            is_other    = d.month != month
+
+            if is_other:
+                cell_bg, cell_color, fw = "transparent", "#d1d5db", "400"
+                border = "none"
+            elif is_holiday:
+                cell_bg, cell_color, fw = "#ede9fe", "#6d28d9", "700"
+                border = "2px solid #7c3aed" if is_today else "none"
+            elif is_vl:
+                cell_bg, cell_color, fw = "#dcfce7", "#15803d", "700"
+                border = "2px solid #16a34a" if is_today else "none"
+            elif is_today:
+                cell_bg, cell_color, fw = "#eff6ff", "#1d4ed8", "700"
+                border = "2px solid #3b82f6"
+            else:
+                cell_bg, cell_color, fw = "transparent", "var(--gx-text)", "400"
+                border = "none"
+
+            title = holiday_dates.get(ds, "VL" if is_vl else "")
+            row += (
+                f'<td title="{title}" style="'
+                f'padding:4px 2px;text-align:center;font-size:12px;'
+                f'background:{cell_bg};color:{cell_color};font-weight:{fw};'
+                f'border-radius:6px;border:{border};cursor:default;">'
+                f'{d.day}</td>'
+            )
+        rows += f"<tr>{row}</tr>"
+
+    legend = (
+        '<div style="display:flex;gap:12px;margin-top:8px;font-size:11px;">'
+        '<span><span style="display:inline-block;width:10px;height:10px;background:#dcfce7;border-radius:3px;margin-right:3px;border:1px solid #16a34a"></span>VL</span>'
+        '<span><span style="display:inline-block;width:10px;height:10px;background:#ede9fe;border-radius:3px;margin-right:3px;border:1px solid #7c3aed"></span>Holiday</span>'
+        '<span><span style="display:inline-block;width:10px;height:10px;background:#eff6ff;border-radius:3px;margin-right:3px;border:1px solid #3b82f6"></span>Today</span>'
+        '</div>'
+    )
+
+    return (
+        f'<div style="background:var(--gx-card-bg,#fff);border:1px solid var(--gx-border,#e5e7eb);'
+        f'border-radius:12px;padding:14px 16px;">'
+        f'<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--gx-text)">{month_name}</div>'
+        f'<table style="width:100%;border-collapse:separate;border-spacing:2px 2px;">'
+        f'<thead><tr>'
+        + "".join(
+            f'<th style="font-size:11px;color:#6b7280;font-weight:600;text-align:center;padding-bottom:4px;">{d}</th>'
+            for d in ["Mo","Tu","We","Th","Fr","Sa","Su"]
+        )
+        + f'</tr></thead><tbody>{rows}</tbody></table>'
+        + legend
+        + '</div>'
+    )
+
+
+def _render_dashboard(emp: dict, company: dict):
+    """Employee portal landing dashboard."""
+    today = date.today()
+    greeting_hour = datetime.datetime.now().hour
+    greeting = "Good morning" if greeting_hour < 12 else ("Good afternoon" if greeting_hour < 18 else "Good evening")
+    first_name = emp.get("first_name", "")
+
+    st.markdown(
+        f'<div style="font-size:20px;font-weight:700;margin-bottom:4px;">'
+        f'{greeting}, {first_name}! 👋</div>'
+        f'<div style="font-size:13px;color:#6b7280;margin-bottom:20px;">'
+        f'{today.strftime("%A, %B %d, %Y")}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Row 1: Leave balance cards + upcoming holiday ─────────
+    col_vl, col_sl, col_cl, col_holiday = st.columns([1, 1, 1, 1.4])
+
+    balance, _ = _get_leave_balance(emp["id"], company, emp)
+
+    def _leave_card(col, leave_type: str, icon: str, bg: str, accent: str):
+        b = balance.get(leave_type, {"remaining": 0, "total": 0, "used": 0})
+        pct = int((b["used"] / b["total"] * 100)) if b["total"] else 0
+        bar_w = max(4, min(100, pct))
+        col.markdown(
+            f'<div style="background:{bg};border-radius:12px;padding:14px 16px;height:100%;">'
+            f'<div style="font-size:20px">{icon}</div>'
+            f'<div style="font-size:22px;font-weight:800;color:{accent};margin:4px 0;">'
+            f'{b["remaining"]:.0f}<span style="font-size:13px;font-weight:500;color:#6b7280"> / {b["total"]:.0f} days</span></div>'
+            f'<div style="font-size:12px;color:#6b7280;font-weight:600;">{leave_type} Balance</div>'
+            f'<div style="margin-top:8px;height:4px;background:#e5e7eb;border-radius:4px;">'
+            f'<div style="width:{bar_w}%;height:4px;background:{accent};border-radius:4px;opacity:.7;"></div></div>'
+            f'<div style="font-size:11px;color:#9ca3af;margin-top:3px;">{pct}% used</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    _leave_card(col_vl, "VL", "🌴", "#f0fdf4", "#16a34a")
+    _leave_card(col_sl, "SL", "🩺", "#eff6ff", "#2563eb")
+    _leave_card(col_cl, "CL", "✨", "#fdf4ff", "#9333ea")
+
+    # Upcoming holidays card
+    upcoming = _load_upcoming_holidays(company["id"], n=4)
+    _HTYPE_COLORS = {
+        "regular": ("#fee2e2", "#dc2626"),
+        "special": ("#fef9c3", "#ca8a04"),
+        "special_working": ("#dbeafe", "#2563eb"),
+    }
+    if upcoming:
+        holiday_html = ""
+        for h in upcoming:
+            hdate = date.fromisoformat(h["date"])
+            days_away = (hdate - today).days
+            label = "Today" if days_away == 0 else (f"Tomorrow" if days_away == 1 else f"In {days_away}d")
+            bg, accent = _HTYPE_COLORS.get(h.get("holiday_type","regular"), ("#f3f4f6","#374151"))
+            holiday_html += (
+                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+                f'<div style="background:{bg};color:{accent};font-size:10px;font-weight:700;'
+                f'padding:2px 6px;border-radius:6px;white-space:nowrap;">{label}</div>'
+                f'<div style="font-size:12px;color:var(--gx-text);flex:1;overflow:hidden;'
+                f'text-overflow:ellipsis;white-space:nowrap;" title="{h["name"]}">{h["name"]}</div>'
+                f'</div>'
+            )
+        col_holiday.markdown(
+            f'<div style="background:var(--gx-card-bg,#fff);border:1px solid var(--gx-border,#e5e7eb);'
+            f'border-radius:12px;padding:14px 16px;height:100%;">'
+            f'<div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:10px;">🗓️ UPCOMING HOLIDAYS</div>'
+            + holiday_html
+            + '</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        col_holiday.markdown(
+            '<div style="background:var(--gx-card-bg,#fff);border:1px solid var(--gx-border,#e5e7eb);'
+            'border-radius:12px;padding:14px 16px;height:100%;">'
+            '<div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:8px;">🗓️ UPCOMING HOLIDAYS</div>'
+            '<div style="font-size:12px;color:#9ca3af;">No upcoming holidays.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    # ── Row 2: Latest pay breakdown + mini calendar ────────────
+    col_pay, col_cal = st.columns([1.3, 1])
+
+    with col_pay:
+        payslips = _get_payslips(emp["id"])
+        if payslips:
+            latest = payslips[0]
+            pp = latest.get("pay_periods") or {}
+            period_label = f"{pp.get('period_start','')} → {pp.get('period_end','')}"
+            gross = _p(latest.get("gross_pay") or 0)
+            net   = _p(latest.get("net_pay")   or 0)
+            deductions = gross - net
+
+            # Mini bar chart using HTML proportional bars
+            items = [
+                ("Basic Pay",     _p(latest.get("basic_pay")    or 0), "#3b82f6"),
+                ("OT / Other",    _p(latest.get("overtime_pay") or 0) + _p(latest.get("holiday_pay") or 0), "#10b981"),
+                ("Deductions",    deductions, "#ef4444"),
+                ("Net Pay",       net,        "#8b5cf6"),
+            ]
+            max_val = max(v for _, v, _ in items) or 1
+            bars = ""
+            for label, val, color in items:
+                if val <= 0:
+                    continue
+                w = max(4, int(val / max_val * 100))
+                bars += (
+                    f'<div style="margin-bottom:8px;">'
+                    f'<div style="display:flex;justify-content:space-between;font-size:11px;'
+                    f'color:#6b7280;margin-bottom:2px;"><span>{label}</span>'
+                    f'<span style="font-weight:600;color:var(--gx-text);">₱{val:,.2f}</span></div>'
+                    f'<div style="height:8px;background:#f3f4f6;border-radius:4px;">'
+                    f'<div style="width:{w}%;height:8px;background:{color};border-radius:4px;"></div>'
+                    f'</div></div>'
+                )
+
+            st.markdown(
+                f'<div style="background:var(--gx-card-bg,#fff);border:1px solid var(--gx-border,#e5e7eb);'
+                f'border-radius:12px;padding:16px 18px;">'
+                f'<div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:4px;">💰 LATEST PAY BREAKDOWN</div>'
+                f'<div style="font-size:11px;color:#9ca3af;margin-bottom:12px;">{period_label}</div>'
+                + bars
+                + f'<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--gx-border,#e5e7eb);'
+                f'display:flex;justify-content:space-between;align-items:center;">'
+                f'<span style="font-size:12px;color:#6b7280;">Net Pay</span>'
+                f'<span style="font-size:18px;font-weight:800;color:#16a34a;">₱{net:,.2f}</span>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div style="background:var(--gx-card-bg,#fff);border:1px solid var(--gx-border,#e5e7eb);'
+                'border-radius:12px;padding:32px 18px;text-align:center;">'
+                '<div style="font-size:24px">💰</div>'
+                '<div style="font-size:13px;color:#6b7280;margin-top:8px;">No payslips yet.</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+    with col_cal:
+        vl_dates      = _load_approved_vl_this_month(emp["id"])
+        holiday_dates = _load_holidays_this_month(company["id"])
+        cal_html = _mini_calendar_html(today.year, today.month, vl_dates, holiday_dates, today)
+        st.markdown(cal_html, unsafe_allow_html=True)
+
+
+# ============================================================
 # Section 4B: DTR / Attendance Sub-tab helpers
 # ============================================================
 
@@ -1546,9 +1824,12 @@ def render():
     _render_hero(emp, company)
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    tab_profile, tab_payslips, tab_leave, tab_docs, tab_prefs = st.tabs([
-        "My Profile", "My Payslips", "My Time & Leave", "My Documents", "Preferences",
+    tab_dash, tab_profile, tab_payslips, tab_leave, tab_docs, tab_prefs = st.tabs([
+        "🏠 Dashboard", "My Profile", "My Payslips", "My Time & Leave", "My Documents", "Preferences",
     ])
+
+    with tab_dash:
+        _render_dashboard(emp, company)
 
     with tab_profile:
         profile = _get_profile(emp["id"])
