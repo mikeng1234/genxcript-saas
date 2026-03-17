@@ -24,6 +24,7 @@ from app.auth import (
     update_active_company, add_accessible_company,
     ensure_accessible_companies_loaded,
     change_own_password, get_current_display_name, update_own_display_name,
+    exchange_recovery_code, set_new_password,
 )
 
 # Hide Streamlit's auto-generated page navigation (it scans the pages/
@@ -43,11 +44,54 @@ st.markdown(
 restore_from_query_params()
 
 # ============================================================
+# Supabase PKCE recovery callback — ?code=<token>
+# Supabase appends this after the user clicks the password-reset
+# email link. Exchange it for a session so we can show the
+# "Set New Password" form instead of the regular login page.
+# ============================================================
+
+_recovery_code = st.query_params.get("code")
+if _recovery_code and not is_logged_in() and "pw_reset_user" not in st.session_state:
+    _recovery_user = exchange_recovery_code(_recovery_code)
+    if _recovery_user:
+        st.session_state["pw_reset_user"] = _recovery_user
+        st.query_params.clear()
+        st.rerun()
+
+# ============================================================
 # Auth Gate
 # ============================================================
 
 if not is_logged_in():
-    if st.session_state.get("show_register"):
+    if st.session_state.get("pw_reset_user"):
+        # Show Set New Password form (after clicking reset email link)
+        _, _col, _ = st.columns([1, 1.5, 1])
+        with _col:
+            st.markdown("## GenXcript Payroll")
+            st.markdown("#### Set New Password")
+            st.divider()
+            _ru = st.session_state["pw_reset_user"]
+            st.info(f"Setting password for **{_ru['email']}**", icon="🔑")
+            with st.form("set_pw_form"):
+                _new_pw   = st.text_input("New password", type="password",
+                                          help="Minimum 6 characters")
+                _conf_pw  = st.text_input("Confirm new password", type="password")
+                _save_btn = st.form_submit_button("Save Password", type="primary",
+                                                  use_container_width=True)
+            if _save_btn:
+                if len(_new_pw) < 6:
+                    st.error("Password must be at least 6 characters.")
+                elif _new_pw != _conf_pw:
+                    st.error("Passwords do not match.")
+                else:
+                    _ok, _err = set_new_password(_ru["user_id"], _new_pw)
+                    if _ok:
+                        st.session_state.pop("pw_reset_user", None)
+                        st.success("Password updated! You can now sign in.")
+                        st.balloons()
+                    else:
+                        st.error(_err)
+    elif st.session_state.get("show_register"):
         from app.pages.register import render as render_register
         render_register()
     else:

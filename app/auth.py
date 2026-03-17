@@ -426,6 +426,43 @@ def send_password_reset(email: str) -> tuple[bool, str]:
         return False, f"Could not send reset email: {e}"
 
 
+def exchange_recovery_code(code: str) -> dict | None:
+    """
+    Exchange the PKCE auth code from a Supabase password-reset email link.
+
+    Supabase (PKCE flow) appends ?code=<value> to the redirect URL.
+    This method exchanges that code for a real session and returns the
+    user details so we can show the "Set New Password" form.
+
+    Returns {user_id, email} on success, None on failure.
+    """
+    try:
+        pub = _get_auth_client()
+        resp = pub.auth.exchange_code_for_session({"auth_code": code})
+        s = getattr(resp, "session", None)
+        if s and getattr(s, "user", None):
+            return {
+                "user_id": s.user.id,
+                "email":   s.user.email,
+            }
+    except Exception:
+        pass
+    return None
+
+
+def set_new_password(user_id: str, new_password: str) -> tuple[bool, str]:
+    """
+    Set a new password for the user after a recovery flow.
+    Uses the admin client so no current-password check is needed.
+    """
+    try:
+        adm = _get_admin_auth_client()
+        adm.auth.admin.update_user_by_id(user_id, {"password": new_password})
+        return True, ""
+    except Exception as e:
+        return False, f"Failed to set new password: {e}"
+
+
 # ============================================================
 # Employee Invite
 # ============================================================
