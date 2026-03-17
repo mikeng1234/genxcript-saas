@@ -3,6 +3,8 @@
 <head><meta charset="utf-8"></head>
 <body>
 <script>
+  var _sent = false;
+
   function parseHash(hash) {
     if (!hash || hash.length < 2) return {};
     return hash.slice(1).split("&").reduce(function(obj, pair) {
@@ -12,34 +14,48 @@
     }, {});
   }
 
-  function sendResult() {
+  function trySetValue(value) {
+    // window.parent.Streamlit might not exist yet — this is called in a retry loop
     try {
-      // declare_component iframes are same-origin so we can read parent's hash
+      if (window.parent && window.parent.Streamlit && window.parent.Streamlit.setComponentValue) {
+        window.parent.Streamlit.setComponentValue(value);
+        return true;
+      }
+    } catch(e) { /* cross-origin guard, should not happen on same-origin */ }
+    return false;
+  }
+
+  function computeResult() {
+    try {
       var hash = window.parent.location.hash;
       var params = parseHash(hash);
-
       if (params.type === "recovery" && params.access_token) {
-        window.parent.Streamlit.setComponentValue({
-          type:         "recovery",
-          access_token: params.access_token
-        });
-      } else if (params.error) {
-        // e.g. otp_expired — tell Python so it can show a friendly message
-        window.parent.Streamlit.setComponentValue({
-          type:  "error",
-          error: params.error,
-          desc:  params.error_description || ""
-        });
-      } else {
-        window.parent.Streamlit.setComponentValue(null);
+        return { type: "recovery", access_token: params.access_token };
       }
-    } catch(e) {
-      // Cross-origin guard — should not happen on localhost
-      window.parent.Streamlit.setComponentValue(null);
+      if (params.error) {
+        return { type: "error", error: params.error, desc: params.error_description || "" };
+      }
+    } catch(e) { /* cross-origin guard */ }
+    return null;
+  }
+
+  function sendResult() {
+    if (_sent) return;
+    var result = computeResult();
+    if (trySetValue(result)) {
+      _sent = true;
     }
   }
 
-  // Streamlit sends this event when the component iframe is ready
+  // Retry every 100 ms until window.parent.Streamlit is ready (max 10 s)
+  var _tries = 0;
+  var _timer = setInterval(function() {
+    _tries++;
+    sendResult();
+    if (_sent || _tries > 100) clearInterval(_timer);
+  }, 100);
+
+  // Also fire on Streamlit's render event as primary trigger
   window.addEventListener("message", function(event) {
     if (event.data && event.data.type === "streamlit:render") {
       sendResult();
