@@ -428,17 +428,16 @@ def send_password_reset(email: str) -> tuple[bool, str]:
 
 def get_user_from_access_token(access_token: str) -> dict | None:
     """
-    Resolve a Supabase access_token (from the implicit-flow hash) to
-    {user_id, email} using the admin client.
+    Resolve a Supabase access_token JWT (from the implicit-flow hash) to
+    {user_id, email}.
 
-    Used when Supabase uses implicit flow and puts the token in the URL hash
-    (#access_token=...&type=recovery). The JS hash_auth component extracts it
-    and passes it here.
+    Uses the public auth client's get_user(jwt) which validates the JWT
+    server-side and returns the user record — no admin privileges needed.
     """
     try:
-        adm = _get_admin_auth_client()
-        user = adm.auth.admin.get_user(access_token)
-        u = getattr(user, "user", None)
+        pub = _get_auth_client()
+        response = pub.auth.get_user(access_token)
+        u = getattr(response, "user", None)
         if u:
             return {"user_id": u.id, "email": u.email}
     except Exception:

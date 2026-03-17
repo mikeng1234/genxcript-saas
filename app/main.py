@@ -44,17 +44,32 @@ st.markdown(
 restore_from_query_params()
 
 # ============================================================
-# Supabase PKCE recovery callback — ?code=<token>
-# Supabase appends this after the user clicks the password-reset
-# email link. Exchange it for a session so we can show the
-# "Set New Password" form instead of the regular login page.
+# Password-reset callback handlers (runs before auth gate)
+#
+# Two flows depending on Supabase project settings:
+#   PKCE flow   → ?code=TOKEN  (server-readable query param)
+#   Implicit flow → #access_token=TOKEN (hash, server never sees it)
+#
+# For implicit flow the hash_auth iframe JS redirects the browser to
+# /?_rec=1&_tok=TOKEN so Python can read it here on the next request.
 # ============================================================
 
-_recovery_code = st.query_params.get("code")
-if _recovery_code and not is_logged_in() and "pw_reset_user" not in st.session_state:
-    _recovery_user = exchange_recovery_code(_recovery_code)
-    if _recovery_user:
-        st.session_state["pw_reset_user"] = _recovery_user
+if not is_logged_in() and "pw_reset_user" not in st.session_state:
+    # PKCE flow
+    _code = st.query_params.get("code")
+    if _code:
+        _ru = exchange_recovery_code(_code)
+        if _ru:
+            st.session_state["pw_reset_user"] = _ru
+            st.query_params.clear()
+            st.rerun()
+
+    # Implicit flow (hash redirected to query param by hash_auth iframe)
+    _tok = st.query_params.get("_tok")
+    if _tok and st.query_params.get("_rec"):
+        _ru = get_user_from_access_token(_tok)
+        if _ru:
+            st.session_state["pw_reset_user"] = _ru
         st.query_params.clear()
         st.rerun()
 
@@ -87,7 +102,7 @@ if not is_logged_in():
                     _ok, _err = set_new_password(_ru["user_id"], _new_pw)
                     if _ok:
                         st.session_state.pop("pw_reset_user", None)
-                        st.success("Password updated! You can now sign in.")
+                        st.success("✅ Password updated! You can now sign in.")
                         st.balloons()
                     else:
                         st.error(_err)
@@ -95,26 +110,18 @@ if not is_logged_in():
         from app.pages.register import render as render_register
         render_register()
     else:
-        # ── Implicit-flow hash reader (invisible, height=0) ───
-        # Supabase puts the recovery token in the URL *hash* which the
-        # server never sees. This JS component reads window.location.hash
-        # and sends {type, access_token} back to Python.
-        if "pw_reset_hash_checked" not in st.session_state:
-            from app.components.hash_auth import read_hash_auth
-            _hash_result = read_hash_auth(key="hash_auth_reader", default=None)
-            if _hash_result and _hash_result.get("type") == "recovery":
-                _token = _hash_result.get("access_token", "")
-                if _token:
-                    _recovery_user = get_user_from_access_token(_token)
-                    if _recovery_user:
-                        st.session_state["pw_reset_user"] = _recovery_user
-                        st.session_state["pw_reset_hash_checked"] = True
-                        st.rerun()
-            elif _hash_result is not None:
-                # Hash was read but not a recovery token — mark done so
-                # we don't re-render the component on every rerun
-                st.session_state["pw_reset_hash_checked"] = True
-
+        # Render invisible hash reader on every login page load.
+        # If Supabase used implicit flow, the iframe JS will detect
+        # #access_token=...&type=recovery and redirect the parent window
+        # to /?_rec=1&_tok=TOKEN — handled above on the next request.
+        import streamlit.components.v1 as _cv1
+        _cv1.html(
+            open(__import__("os").path.join(
+                __import__("os").path.dirname(__file__),
+                "components", "hash_auth_frontend", "index.html"
+            )).read(),
+            height=0,
+        )
         from app.pages.login import render as render_login
         render_login()
     st.stop()
