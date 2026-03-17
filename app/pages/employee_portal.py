@@ -1063,13 +1063,16 @@ def _render_time_leave(emp: dict, company: dict):
 import calendar as _calendar
 
 def _load_upcoming_holidays(company_id: str, n: int = 5) -> list[dict]:
+    """Return next N holidays: national (company_id IS NULL) + company-specific."""
     today = date.today()
+    # National holidays have company_id = NULL; company ones match company_id.
+    # Use OR filter via PostgREST: `company_id=is.null,company_id=eq.<id>`
     return (
         get_db().table("holidays")
-        .select("name, date, holiday_type")
-        .eq("company_id", company_id)
-        .gte("date", str(today))
-        .order("date")
+        .select("name, holiday_date, type")
+        .or_(f"company_id.is.null,company_id.eq.{company_id}")
+        .gte("holiday_date", str(today))
+        .order("holiday_date")
         .limit(n)
         .execute()
     ).data or []
@@ -1101,19 +1104,19 @@ def _load_approved_vl_this_month(employee_id: str) -> set[str]:
 
 
 def _load_holidays_this_month(company_id: str) -> dict[str, str]:
-    """Return {date_str: holiday_name} for holidays this month."""
+    """Return {date_str: holiday_name} for holidays this month (national + company)."""
     today = date.today()
     first = today.replace(day=1)
     last  = today.replace(day=_calendar.monthrange(today.year, today.month)[1])
     rows = (
         get_db().table("holidays")
-        .select("date, name, holiday_type")
-        .eq("company_id", company_id)
-        .gte("date", str(first))
-        .lte("date", str(last))
+        .select("holiday_date, name, type")
+        .or_(f"company_id.is.null,company_id.eq.{company_id}")
+        .gte("holiday_date", str(first))
+        .lte("holiday_date", str(last))
         .execute()
     ).data or []
-    return {r["date"]: r["name"] for r in rows}
+    return {r["holiday_date"]: r["name"] for r in rows}
 
 
 def _mini_calendar_html(year: int, month: int,
@@ -1229,17 +1232,17 @@ def _render_dashboard(emp: dict, company: dict):
     # Upcoming holidays card
     upcoming = _load_upcoming_holidays(company["id"], n=4)
     _HTYPE_COLORS = {
-        "regular": ("#fee2e2", "#dc2626"),
-        "special": ("#fef9c3", "#ca8a04"),
-        "special_working": ("#dbeafe", "#2563eb"),
+        "regular":             ("#fee2e2", "#dc2626"),
+        "special_non_working": ("#fef9c3", "#ca8a04"),
+        "special_working":     ("#dbeafe", "#2563eb"),
     }
     if upcoming:
         holiday_html = ""
         for h in upcoming:
-            hdate = date.fromisoformat(h["date"])
+            hdate = date.fromisoformat(h["holiday_date"])
             days_away = (hdate - today).days
-            label = "Today" if days_away == 0 else (f"Tomorrow" if days_away == 1 else f"In {days_away}d")
-            bg, accent = _HTYPE_COLORS.get(h.get("holiday_type","regular"), ("#f3f4f6","#374151"))
+            label = "Today" if days_away == 0 else ("Tomorrow" if days_away == 1 else f"In {days_away}d")
+            bg, accent = _HTYPE_COLORS.get(h.get("type", "regular"), ("#f3f4f6", "#374151"))
             holiday_html += (
                 f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
                 f'<div style="background:{bg};color:{accent};font-size:10px;font-weight:700;'
