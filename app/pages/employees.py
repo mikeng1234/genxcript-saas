@@ -990,12 +990,12 @@ def _render_approvals_tab():
             icon="📋",
         )
 
-    lr_label = f"🏖 Leave Requests ({len(pending_lr)} pending)" if pending_lr else "🏖 Leave Requests"
-    ot_label = f"⏰ OT Requests ({len(pending_ot)} pending)"    if pending_ot else "⏰ OT Requests"
+    lr_col, ot_col = st.columns(2)
 
-    lr_tab, ot_tab = st.tabs([lr_label, ot_label])
-
-    with lr_tab:
+    with lr_col:
+        lr_badge = f" ({len(pending_lr)} pending)" if pending_lr else ""
+        st.markdown(f"#### 🏖 Leave Requests{lr_badge}")
+        st.divider()
         if not all_lr:
             st.caption("No leave requests have been filed yet.")
         else:
@@ -1012,7 +1012,10 @@ def _render_approvals_tab():
             if not pending_lr:
                 st.caption("No pending leave requests.")
 
-    with ot_tab:
+    with ot_col:
+        ot_badge = f" ({len(pending_ot)} pending)" if pending_ot else ""
+        st.markdown(f"#### ⏰ OT Requests{ot_badge}")
+        st.divider()
         if not all_ot:
             st.caption("No overtime requests have been filed yet.")
         else:

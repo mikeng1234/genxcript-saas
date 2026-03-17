@@ -12,6 +12,7 @@ for the viewed year.
 """
 
 import streamlit as st
+import streamlit.components.v1 as _stc
 from datetime import date, timedelta
 import calendar as _cal
 
@@ -363,7 +364,48 @@ def _render_holiday_table(holidays: list[dict]):
 
 def render():
     inject_css()
-    st.title("Calendar")
+
+    _col_title, _col_clock = st.columns([3, 1])
+    with _col_title:
+        st.title("Calendar")
+    with _col_clock:
+        _stc.html(
+            """
+            <div id="gxp-clock-wrap" style="
+                display:flex;flex-direction:column;align-items:flex-end;
+                justify-content:center;height:80px;padding-right:4px;
+                font-family:'Inter',system-ui,sans-serif;">
+              <div id="gxp-time" style="
+                font-size:22px;font-weight:700;letter-spacing:0.5px;
+                color:#1e293b;line-height:1.1;"></div>
+              <div id="gxp-date" style="
+                font-size:11px;font-weight:400;color:#64748b;
+                margin-top:3px;"></div>
+            </div>
+            <script>
+            (function(){
+              var timEl = document.getElementById('gxp-time');
+              var datEl = document.getElementById('gxp-date');
+              var days  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+              var months= ['Jan','Feb','Mar','Apr','May','Jun',
+                           'Jul','Aug','Sep','Oct','Nov','Dec'];
+              function pad(n){return n<10?'0'+n:n;}
+              function tick(){
+                var n  = new Date();
+                var h  = n.getHours(), m = n.getMinutes(), s = n.getSeconds();
+                var ap = h >= 12 ? 'PM' : 'AM';
+                h = h % 12 || 12;
+                timEl.textContent = pad(h)+':'+pad(m)+':'+pad(s)+' '+ap;
+                datEl.textContent = days[n.getDay()]+', '+months[n.getMonth()]+' '+n.getDate()+', '+n.getFullYear();
+              }
+              tick();
+              setInterval(tick, 1000);
+            })();
+            </script>
+            """,
+            height=84,
+            scrolling=False,
+        )
 
     today = date.today()
 

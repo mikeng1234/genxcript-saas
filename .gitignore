@@ -21,3 +21,6 @@ Thumbs.db
 
 # Pytest
 .pytest_cache/
+
+# Local DTR snapshot archives (can be GBs — do not push to GitHub)
+archives/

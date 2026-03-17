@@ -349,181 +349,429 @@ _dirty_nav = (
     and bool(st.session_state.get("editing_id"))
 )
 if _dirty_nav:
-    # Revert BEFORE the radio renders so Streamlit doesn't complain
     st.session_state.nav_page = st.session_state.current_page
 
-st.sidebar.radio("Navigate", options=PAGES, key="nav_page")
-
-if _dirty_nav:
-    _unsaved_nav_dialog(_intended)
-    # Don't st.stop() — let the current page render behind the dialog overlay
-
-st.session_state.current_page = st.session_state.nav_page
-page = st.session_state.nav_page
-
-# ── Collapsed-sidebar top navigation bar ───────────────────────
-# Rendered as a 0-height component so the JS executes without
-# taking up any visual space. The script injects a fixed top bar
-# into the *parent* page (window.parent.document) and shows/hides
-# it based on the sidebar's aria-expanded attribute.
+# ── Grouped sidebar navigation ────────────────────────────────────────────
 _NAV_ICONS = {
     "Dashboard": "📊", "Employees": "👥", "Payroll Run": "💸",
     "Payslips": "📄", "Payroll Comparison": "📈", "OT Analytics": "🔥",
     "Attendance": "🕐", "Government Reports": "🏛️", "Calendar": "📅",
     "Company Setup": "🏢", "Preferences": "⚙️",
 }
-_nav_json = ", ".join(
+_NAV_GROUPS = [
+    ("Overview",    ["Dashboard"]),
+    ("People",      ["Employees", "Attendance", "Calendar"]),
+    ("Payroll",     ["Payroll Run", "Payslips", "Payroll Comparison", "OT Analytics"]),
+    ("Compliance",  ["Government Reports"]),
+    ("Settings",    ["Company Setup", "Preferences"]),
+]
+_active_page = st.session_state.current_page   # stable source of truth for highlight
+
+for _grp_name, _grp_pages in _NAV_GROUPS:
+    st.sidebar.markdown(
+        f'<p class="gxp-nav-group">{_grp_name}</p>',
+        unsafe_allow_html=True,
+    )
+    for _p in _grp_pages:
+        # Marker div: active state is encoded here so CSS can highlight the
+        # immediately following button via adjacent-sibling selector.
+        _marker_cls = "gxp-nav-marker gxp-nav-active" if _p == _active_page else "gxp-nav-marker"
+        st.sidebar.markdown(f'<div class="{_marker_cls}"></div>', unsafe_allow_html=True)
+        if st.sidebar.button(
+            f"{_NAV_ICONS.get(_p, '')}  {_p}",
+            key=f"nav_btn_{_p}",
+            use_container_width=True,
+        ):
+            st.session_state.nav_page = _p   # guard will catch dirty state
+            if not st.session_state.get("editing_id"):
+                st.session_state.current_page = _p
+            st.rerun()
+
+if _dirty_nav:
+    _unsaved_nav_dialog(_intended)
+
+st.session_state.current_page = st.session_state.nav_page
+page = st.session_state.nav_page
+
+# ── Custom collapsible left sidebar ───────────────────────────────────────
+# Replaces the old collapsed-sidebar top nav bar.
+# Injects a fixed left sidebar into the parent page (window.parent.document).
+# The Streamlit sidebar is hidden visually but kept in the DOM so JS can
+# still click its buttons as navigation targets.
+_page_json = ", ".join(
     '{{"n":"{n}","i":"{i}"}}'.format(n=p, i=_NAV_ICONS.get(p, ""))
     for p in PAGES
 )
+_grp_json = ", ".join(
+    '{{"name":"{g}","pages":[{ps}]}}'.format(
+        g=grp[0],
+        ps=", ".join(f'"{p}"' for p in grp[1])
+    )
+    for grp in _NAV_GROUPS
+)
+_acct_label = "👤 My Account"
+_signout_label = "Sign Out"
+
 components.html(f"""
 <script>
 (function(){{
-  var PAGES=[{_nav_json}], ACTIVE="{page}", ID='gxp-topnav', H=48;
   var d=window.parent.document;
+  var PAGES=[{_page_json}];
+  var GROUPS=[{_grp_json}];
+  var ACTIVE="{page}";
+  var ACCT_LABEL="{_acct_label}", SIGNOUT_LABEL="{_signout_label}";
+  var ID='gxp-lnav', CSS_ID='gxp-lnav-css', LS='gxp-lnav-c';
+  var EW=214, CW=54, PW=188;
 
+  // ── Read CSS custom properties from parent page ──────────────────────
   function gc(n,fb){{
-    try{{var v=getComputedStyle(d.documentElement).getPropertyValue(n).trim();return v||fb;}}
+    try{{return getComputedStyle(d.documentElement).getPropertyValue(n).trim()||fb;}}
     catch(e){{return fb;}}
   }}
 
-  function isSidebarCollapsed(){{
-    var sb=d.querySelector('[data-testid="stSidebar"]');
-    if(!sb) return false;
-    // Primary: aria-expanded attribute
-    var ae=sb.getAttribute('aria-expanded');
-    if(ae==='false') return true;
-    if(ae==='true')  return false;
-    // Fallback: measure actual rendered width (collapsed sidebar ~0-80px)
-    var w=sb.getBoundingClientRect().width;
-    if(w>0) return w<100;
-    // Fallback: check collapse button aria state
-    var btn=d.querySelector('[data-testid="stSidebarCollapseButton"] button,[aria-label="Close sidebar"],[aria-label="Collapse sidebar"]');
-    if(btn) return false; // button present means it's open
-    return false;
-  }}
-
+  // ── Click a Streamlit sidebar button by page name ────────────────────
   function clickNav(name){{
-    // First try to expand sidebar and click the radio
     var sb=d.querySelector('[data-testid="stSidebar"]');
     if(!sb) return;
-    var labels=sb.querySelectorAll('label');
-    for(var i=0;i<labels.length;i++){{
-      if(labels[i].textContent.trim()===name){{
-        var inp=labels[i].querySelector('input[type="radio"]');
-        if(inp){{ inp.click(); return; }}
-        labels[i].click(); return;
-      }}
+    var btns=sb.querySelectorAll('[data-testid="stButton"] button');
+    for(var i=0;i<btns.length;i++){{
+      if(btns[i].textContent.indexOf(name)!==-1){{ btns[i].click(); return; }}
     }}
   }}
 
-  function getStHeaderHeight(){{
-    var h=d.querySelector('[data-testid="stHeader"]');
-    return h ? h.getBoundingClientRect().height : 0;
+  // ── Inject CSS: hide Streamlit sidebar + top toolbar, remove layout gaps ─
+  function injectCSS(){{
+    if(d.getElementById(CSS_ID)) return;
+    var s=d.createElement('style'); s.id=CSS_ID;
+    s.textContent=[
+      '[data-testid="stSidebar"]{{',
+      '  position:fixed!important;left:-9999px!important;',
+      '  width:1px!important;height:1px!important;',
+      '  overflow:hidden!important;pointer-events:none!important;',
+      '  opacity:0!important;z-index:-1!important;',
+      '}}',
+      '[data-testid="stSidebarCollapseButton"],',
+      '[data-testid="collapsedControl"]{{display:none!important;}}',
+      // Hide Streamlit's top toolbar so our sidebar tab is always visible
+      '[data-testid="stHeader"]{{display:none!important;}}',
+      '[data-testid="stDecoration"]{{display:none!important;}}',
+      // Kill the gap Streamlit reserves for the sidebar
+      '[data-testid="stAppViewContainer"]{{padding-left:0!important;}}',
+      'section[data-testid="stMain"]{{margin-left:0!important;padding-left:0!important;}}',
+    ].join('');
+    d.head.appendChild(s);
   }}
 
-  function setMainPad(collapsed){{
-    var extra=collapsed?(getStHeaderHeight()+H+4):0;
-    var selectors=[
-      '[data-testid="stMainBlockContainer"]',
-      '.stMainBlockContainer',
-      '[data-testid="block-container"]',
-      '.block-container'
+  // ── Offset main content by sidebar width ─────────────────────────────
+  function setOffset(w){{
+    var targets=[
+      '[data-testid="stMain"]',
+      'section[data-testid="stMain"]',
     ];
-    for(var i=0;i<selectors.length;i++){{
-      var el=d.querySelector(selectors[i]);
-      if(el){{ el.style.paddingTop=extra?extra+'px':''; break; }}
+    for(var i=0;i<targets.length;i++){{
+      var el=d.querySelector(targets[i]);
+      if(el){{ el.style.setProperty('padding-left',w+'px','important'); break; }}
     }}
   }}
 
+  // ── Collapse state ────────────────────────────────────────────────────
+  var isC=localStorage.getItem(LS)==='1';
+  var isPeek=false;
+
+  // ── Visual update ─────────────────────────────────────────────────────
+  function updateState(nav){{
+    var w=isC?(isPeek?PW:CW):EW;
+    nav.style.width=w+'px';
+    var show=!isC||isPeek;
+    // Group labels
+    nav.querySelectorAll('.ln-grp').forEach(function(el){{
+      el.style.opacity=show?'1':'0';
+      el.style.height=show?'auto':'0';
+      el.style.overflow='hidden';
+      el.style.paddingTop=show?'10px':'0';
+      el.style.paddingBottom=show?'4px':'0';
+    }});
+    // Button labels
+    nav.querySelectorAll('.ln-lbl').forEach(function(el){{
+      el.style.opacity=show?'1':'0';
+      el.style.maxWidth=show?'160px':'0';
+    }});
+    // Brand text
+    var bt=nav.querySelector('.ln-brand');
+    if(bt){{ bt.style.opacity=show?'1':'0'; bt.style.maxWidth=show?'140px':'0'; }}
+    // Toggle icon
+    var ti=nav.querySelector('.ln-ti');
+    if(ti) ti.textContent=isC?'\u25b6':'\u25c0';
+    setOffset(isC&&!isPeek?CW:EW);
+  }}
+
+  // ── Build sidebar ─────────────────────────────────────────────────────
   function build(){{
     var old=d.getElementById(ID); if(old) old.remove();
-    var sf=gc('--gxp-surface','#1e2530'), br=gc('--gxp-border','#2d3748'),
-        tx=gc('--gxp-text','#e2e8f0'),   t2=gc('--gxp-text2','#94a3b8'),
-        ac=gc('--gxp-accent','#3b82f6'), ab=gc('--gxp-accent-bg','#1e3a5f');
-    var hh=getStHeaderHeight();
+
+    var sf=gc('--gxp-surface','#1e2530'),
+        sf2=gc('--gxp-surface2','#161d28'),
+        br=gc('--gxp-border','#2d3748'),
+        tx=gc('--gxp-text','#e2e8f0'),
+        t2=gc('--gxp-text2','#94a3b8'),
+        ac=gc('--gxp-accent','#3b82f6'),
+        ab=gc('--gxp-accent-bg','#1e3a5f');
 
     var nav=d.createElement('div'); nav.id=ID;
     nav.style.cssText=
-      'position:fixed;top:'+hh+'px;left:0;right:0;z-index:99990;'+
-      'background:'+sf+';border-bottom:1px solid '+br+';'+
-      'display:none;align-items:center;gap:2px;'+
-      'padding:0 14px;height:'+H+'px;'+
-      'overflow-x:auto;white-space:nowrap;'+
-      'box-shadow:0 2px 12px rgba(0,0,0,0.28);scrollbar-width:none;';
+      'position:fixed;left:0;top:0;bottom:0;'+
+      'width:'+(isC?CW:EW)+'px;'+
+      'background:'+sf+';border-right:1px solid '+br+';'+
+      'z-index:99990;overflow:visible;'+
+      'display:flex;flex-direction:column;'+
+      'transition:width 0.22s cubic-bezier(0.4,0,0.2,1);'+
+      'box-shadow:2px 0 18px rgba(0,0,0,0.26);';
 
-    // Logo
-    var logo=d.createElement('div');
-    logo.innerHTML='<span style="font-size:17px">💰</span>'+
-      '<span style="font-size:14px;font-weight:700;color:'+tx+';margin-left:5px;letter-spacing:-0.3px">GenXcript</span>';
-    logo.style.cssText='display:flex;align-items:center;flex-shrink:0;margin-right:12px;';
-    nav.appendChild(logo);
+    // ── Inner wrapper (clips content, lets floating tab protrude) ─────────
+    var inner=d.createElement('div');
+    inner.style.cssText=
+      'display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0;';
 
-    var sep=d.createElement('div');
-    sep.style.cssText='width:1px;height:20px;background:'+br+';margin-right:8px;flex-shrink:0;';
-    nav.appendChild(sep);
+    // ── Floating toggle tab (always visible on the right edge) ────────────
+    var tab=d.createElement('button');
+    tab.style.cssText=
+      'position:absolute;top:18px;right:-14px;'+
+      'width:28px;height:28px;border-radius:50%;'+
+      'background:'+ac+';border:2px solid '+sf+';color:#fff;'+
+      'cursor:pointer;display:flex;align-items:center;justify-content:center;'+
+      'font-size:11px;z-index:99991;'+
+      'box-shadow:2px 0 8px rgba(0,0,0,0.35);outline:none;'+
+      'transition:background 0.15s,transform 0.22s;';
+    tab.innerHTML='<span class="ln-ti">'+(isC?'\u25b6':'\u25c0')+'</span>';
+    tab.onmouseenter=function(){{this.style.background='#2563eb';}};
+    tab.onmouseleave=function(){{this.style.background=ac;}};
+    tab.onclick=function(e){{
+      e.stopPropagation();
+      isC=!isC; isPeek=false;
+      localStorage.setItem(LS,isC?'1':'0');
+      updateState(nav);
+    }};
+    nav.appendChild(tab);
 
-    PAGES.forEach(function(p){{
-      var isA=(p.n===ACTIVE);
-      var btn=d.createElement('button');
-      btn.textContent=(p.i?p.i+'\u00a0':'')+p.n;
-      btn.style.cssText=
-        'border:1px solid '+(isA?ac:'transparent')+';'+
-        'background:'+(isA?ab:'transparent')+';'+
-        'color:'+(isA?ac:t2)+';cursor:pointer;'+
-        'padding:5px 11px;border-radius:6px;font-size:12px;'+
-        'font-weight:'+(isA?'600':'400')+';'+
-        'white-space:nowrap;flex-shrink:0;font-family:inherit;'+
-        'transition:background 0.12s,color 0.12s;outline:none;';
-      if(!isA){{
-        btn.onmouseenter=function(){{this.style.background=gc('--gxp-surface2','#161d28');this.style.color=tx;}};
-        btn.onmouseleave=function(){{this.style.background='transparent';this.style.color=t2;}};
-      }}
-      btn.onclick=function(){{ clickNav(p.n); }};
-      nav.appendChild(btn);
+    // ── Header: logo only (toggle moved to floating tab) ──────────────────
+    var hdr=d.createElement('div');
+    hdr.style.cssText=
+      'display:flex;align-items:center;'+
+      'padding:14px 10px 12px;flex-shrink:0;'+
+      'border-bottom:1px solid '+br+';';
+
+    var brand=d.createElement('div');
+    brand.style.cssText='display:flex;align-items:center;gap:7px;overflow:hidden;min-width:0;';
+    brand.innerHTML=
+      '<span style="font-size:19px;flex-shrink:0;">💰</span>'+
+      '<span class="ln-brand" style="font-size:13px;font-weight:700;color:'+tx+';'+
+      'white-space:nowrap;letter-spacing:-0.3px;overflow:hidden;'+
+      'transition:opacity 0.18s,max-width 0.18s;'+
+      (isC?'opacity:0;max-width:0;':'opacity:1;max-width:140px;')+
+      '">GenXcript</span>';
+
+    hdr.appendChild(brand);
+    inner.appendChild(hdr);
+
+    // ── Scrollable nav items ───────────────────────────────────────────
+    var body=d.createElement('div');
+    body.style.cssText=
+      'flex:1;overflow-y:auto;overflow-x:hidden;padding:6px 0;scrollbar-width:none;min-height:0;';
+
+    GROUPS.forEach(function(grp){{
+      var grpEl=d.createElement('div');
+      grpEl.className='ln-grp';
+      grpEl.style.cssText=
+        'font-size:9px;font-weight:700;letter-spacing:1.1px;'+
+        'text-transform:uppercase;color:'+t2+';padding:10px 14px 4px;'+
+        'white-space:nowrap;overflow:hidden;'+
+        'transition:opacity 0.18s,height 0.18s,padding 0.18s;'+
+        (isC?'opacity:0;height:0;padding-top:0;padding-bottom:0;':'opacity:1;');
+      grpEl.textContent=grp.name;
+      body.appendChild(grpEl);
+
+      grp.pages.forEach(function(pname){{
+        var pi=PAGES.find(function(p){{return p.n===pname;}})||{{n:pname,i:''}};
+        var isA=(pname===ACTIVE);
+
+        var btn=d.createElement('button');
+        btn.style.cssText=
+          'display:flex;align-items:center;gap:10px;width:100%;'+
+          'padding:8px 12px;background:'+(isA?ab:'transparent')+';'+
+          'border:none;border-left:3px solid '+(isA?ac:'transparent')+';'+
+          'color:'+(isA?ac:t2)+';cursor:pointer;text-align:left;'+
+          'font-size:13px;font-weight:'+(isA?'600':'400')+';'+
+          'font-family:inherit;white-space:nowrap;overflow:hidden;'+
+          'transition:background 0.12s,color 0.12s;outline:none;';
+
+        var ico=d.createElement('span');
+        ico.style.cssText=
+          'font-size:17px;flex-shrink:0;width:24px;text-align:center;line-height:1;';
+        ico.textContent=pi.i||'\u2022';
+
+        var lbl=d.createElement('span');
+        lbl.className='ln-lbl';
+        lbl.style.cssText=
+          'overflow:hidden;white-space:nowrap;'+
+          'transition:opacity 0.18s,max-width 0.18s;'+
+          (isC?'opacity:0;max-width:0;':'opacity:1;max-width:160px;');
+        lbl.textContent=pname;
+
+        btn.appendChild(ico); btn.appendChild(lbl);
+        if(!isA){{
+          btn.onmouseenter=function(){{this.style.background=sf2;this.style.color=tx;}};
+          btn.onmouseleave=function(){{this.style.background='transparent';this.style.color=t2;}};
+        }}
+        btn.onclick=function(){{ clickNav(pname); }};
+        body.appendChild(btn);
+      }});
     }});
 
+    inner.appendChild(body);
+
+    // ── Footer: Account + Sign out ─────────────────────────────────────
+    var foot=d.createElement('div');
+    foot.style.cssText=
+      'flex-shrink:0;border-top:1px solid '+br+';padding:8px 0;';
+
+    // [clickTarget, displayText, icon]
+    [
+      [ACCT_LABEL, 'My Account', '\U0001F464'],
+      [SIGNOUT_LABEL, 'Sign Out', '\U0001F6AA']
+    ].forEach(function(item){{
+      var clickTarget=item[0], displayText=item[1], ico=item[2];
+      var fbtn=d.createElement('button');
+      fbtn.style.cssText=
+        'display:flex;align-items:center;gap:10px;width:100%;'+
+        'padding:8px 12px;background:transparent;border:none;border-left:3px solid transparent;'+
+        'color:'+t2+';cursor:pointer;text-align:left;'+
+        'font-size:13px;font-family:inherit;white-space:nowrap;overflow:hidden;'+
+        'transition:background 0.12s,color 0.12s;outline:none;';
+      var fi=d.createElement('span');
+      fi.style.cssText='font-size:16px;flex-shrink:0;width:24px;text-align:center;';
+      fi.textContent=ico;
+      var fl=d.createElement('span');
+      fl.className='ln-lbl';
+      fl.style.cssText=
+        'overflow:hidden;white-space:nowrap;'+
+        'transition:opacity 0.18s,max-width 0.18s;'+
+        (isC?'opacity:0;max-width:0;':'opacity:1;max-width:160px;');
+      fl.textContent=displayText;
+      fbtn.appendChild(fi); fbtn.appendChild(fl);
+      fbtn.onmouseenter=function(){{this.style.background=sf2;this.style.color=tx;}};
+      fbtn.onmouseleave=function(){{this.style.background='transparent';this.style.color=t2;}};
+      fbtn.onclick=(function(t){{return function(){{clickNav(t);}};}})(clickTarget);
+      foot.appendChild(fbtn);
+    }});
+
+    inner.appendChild(foot);
+    nav.appendChild(inner);
+
+    // ── Peek on hover when collapsed ───────────────────────────────────
+    nav.onmouseenter=function(){{
+      if(isC){{ isPeek=true; updateState(nav); }}
+    }};
+    nav.onmouseleave=function(){{
+      if(isC){{ isPeek=false; updateState(nav); }}
+    }};
+
     d.body.appendChild(nav);
-  }}
-
-  function sync(){{
-    var collapsed=isSidebarCollapsed();
-    var nav=d.getElementById(ID);
-    if(!nav){{ build(); nav=d.getElementById(ID); }}
-    // Always recompute top offset in case Streamlit header rendered late
-    nav.style.top=getStHeaderHeight()+'px';
-    nav.style.display=collapsed?'flex':'none';
-    setMainPad(collapsed);
-  }}
-
-  var _sbObs=null;
-  function watchSidebar(){{
-    var sb=d.querySelector('[data-testid="stSidebar"]');
-    if(!sb) return;
-    if(_sbObs) _sbObs.disconnect();
-    _sbObs=new MutationObserver(sync);
-    _sbObs.observe(sb,{{attributes:true,attributeFilter:['aria-expanded','class','style']}});
+    setOffset(isC?CW:EW);
   }}
 
   function start(){{
-    build(); sync(); watchSidebar();
-    // Re-watch if sidebar element is replaced (Streamlit hot-reload)
+    injectCSS(); build();
+    // Re-run on Streamlit hot-reload (sidebar element replaced)
     new MutationObserver(function(ml){{
       for(var i=0;i<ml.length;i++){{
-        var added=ml[i].addedNodes;
-        for(var j=0;j<added.length;j++){{
-          if(added[j].getAttribute&&added[j].getAttribute('data-testid')==='stSidebar'){{
-            watchSidebar(); sync(); return;
+        for(var j=0;j<ml[i].addedNodes.length;j++){{
+          var n=ml[i].addedNodes[j];
+          if(n.getAttribute&&n.getAttribute('data-testid')==='stSidebar'){{
+            build(); return;
           }}
         }}
       }}
     }}).observe(d.body,{{childList:true,subtree:false}});
-    // Polling fallback — covers any cases MutationObserver misses
-    setInterval(sync, 600);
   }}
 
   if(d.readyState==='loading') d.addEventListener('DOMContentLoaded',start);
-  else setTimeout(start, 120);
+  else setTimeout(start,60);
+}})();
+</script>
+""", height=0, scrolling=False)
+
+# ── Global loading overlay (shows on every button click during Streamlit rerun) ──
+components.html("""
+<script>
+(function(){{
+  var d=window.parent.document;
+  if(d.getElementById('gxp-ld')) return;  // already injected this session
+
+  // Spin keyframe
+  var ks=d.createElement('style');
+  ks.textContent='@keyframes gxp-spin{{to{{transform:rotate(360deg)}}}}';
+  d.head.appendChild(ks);
+
+  // Overlay
+  var ov=d.createElement('div'); ov.id='gxp-ld';
+  ov.style.cssText=
+    'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999999;'+
+    'background:rgba(10,14,20,0.52);backdrop-filter:blur(2px);'+
+    'display:none;align-items:center;justify-content:center;'+
+    'flex-direction:column;gap:12px;pointer-events:all;';
+
+  // Spinner ring
+  var ring=d.createElement('div');
+  ring.style.cssText=
+    'width:46px;height:46px;border-radius:50%;'+
+    'border:3px solid rgba(255,255,255,0.14);'+
+    'border-top-color:#3b82f6;'+
+    'animation:gxp-spin 0.72s linear infinite;';
+
+  // Label
+  var lbl=d.createElement('div');
+  lbl.style.cssText=
+    'color:rgba(255,255,255,0.65);font-size:11px;'+
+    'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;'+
+    'letter-spacing:0.6px;';
+  lbl.textContent='Loading\u2026';
+
+  ov.appendChild(ring); ov.appendChild(lbl);
+  d.body.appendChild(ov);
+
+  var active=false, tid=null;
+  function show(){{ ov.style.display='flex'; active=true; }}
+  function hide(){{ ov.style.display='none'; active=false; if(tid){{clearTimeout(tid);tid=null;}} }}
+
+  function pollUntilIdle(){{
+    function check(){{
+      if(!active) return;
+      var sw=d.querySelector('[data-testid="stStatusWidget"]');
+      // Status widget present with a spinner means still running
+      if(sw && sw.querySelector('svg')){{
+        tid=setTimeout(check,180);
+      }} else {{
+        // Idle — hide with tiny delay so content renders first
+        tid=setTimeout(hide,120);
+      }}
+    }}
+    // Give Streamlit a moment to start the rerun before we begin polling
+    tid=setTimeout(check,250);
+    // Hard safety cap
+    setTimeout(function(){{if(active)hide();}},8000);
+  }}
+
+  d.addEventListener('click',function(e){{
+    var btn=e.target.closest('button');
+    if(!btn) return;
+    if(btn.closest('#gxp-lnav')) return;          // sidebar nav
+    if(btn.getAttribute('aria-label')==='Close') return; // dialog X
+    if(btn.closest('[role="dialog"]')&&
+       btn.getAttribute('type')==='button'&&
+       !btn.closest('[data-testid="stButton"]')) return; // internal dialog controls
+    show();
+    pollUntilIdle();
+  }},true);
 }})();
 </script>
 """, height=0, scrolling=False)
@@ -605,46 +853,68 @@ if st.session_state.pop("_show_my_account", False):
 # Page Router
 # ============================================================
 
-if page == "Dashboard":
-    from app.pages.dashboard import render as render_dashboard
-    render_dashboard()
+def _render_page(page: str) -> None:
+    if page == "Dashboard":
+        from app.pages.dashboard import render as render_dashboard
+        render_dashboard()
 
-elif page == "Employees":
-    from app.pages.employees import render
-    render()
+    elif page == "Employees":
+        from app.pages.employees import render
+        render()
 
-elif page == "Payroll Run":
-    from app.pages.payroll_run import render as render_payroll
-    render_payroll()
+    elif page == "Payroll Run":
+        from app.pages.payroll_run import render as render_payroll
+        render_payroll()
 
-elif page == "Payslips":
-    from app.pages.payslips import render as render_payslips
-    render_payslips()
+    elif page == "Payslips":
+        from app.pages.payslips import render as render_payslips
+        render_payslips()
 
-elif page == "Payroll Comparison":
-    from app.pages.payroll_comparison import render as render_comparison
-    render_comparison()
+    elif page == "Payroll Comparison":
+        from app.pages.payroll_comparison import render as render_comparison
+        render_comparison()
 
-elif page == "OT Analytics":
-    from app.pages.ot_heatmap import render as render_ot
-    render_ot()
+    elif page == "OT Analytics":
+        from app.pages.ot_heatmap import render as render_ot
+        render_ot()
 
-elif page == "Attendance":
-    from app.pages.dtr import render as render_dtr
-    render_dtr()
+    elif page == "Attendance":
+        from app.pages.dtr import render as render_dtr
+        render_dtr()
 
-elif page == "Government Reports":
-    from app.pages.government_reports import render as render_gov_reports
-    render_gov_reports()
+    elif page == "Government Reports":
+        from app.pages.government_reports import render as render_gov_reports
+        render_gov_reports()
 
-elif page == "Calendar":
-    from app.pages.calendar_view import render as render_calendar
-    render_calendar()
+    elif page == "Calendar":
+        from app.pages.calendar_view import render as render_calendar
+        render_calendar()
 
-elif page == "Company Setup":
-    from app.pages.company_setup import render as render_company
-    render_company()
+    elif page == "Company Setup":
+        from app.pages.company_setup import render as render_company
+        render_company()
 
-elif page == "Preferences":
-    from app.pages.preferences import render as render_preferences
-    render_preferences()
+    elif page == "Preferences":
+        from app.pages.preferences import render as render_preferences
+        render_preferences()
+
+
+try:
+    _render_page(page)
+except Exception as _page_exc:
+    _exc_msg = str(_page_exc)
+    if "jwt expired" in _exc_msg.lower() or "PGRST303" in _exc_msg:
+        # Cached admin DB client has stale JWT state — clear cache and force re-login.
+        try:
+            from app.db_helper import get_db
+            get_db.clear()
+        except Exception:
+            pass
+        logout()
+        st.error(
+            "⚠️ Your session has expired. Please sign in again.",
+            icon="🔒",
+        )
+        st.rerun()
+    else:
+        raise

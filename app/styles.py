@@ -674,13 +674,21 @@ def inject_css():
         padding: 12px 16px;
         background: var(--gxp-surface);
         border-top: 3px solid;
+        /* Equal-height: flex column so the total row always sticks to the bottom */
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        box-sizing: border-box;
     }
     .gxp-remit-card h4 {
         font-size: 13px;
         font-weight: 700;
-        margin: 0 0 8px 0;
+        margin: 0 0 6px 0;
         color: var(--gxp-text);
+        flex-shrink: 0;
     }
+    /* The rows group grows to fill space — pushes total line to the bottom */
+    .gxp-remit-rows { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
     .gxp-remit-card .gxp-remit-row {
         display: flex;
         justify-content: space-between;
@@ -694,13 +702,14 @@ def inject_css():
     }
     .gxp-remit-card .gxp-remit-total {
         border-top: 1px solid var(--gxp-border);
-        margin-top: 4px;
+        margin-top: 6px;
         padding-top: 6px;
         font-weight: 700;
         font-size: 13px;
         display: flex;
         justify-content: space-between;
         color: var(--gxp-text);
+        flex-shrink: 0;
     }
     .gxp-remit-card .gxp-remit-total span:last-child {
         font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -825,33 +834,8 @@ def inject_css():
     .gxp-action-bar-next-label { font-size: 11px; color: var(--gxp-text2); text-transform: uppercase; letter-spacing: 0.5px; }
     .gxp-action-bar-next-date  { font-size: 14px; font-weight: 600; color: var(--gxp-text); }
 
-    /* ── ADP-Style Alert Cards ───────────────────────── */
-    .gxp-alerts-section { margin-bottom: 24px; }
-    .gxp-alert-card {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 16px;
-        border-radius: 8px;
-        margin-bottom: 8px;
-        border-left: 4px solid;
-    }
-    .gxp-alert-overdue { background: var(--gxp-danger-bg);  border-color: var(--gxp-danger); }
-    .gxp-alert-warning { background: var(--gxp-warning-bg); border-color: var(--gxp-warning); }
-    .gxp-alert-info    { background: var(--gxp-accent-bg);  border-color: var(--gxp-accent); }
-    .gxp-alert-icon {
-        font-size: 18px; flex-shrink: 0;
-        width: 32px; height: 32px;
-        border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-    }
-    .gxp-alert-overdue .gxp-alert-icon { background: color-mix(in srgb, var(--gxp-danger-bg) 60%, black); color: var(--gxp-danger-fg); }
-    .gxp-alert-warning .gxp-alert-icon { background: color-mix(in srgb, var(--gxp-warning-bg) 60%, black); color: var(--gxp-warning-fg); }
-    .gxp-alert-info    .gxp-alert-icon { background: var(--gxp-accent-bg); color: var(--gxp-accent-fg); }
-    .gxp-alert-body   { flex: 1; }
-    .gxp-alert-title  { font-size: 13px; font-weight: 600; color: var(--gxp-text); }
-    .gxp-alert-desc   { font-size: 12px; color: var(--gxp-text2); margin-top: 1px; }
-    .gxp-alert-action { font-size: 12px; font-weight: 600; color: var(--gxp-text2); white-space: nowrap; }
+    /* ── Alert grid cards (pure HTML, no action buttons) ── */
+    /* All styling is inline in _alert_card_html(); nothing extra needed here. */
 
     /* ── ADP-Style Stat Cards ────────────────────────── */
     .gxp-stat-card {
@@ -862,6 +846,198 @@ def inject_css():
         position: relative;
         overflow: hidden;
         height: 100%;
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
+    }
+
+    /*
+     * ── Reminder + Alert pills — scoped with :not() so ONLY the leaf column
+     *    that holds exactly ONE marker fires, blocking false matches on the
+     *    outer col_alerts (which contains ALL markers) and on sibling columns
+     *    that contain NONE of the markers.
+     * ─────────────────────────────────────────────────────────────────────── */
+
+    /* ── BASE: Leave pill (inner leave-column only) ── */
+    [data-testid="stColumn"]:has(.gxp-remind-leave):not(:has(.gxp-remind-ot))
+        [data-testid="stButton"] button {
+        height:        10px              !important;
+        min-height:    0                 !important;
+        padding:       0 8px            !important;
+        font-size:     0                 !important;
+        color:         rgba(255,255,255,0) !important;
+        border:        none              !important;
+        border-radius: 99px             !important;
+        background:    rgba(124,58,237,0.18) !important;
+        box-shadow:    none              !important;
+        cursor:        pointer           !important;
+        overflow:      hidden            !important;
+        letter-spacing: 0.3px           !important;
+        font-weight:   600               !important;
+        transition:    background 0.2s, box-shadow 0.2s, height 0.18s, color 0.15s !important;
+    }
+    /* Hover: purple glow */
+    [data-testid="stColumn"]:has(.gxp-remind-leave):not(:has(.gxp-remind-ot)):hover
+        [data-testid="stButton"] button {
+        height:     26px  !important;
+        font-size:  9px   !important;
+        color:      rgba(255,255,255,0.90) !important;
+        background: #7c3aed !important;
+        box-shadow: 0 0 0 3px rgba(124,58,237,0.25),
+                    0 0 16px 5px rgba(124,58,237,0.45) !important;
+    }
+
+    /* ── BASE: OT pill (inner OT-column only) ── */
+    [data-testid="stColumn"]:has(.gxp-remind-ot):not(:has(.gxp-remind-leave))
+        [data-testid="stButton"] button {
+        height:        10px              !important;
+        min-height:    0                 !important;
+        padding:       0 8px            !important;
+        font-size:     0                 !important;
+        color:         rgba(255,255,255,0) !important;
+        border:        none              !important;
+        border-radius: 99px             !important;
+        background:    rgba(2,132,199,0.18) !important;
+        box-shadow:    none              !important;
+        cursor:        pointer           !important;
+        overflow:      hidden            !important;
+        letter-spacing: 0.3px           !important;
+        font-weight:   600               !important;
+        transition:    background 0.2s, box-shadow 0.2s, height 0.18s, color 0.15s !important;
+    }
+    /* Hover: blue glow */
+    [data-testid="stColumn"]:has(.gxp-remind-ot):not(:has(.gxp-remind-leave)):hover
+        [data-testid="stButton"] button {
+        height:     26px  !important;
+        font-size:  9px   !important;
+        color:      rgba(255,255,255,0.90) !important;
+        background: #0284c7 !important;
+        box-shadow: 0 0 0 3px rgba(2,132,199,0.25),
+                    0 0 16px 5px rgba(2,132,199,0.45) !important;
+    }
+
+    /* Card lifts on hover (scoped same way) */
+    [data-testid="stColumn"]:has(.gxp-remind-leave):not(:has(.gxp-remind-ot)):hover
+        .gxp-remind-leave,
+    [data-testid="stColumn"]:has(.gxp-remind-ot):not(:has(.gxp-remind-leave)):hover
+        .gxp-remind-ot {
+        box-shadow: 0 8px 24px rgba(0,0,0,0.10) !important;
+        transform:  translateY(-4px) !important;
+    }
+
+    /* ── Alert gov-reports pill — same pattern as reminder pills ── */
+    /* Base: collapsed, tinted red background at rest */
+    [data-testid="stColumn"]:has(.gxp-alert-gov-marker):not(:has(.gxp-remind-leave)):not(:has(.gxp-remind-ot))
+        [data-testid="stButton"] button {
+        height:        10px              !important;
+        min-height:    0                 !important;
+        padding:       0 8px            !important;
+        font-size:     0                 !important;
+        color:         rgba(255,255,255,0) !important;
+        border:        none              !important;
+        border-radius: 99px             !important;
+        background:    rgba(225,29,72,0.15) !important;
+        box-shadow:    none              !important;
+        cursor:        pointer           !important;
+        overflow:      hidden            !important;
+        letter-spacing: 0.3px           !important;
+        font-weight:   600               !important;
+        transition:    background 0.2s, box-shadow 0.2s, height 0.18s, color 0.15s !important;
+    }
+    /* Hover: red glow — fires when any part of the alerts column is hovered */
+    [data-testid="stColumn"]:has(.gxp-alert-gov-marker):not(:has(.gxp-remind-leave)):not(:has(.gxp-remind-ot)):hover
+        [data-testid="stButton"] button {
+        height:     26px  !important;
+        font-size:  9px   !important;
+        color:      rgba(255,255,255,0.90) !important;
+        background: #e11d48 !important;
+        box-shadow: 0 0 0 3px rgba(225,29,72,0.25),
+                    0 0 16px 5px rgba(225,29,72,0.45) !important;
+    }
+
+    /* ── Stat card action button — slim glowing pill with label ───────────── */
+    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
+        [data-testid="stColumn"]
+        [data-testid="stButton"] button {
+        height:        10px  !important;
+        min-height:    0     !important;
+        padding:       0 8px !important;
+        font-size:     0     !important;
+        color:         rgba(255,255,255,0) !important;
+        border:        none  !important;
+        border-radius: 99px  !important;
+        background:    var(--gxp-border) !important;
+        box-shadow:    none  !important;
+        cursor:        pointer !important;
+        margin-top:    8px   !important;
+        overflow:      hidden !important;
+        letter-spacing: 0.3px !important;
+        font-weight:   600   !important;
+        transition:    background  0.2s ease,
+                       box-shadow  0.2s ease,
+                       height      0.18s ease,
+                       color       0.15s ease !important;
+    }
+    /* Per-card hover — expand pill, reveal label, glow with card's accent color */
+    /* col 1: blue (Employees Paid) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
+        [data-testid="stColumn"]:nth-child(1):hover
+        [data-testid="stButton"] button {
+        height:     26px  !important;
+        font-size:  9px   !important;
+        color:      rgba(255,255,255,0.88) !important;
+        background: #2563eb !important;
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.22),
+                    0 0 14px 4px rgba(37,99,235,0.40) !important;
+    }
+    /* col 2: green (Gross Pay) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
+        [data-testid="stColumn"]:nth-child(2):hover
+        [data-testid="stButton"] button {
+        height:     26px  !important;
+        font-size:  9px   !important;
+        color:      rgba(255,255,255,0.88) !important;
+        background: #059669 !important;
+        box-shadow: 0 0 0 3px rgba(5,150,105,0.22),
+                    0 0 14px 4px rgba(5,150,105,0.40) !important;
+    }
+    /* col 3: purple (Net Pay) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
+        [data-testid="stColumn"]:nth-child(3):hover
+        [data-testid="stButton"] button {
+        height:     26px  !important;
+        font-size:  9px   !important;
+        color:      rgba(255,255,255,0.88) !important;
+        background: #7c3aed !important;
+        box-shadow: 0 0 0 3px rgba(124,58,237,0.22),
+                    0 0 14px 4px rgba(124,58,237,0.40) !important;
+    }
+    /* col 4: amber (Employer Cost) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
+        [data-testid="stColumn"]:nth-child(4):hover
+        [data-testid="stButton"] button {
+        height:     26px  !important;
+        font-size:  9px   !important;
+        color:      rgba(255,255,255,0.88) !important;
+        background: #d97706 !important;
+        box-shadow: 0 0 0 3px rgba(217,119,6,0.22),
+                    0 0 14px 4px rgba(217,119,6,0.40) !important;
+    }
+    /* col 5: pink (YTD) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
+        [data-testid="stColumn"]:nth-child(5):hover
+        [data-testid="stButton"] button {
+        height:     26px  !important;
+        font-size:  9px   !important;
+        color:      rgba(255,255,255,0.88) !important;
+        background: #db2777 !important;
+        box-shadow: 0 0 0 3px rgba(219,39,119,0.22),
+                    0 0 14px 4px rgba(219,39,119,0.40) !important;
+    }
+    /* Hover lift — card floats up on column hover */
+    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
+        [data-testid="stColumn"]:hover
+        .gxp-stat-card {
+        box-shadow: 0 12px 32px rgba(0,0,0,0.13) !important;
+        transform:  translateY(-7px) !important;
     }
     .gxp-stat-icon {
         width: 38px; height: 38px;
@@ -984,20 +1160,74 @@ def inject_css():
     .gxp-panel-title    { font-size: 15px; font-weight: 700; color: var(--gxp-text); }
     .gxp-panel-subtitle { font-size: 12px; color: var(--gxp-text2); }
 
+    /* ── Grouped sidebar navigation ────────────────────── */
+
+    /* Group label */
+    [data-testid="stSidebarContent"] .gxp-nav-group {
+        font-size:      9.5px;
+        font-weight:    700;
+        letter-spacing: .7px;
+        text-transform: uppercase;
+        color:          #9ca3af;
+        margin:         12px 0 2px 6px;
+        padding:        0;
+        line-height:    1;
+    }
+
+    /* Marker div is zero-height — purely a CSS hook */
+    [data-testid="stSidebarContent"] .gxp-nav-marker {
+        height: 0; line-height: 0; margin: 0; padding: 0;
+    }
+
+    /* Every nav button: flat, left-aligned, icon + label */
+    [data-testid="stSidebarContent"] .gxp-nav-marker
+        + [data-testid="stButton"] button {
+        background:      transparent !important;
+        border:          none        !important;
+        box-shadow:      none        !important;
+        text-align:      left        !important;
+        justify-content: flex-start  !important;
+        padding:         6px 10px    !important;
+        border-radius:   7px         !important;
+        font-size:       13px        !important;
+        font-weight:     400         !important;
+        color:           #374151     !important;
+        width:           100%        !important;
+        transition:      background .12s ease, color .12s ease;
+    }
+    [data-testid="stSidebarContent"] .gxp-nav-marker
+        + [data-testid="stButton"] button:hover {
+        background: #f3f4f6 !important;
+        color:      #111827 !important;
+    }
+
+    /* Active page highlight */
+    [data-testid="stSidebarContent"] .gxp-nav-marker.gxp-nav-active
+        + [data-testid="stButton"] button {
+        background:  #eff6ff !important;
+        color:       #1d4ed8 !important;
+        font-weight: 600     !important;
+    }
+
+    /* Remove Streamlit's default gap between marker+button pairs */
+    [data-testid="stSidebarContent"] .gxp-nav-marker
+        + [data-testid="stButton"] {
+        margin-top: -0.4rem !important;
+    }
+
+    /* ── Alerts column: stay at natural height, don't stretch to fill row ── */
+    [data-testid="stColumn"]:has(.gxp-alert-card),
+    [data-testid="stColumn"]:has(.gxp-alert-row),
+    [data-testid="stColumn"]:has(.gxp-alert-info) {
+        align-self: flex-start !important;
+    }
+
     /* ── Global: buttons never wrap text ─────────────── */
     [data-testid="stBaseButton-primary"] > button,
     [data-testid="stBaseButton-secondary"] > button {
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
-    }
-
-    /* ── Alert Navigation Buttons (pill style) ───────── */
-    .gxp-alert-nav-btn [data-testid="stBaseButton-secondary"] > button {
-        border-radius: 20px !important;
-        font-size: 11px !important;
-        padding: 4px 14px !important;
-        border-width: 1.5px !important;
     }
 
     /* ── Quick Action Buttons Row ────────────────────── */
@@ -1152,12 +1382,40 @@ def fin_table(rows: list[tuple[str, str]], total: tuple[str, str] | None = None)
     return html
 
 
-def remit_card(title: str, color: str, rows: list[tuple[str, str]], total: tuple[str, str]) -> str:
-    """Return HTML for a government remittance card."""
-    html = f'<div class="gxp-remit-card" style="border-top-color:{color}">'
-    html += f'<h4>{title}</h4>'
+def remit_card(
+    title: str,
+    color: str,
+    rows: list[tuple[str, str]],
+    total: tuple[str, str],
+    remitted: bool = False,
+) -> str:
+    """Return HTML for a government remittance card.
+
+    Parameters
+    ----------
+    remitted : bool
+        When True, a green "✓ Remitted" badge is shown next to the title.
+        When False, a grey "Pending" badge is shown.
+    """
+    if remitted:
+        badge = (
+            '<span style="margin-left:6px;font-size:9px;font-weight:700;'
+            'background:#dcfce7;color:#16a34a;padding:2px 7px;border-radius:10px;'
+            'vertical-align:middle">✓ Remitted</span>'
+        )
+    else:
+        badge = (
+            '<span style="margin-left:6px;font-size:9px;font-weight:700;'
+            'background:#f3f4f6;color:#9ca3af;padding:2px 7px;border-radius:10px;'
+            'vertical-align:middle">Pending</span>'
+        )
+    html  = f'<div class="gxp-remit-card" style="border-top-color:{color}">'
+    html += f'<h4 style="display:flex;align-items:center">{title}{badge}</h4>'
+    # Wrap data rows in a flex-grow container so the total line always sits at bottom
+    html += '<div class="gxp-remit-rows">'
     for label, value in rows:
         html += f'<div class="gxp-remit-row"><span>{label}</span><span>{value}</span></div>'
+    html += '</div>'
     html += f'<div class="gxp-remit-total"><span>{total[0]}</span><span>{total[1]}</span></div>'
     html += '</div>'
     return html

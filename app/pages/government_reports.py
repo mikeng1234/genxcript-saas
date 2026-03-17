@@ -13,7 +13,7 @@ Only shows finalized/paid pay periods (draft periods have incomplete data).
 """
 
 import streamlit as st
-from datetime import date as _date
+from datetime import date as _date, timedelta as _timedelta
 from app.db_helper import get_db, get_company_id
 from app.styles import inject_css
 from reports.government_reports_pdf import (
@@ -163,6 +163,86 @@ def _load_annual_entries(year: int) -> dict:
             aggregated[eid][f] += row.get(f) or 0
 
     return aggregated
+
+
+# ============================================================
+# Remittance Log — DB helpers
+# ============================================================
+
+_AGENCY_FORMS = {
+    "SSS":        "R3 / R5",
+    "PhilHealth": "RF-1",
+    "Pag-IBIG":   "MCRF",
+    "BIR":        "1601-C",
+}
+
+_MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
+
+def _ref_month(today: "_date") -> "_date":
+    """Return the first day of the current 'reference month' (mirrors deadlines.py logic)."""
+    if today.day <= 20:
+        return today.replace(day=1)
+    nxt = today.replace(day=28) + _timedelta(days=4)
+    return nxt.replace(day=1)
+
+
+def _load_remittance_records(year: int | None = None) -> list[dict]:
+    """Load all remittance_records for this company, optionally filtered by year."""
+    db = get_db()
+    q = (
+        db.table("remittance_records")
+        .select("*")
+        .eq("company_id", get_company_id())
+        .order("period_year", desc=True)
+        .order("period_month", desc=True)
+        .order("agency")
+    )
+    if year is not None:
+        q = q.eq("period_year", year)
+    return q.execute().data
+
+
+def _load_remittance_for_period(year: int, month: int) -> dict[str, dict | None]:
+    """Return {agency: row_or_None} for a specific year/month."""
+    db = get_db()
+    rows = (
+        db.table("remittance_records")
+        .select("*")
+        .eq("company_id", get_company_id())
+        .eq("period_year",  year)
+        .eq("period_month", month)
+        .execute()
+    ).data
+    result: dict[str, dict | None] = {a: None for a in _AGENCY_FORMS}
+    for row in rows:
+        result[row["agency"]] = row
+    return result
+
+
+def _upsert_remittance(agency: str, year: int, month: int,
+                       remitted_date: "_date", reference_no: str,
+                       amount_centavos: int, notes: str) -> None:
+    db = get_db()
+    db.table("remittance_records").upsert({
+        "company_id":      get_company_id(),
+        "agency":          agency,
+        "form":            _AGENCY_FORMS[agency],
+        "period_year":     year,
+        "period_month":    month,
+        "remitted_date":   str(remitted_date),
+        "reference_no":    reference_no or None,
+        "amount_centavos": amount_centavos or None,
+        "notes":           notes or None,
+    }, on_conflict="company_id,agency,period_year,period_month").execute()
+
+
+def _delete_remittance(record_id: str) -> None:
+    db = get_db()
+    db.table("remittance_records").delete().eq("id", record_id).execute()
 
 
 # ============================================================
@@ -363,9 +443,11 @@ def render():
     all_employees = _load_employees()
 
     # ============================================================
-    # Tab layout — Monthly vs Annual
+    # Tab layout
     # ============================================================
-    tab_monthly, tab_annual = st.tabs(["📅 Monthly Reports", "📑 Annual Reports"])
+    tab_monthly, tab_annual, tab_remit = st.tabs([
+        "📅 Monthly Reports", "📑 Annual Reports", "📋 Remittance Log",
+    ])
 
     # ============================================================
     # MONTHLY REPORTS TAB
@@ -553,3 +635,206 @@ def render():
                     f"Landscape A4 · Schedule 1 — "
                     f"{len(emp_in_year)} employee(s) sorted A-Z"
                 )
+
+    # ============================================================
+    # REMITTANCE LOG TAB
+    # ============================================================
+    with tab_remit:
+        today = _date.today()
+        ref   = _ref_month(today)
+
+        # ── Period selector ───────────────────────────────────────────────────
+        col_yr, col_mo, _ = st.columns([2, 2, 5])
+        with col_yr:
+            year_opts  = [today.year - i for i in range(3)]
+            sel_year   = st.selectbox("Year", year_opts, key="remit_log_year")
+        with col_mo:
+            month_opts = list(range(1, 13))
+            sel_month  = st.selectbox(
+                "Month",
+                month_opts,
+                index=(ref.month - 1),
+                format_func=lambda m: _MONTH_NAMES[m - 1],
+                key="remit_log_month",
+            )
+
+        period_label = f"{_MONTH_NAMES[sel_month - 1]} {sel_year}"
+        st.markdown(f"#### Remittance status for **{period_label}**")
+        st.caption(
+            "Mark each agency as remitted once you have submitted the payment. "
+            "Remitted agencies are suppressed from the dashboard overdue alerts."
+        )
+        st.divider()
+
+        # ── Load current status for selected period ───────────────────────────
+        status = _load_remittance_for_period(sel_year, sel_month)
+
+        agency_colors = {
+            "SSS":        "#7c3aed",
+            "PhilHealth": "#0891b2",
+            "Pag-IBIG":   "#059669",
+            "BIR":        "#dc2626",
+        }
+
+        for agency, form in _AGENCY_FORMS.items():
+            rec = status[agency]
+            color = agency_colors[agency]
+
+            left_col, right_col = st.columns([3, 2])
+
+            with left_col:
+                if rec:
+                    # ── Already remitted ──
+                    ref_display  = rec.get("reference_no") or "—"
+                    date_display = rec.get("remitted_date", "")
+                    amt_raw      = rec.get("amount_centavos")
+                    amt_display  = f"₱{amt_raw / 100:,.2f}" if amt_raw else "—"
+                    notes_display = rec.get("notes") or ""
+
+                    st.markdown(
+                        f'<div style="border-left:4px solid {color};padding:10px 14px;'
+                        f'background:#f0fdf4;border-radius:6px;margin-bottom:4px">'
+                        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+                        f'<span style="font-weight:700;font-size:14px;color:#1f2937">{agency}</span>'
+                        f'<span style="font-size:11px;color:#6b7280">({form})</span>'
+                        f'<span style="background:#dcfce7;color:#16a34a;font-size:10px;'
+                        f'font-weight:700;padding:2px 8px;border-radius:10px">✓ Remitted</span>'
+                        f'</div>'
+                        f'<div style="display:flex;gap:24px;font-size:12px;color:#374151">'
+                        f'<span>📅 <b>Date:</b> {date_display}</span>'
+                        f'<span>🔖 <b>Ref No:</b> {ref_display}</span>'
+                        f'<span>💰 <b>Amount:</b> {amt_display}</span>'
+                        f'</div>'
+                        + (f'<div style="font-size:11px;color:#6b7280;margin-top:4px">📝 {notes_display}</div>' if notes_display else '')
+                        + f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    # ── Not yet remitted ──
+                    st.markdown(
+                        f'<div style="border-left:4px solid {color};padding:10px 14px;'
+                        f'background:#fafafa;border-radius:6px;margin-bottom:4px">'
+                        f'<div style="display:flex;align-items:center;gap:8px">'
+                        f'<span style="font-weight:700;font-size:14px;color:#1f2937">{agency}</span>'
+                        f'<span style="font-size:11px;color:#6b7280">({form})</span>'
+                        f'<span style="background:#f3f4f6;color:#9ca3af;font-size:10px;'
+                        f'font-weight:700;padding:2px 8px;border-radius:10px">Pending</span>'
+                        f'</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            with right_col:
+                if rec:
+                    # Edit / Undo buttons
+                    btn_edit, btn_undo = st.columns(2)
+                    with btn_edit:
+                        if st.button("✏️ Edit", key=f"remit_edit_{agency}_{sel_year}_{sel_month}", width="stretch"):
+                            st.session_state[f"remit_form_{agency}"] = True
+                    with btn_undo:
+                        if st.button("↩ Undo", key=f"remit_undo_{agency}_{sel_year}_{sel_month}", width="stretch"):
+                            _delete_remittance(rec["id"])
+                            st.success(f"{agency} remittance for {period_label} removed.")
+                            st.rerun()
+                else:
+                    if st.button(
+                        f"✓ Mark {agency} as Remitted",
+                        key=f"remit_mark_{agency}_{sel_year}_{sel_month}",
+                        width="stretch",
+                        type="primary",
+                    ):
+                        st.session_state[f"remit_form_{agency}"] = True
+
+            # ── Inline form (shown after clicking Mark / Edit) ────────────────
+            form_key = f"remit_form_{agency}"
+            if st.session_state.get(form_key):
+                with st.form(key=f"remit_submit_{agency}_{sel_year}_{sel_month}"):
+                    st.markdown(f"**Record {agency} remittance — {period_label}**")
+                    fc1, fc2 = st.columns(2)
+                    with fc1:
+                        default_date = (
+                            _date.fromisoformat(rec["remitted_date"])
+                            if rec and rec.get("remitted_date")
+                            else today
+                        )
+                        f_date = st.date_input("Date Remitted", value=default_date)
+                        f_ref  = st.text_input(
+                            "Reference / ORN / Batch No.",
+                            value=(rec.get("reference_no") or "") if rec else "",
+                        )
+                    with fc2:
+                        f_amt_str = st.text_input(
+                            "Amount Remitted (₱)",
+                            value=(
+                                f"{rec['amount_centavos'] / 100:.2f}"
+                                if rec and rec.get("amount_centavos")
+                                else ""
+                            ),
+                            help="Enter the total amount you actually remitted (e.g. 16725.00)",
+                        )
+                        f_notes = st.text_area(
+                            "Notes (optional)",
+                            value=(rec.get("notes") or "") if rec else "",
+                            height=68,
+                        )
+                    sub_col, cancel_col = st.columns([2, 1])
+                    submitted = sub_col.form_submit_button(
+                        f"💾 Save {agency} Remittance",
+                        type="primary",
+                        use_container_width=True,
+                    )
+                    cancelled = cancel_col.form_submit_button(
+                        "Cancel",
+                        use_container_width=True,
+                    )
+
+                if submitted:
+                    try:
+                        amt_centavos = int(float(f_amt_str) * 100) if f_amt_str.strip() else 0
+                    except ValueError:
+                        amt_centavos = 0
+                    _upsert_remittance(
+                        agency=agency,
+                        year=sel_year,
+                        month=sel_month,
+                        remitted_date=f_date,
+                        reference_no=f_ref,
+                        amount_centavos=amt_centavos,
+                        notes=f_notes,
+                    )
+                    st.session_state.pop(form_key, None)
+                    st.success(f"✓ {agency} remittance for {period_label} saved.")
+                    st.rerun()
+                if cancelled:
+                    st.session_state.pop(form_key, None)
+                    st.rerun()
+
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+
+        # ── History table ─────────────────────────────────────────────────────
+        st.divider()
+        st.markdown("#### Remittance History")
+
+        hist_year_opts = [today.year - i for i in range(5)]
+        col_hy, _ = st.columns([2, 7])
+        with col_hy:
+            hist_year = st.selectbox("Filter by year", hist_year_opts, key="remit_hist_year")
+
+        all_records = _load_remittance_records(year=hist_year)
+
+        if not all_records:
+            st.info(f"No remittance records found for {hist_year}.")
+        else:
+            hist_rows = []
+            for r in all_records:
+                amt = r.get("amount_centavos")
+                hist_rows.append({
+                    "Period":       f"{_MONTH_NAMES[r['period_month'] - 1]} {r['period_year']}",
+                    "Agency":       r["agency"],
+                    "Form":         r["form"],
+                    "Date Remitted": r.get("remitted_date", "—"),
+                    "Reference No.": r.get("reference_no") or "—",
+                    "Amount":       f"₱{amt / 100:,.2f}" if amt else "—",
+                    "Notes":        r.get("notes") or "",
+                })
+            st.dataframe(hist_rows, hide_index=True, use_container_width=True)

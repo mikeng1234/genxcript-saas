@@ -241,6 +241,7 @@ def generate_sss_r3(company, employees, entries, period_label):
     summary_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
+        ("FONTNAME", (1, 0), (1, -1), FONT),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
@@ -346,6 +347,7 @@ def generate_philhealth_rf1(company, employees, entries, period_label):
     summary_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
+        ("FONTNAME", (1, 0), (1, -1), FONT),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
@@ -450,6 +452,7 @@ def generate_pagibig_mcrf(company, employees, entries, period_label):
     summary_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
+        ("FONTNAME", (1, 0), (1, -1), FONT),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
@@ -575,6 +578,7 @@ def generate_bir_1601c(company, employees, entries, period_label):
     summary_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("FONTNAME", (0, 0), (0, -1), FONT_BOLD),
+        ("FONTNAME", (1, 0), (1, -1), FONT),
         ("ALIGN", (1, 0), (1, -1), "RIGHT"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3),

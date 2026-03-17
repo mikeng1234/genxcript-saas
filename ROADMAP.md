@@ -1,6 +1,6 @@
 # GenXcript Payroll — Product Roadmap
 
-> Last updated: 2026-03-18
+> Last updated: 2026-03-18 (evening)
 > Strategy: Payroll-first → HR Compliance → Attendance → Advanced Payroll → Portal → BI → Scale
 > Each phase unlocks the next. Features within a phase are ordered by dependency.
 
@@ -17,6 +17,7 @@
 - [x] **Dashboard** — KPI metrics (headcount, total gross, total deductions, net payroll), remittance deadlines, government contribution summaries, and payroll trend charts
 - [x] **Company Setup** — Company profile, government employer numbers, pay frequency configuration
 - [x] **Government Report Generation** — SSS R3, PhilHealth RF-1, Pag-IBIG MCRF, BIR 1601-C monthly remittance forms; BIR 2316 annual certificate per employee; BIR 1604-C annual alphalist (due Jan 31)
+- [x] **Remittance Records table** — `remittance_records` (migration 014): tracks actual filed date, reference number, and amount per company × agency × calendar month; UNIQUE constraint prevents duplicate entries; RLS scoped to company members *(UI pending — see Phase 2)*
 - [x] **Auth / Multi-tenant login** — Supabase Auth with company-scoped RLS; employee login via Employee ID or email; case-insensitive lookup with distinct error messages for "not found" vs "no portal access"
 - [x] **Multi-company management** — Admin can register and switch between multiple companies; all data is strictly scoped per company
 - [x] **Audit trail** — Activity log records every action (who, what, when); employee updates log full before/after field diffs (old value in red, new value in green) with full-text search
@@ -34,6 +35,10 @@
 - [x] **Philippine holiday calendar** — 2025–2026 national holidays pre-seeded (regular + special non-working + special working); used by deadline engine and calendar view
 - [x] **Dashboard charts** — Payroll cost trend (line), deductions breakdown (pie), headcount over time (bar); draggable/resizable card layout with show/hide controls per card
 - [x] **UI/UX design pass** — Shared CSS styles module with full inject_css() coverage across all pages; financial data styled with consistent typography; colored status badges; remittance agency cards with progress indicators; uniform h1 sizing via native st.title() on all pages
+- [x] **Dashboard interactive pills** — Stat card hover pills (collapsed 10px → 26px on hover, accent-colored glow per card); Reminders section above Alerts with pending Leave/OT counts; Leave/OT/Gov Reports pills open dialogs; cross-column hover scope fixed via CSS :not(:has())
+- [x] **Dashboard live clock** — JS-powered HH:MM:SS AM/PM + weekday/date widget top-right of dashboard; also added to Calendar page
+- [x] **Custom left sidebar** — Replaces horizontal top nav; collapsed=54px (icons) / expanded=214px (icons + labels) / peek on hover; ◀/▶ toggle; localStorage persistence; Streamlit sidebar hidden and JS-routed
+- [ ] **Remittance Tracking UI** — Record and view actual government remittance submissions per agency per month; mark as filed with reference number and amount; `remittance_records` table ready (migration 014)
 - [x] **Leave Entitlement Templates** — Named leave tiers (e.g., "0–1 Year", "Regular Staff") with configurable VL/SL/CL days; assignable per employee; defaults to 15/15/5 if unassigned
 - [x] **OT Heat Maps** — Visualize which days and cost centers drive overtime spikes; baseline for Phase 7 BI analytics
 - [ ] **PWA cache** — Offline-capable for areas with unstable internet *(low priority, skip for now)*
@@ -100,7 +105,16 @@
 
 **Web-based Time-In Verification** ✅ Complete *(no mobile app required — browser APIs only)*
 - [x] Geofencing — browser Geolocation API via declared component captures lat/long on clock-in; distance computed via Haversine formula; validated against company-defined site radius *(app/components/geolocation.py + geolocation_frontend/index.html)*
-- [x] Face snapshot — `st.camera_input()` captures photo at clock-in/out; uploaded to Supabase Storage bucket `dtr-snapshots`; URL stored per log entry *(employee_portal.py)*
+- [x] Face snapshot — `st.file_uploader` captures photo at clock-in/out (iOS-compatible over HTTP); uploaded to Supabase Storage bucket `dtr-snapshots`; URL stored per log entry *(employee_portal.py)*
+- [x] EXIF GPS extraction — server-side Pillow reads GPS coordinates embedded in phone camera photos; works on HTTP without browser geolocation API; location priority: EXIF GPS → browser geolocation → manual office select *(employee_portal.py: _extract_exif_gps())*
+- [x] HTTPS tunnel for full GPS — ngrok v3.37.2 configured with static domain (malarian-kimberlee-postnuptially.ngrok-free.dev); Cloudflare Tunnel as backup; start_ngrok.bat / start_https.bat launch scripts included
+- [x] **Snapshot compression** — uploaded photos auto-resized to max 640px JPEG quality 55 server-side; reduces 3–8 MB phone photos to ~60–120 KB (30–60× smaller); storage estimate ≈ 1 GB/year per 20 employees vs 40 GB uncompressed
+
+**Snapshot Storage Maintenance** *(run quarterly)*
+- [x] `scripts/archive_snapshots.py` — lists all files in `dtr-snapshots` bucket; downloads files older than 30 days to `archives/dtr-snapshots/YYYY-QN/` on local machine; then deletes them from Supabase; supports `--days N` and `--dry-run`; `archive_snapshots.bat` double-click launcher
+- [ ] Scheduled Windows Task — automate quarterly archival via Task Scheduler (trigger: 1st day of Jan/Apr/Jul/Oct at 9AM; action: `archive_snapshots.bat`)
+- [ ] Archive request flow — if client needs a photo older than 30 days, they contact their IT → IT contacts GenXcript → retrieve from `archives/dtr-snapshots/YYYY-QN/`
+- [ ] **Future (when client has a dedicated PC):** auto-sync archive folder to client's local NAS or PC after each quarter via robocopy / rclone; client retains their own cold copy; no reliance on GenXcript retrieval
 - [x] Company Setup: "📍 Locations" tab — named GPS sites CRUD with latitude/longitude/radius/active toggle + Google Maps link *(company_setup.py)*
 - [x] Time-in record stores: timestamp, coordinates, distance from nearest site, location_id, snapshot URL, method ('manual'/'portal') *(time_logs table in migration 013)*
 - [x] Out-of-range alert — portal warns employee if distance > allowed radius; flag stored in time_logs.is_out_of_range *(employee_portal.py)*
@@ -108,7 +122,7 @@
 ### 4C — OT & Leave Request Workflows *(partially done; depends on 4B for full DTR-backed computation)*
 - [x] Overtime request form — employee portal submits OT request with date/time/hours *(employee_portal.py)*
 - [x] Leave request form — employee portal submits leave with balance check warning *(employee_portal.py)*
-- [x] Admin approval — single-level approve/reject with notes; Leave & OT Approvals tab *(employees.py)*
+- [x] Admin approval — single-level approve/reject with notes; Leave & OT shown side-by-side in two columns (no tab switching) *(employees.py)*
 - [x] Request history list — employee sees own requests + statuses *(employee_portal.py)*
 - [ ] 2-level approval (Supervisor → HR/Admin) — *depends on Phase 3D role + supervisor assignment*
 - [ ] Auto-email notifications — employee notified on approval/rejection; supervisor notified on new submission *(depends on 2-level approval)*

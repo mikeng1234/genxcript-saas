@@ -342,6 +342,15 @@ def login(identifier: str, password: str) -> tuple[bool, str]:
         msg = str(e)
         if "invalid login" in msg.lower() or "invalid credentials" in msg.lower():
             return False, "Incorrect email or password."
+        # JWT expired on the cached admin client — clear the cache so the next
+        # attempt gets a fresh client, then return a friendly message.
+        if "jwt expired" in msg.lower() or "PGRST303" in msg:
+            try:
+                from app.db_helper import get_db
+                get_db.clear()
+            except Exception:
+                pass
+            return False, "Session expired. Please try logging in again."
         return False, f"Login error: {msg}"
 
 

@@ -31,7 +31,11 @@ def adjust_to_next_business_day(deadline: date, holidays: set[date]) -> date:
     return deadline
 
 
-def get_remittance_deadlines(today: date, holidays: set[date]) -> list[dict]:
+def get_remittance_deadlines(
+    today: date,
+    holidays: set[date],
+    remitted_set: "set[tuple[str, int, int]] | None" = None,
+) -> list[dict]:
     """
     Return the upcoming government remittance deadlines adjusted for
     weekends and Philippine holidays.
@@ -45,6 +49,10 @@ def get_remittance_deadlines(today: date, holidays: set[date]) -> list[dict]:
         Current date (passed in so the function is testable).
     holidays : set[date]
         Non-working holiday dates for the relevant months.
+    remitted_set : set of (agency, year, month) tuples, optional
+        Agencies that have already been remitted for the reference period.
+        Matching deadlines are marked ``remitted=True`` so alert code can
+        suppress them without re-querying the database.
     """
     # Determine the reference month for remittances.
     # If we're still before the 20th, deadlines are for this month.
@@ -56,6 +64,7 @@ def get_remittance_deadlines(today: date, holidays: set[date]) -> list[dict]:
         ref_month = next_month.replace(day=1)
 
     month_label = ref_month.strftime("%B %Y")
+    _remitted = remitted_set or set()
 
     agencies = [
         {
@@ -89,14 +98,18 @@ def get_remittance_deadlines(today: date, holidays: set[date]) -> list[dict]:
         raw_deadline = ref_month.replace(day=a["day"])
         adjusted = adjust_to_next_business_day(raw_deadline, holidays)
         days_until = (adjusted - today).days
+        remitted = (a["agency"], ref_month.year, ref_month.month) in _remitted
 
         deadlines.append({
-            "agency": a["agency"],
-            "form": a["form"],
-            "description": a["description"],
+            "agency":       a["agency"],
+            "form":         a["form"],
+            "description":  a["description"],
             "raw_deadline": raw_deadline,
-            "deadline": adjusted,
-            "days_until": days_until,
+            "deadline":     adjusted,
+            "days_until":   days_until,
+            "remitted":     remitted,           # True → alert suppressed
+            "period_year":  ref_month.year,
+            "period_month": ref_month.month,
         })
 
     return deadlines

@@ -1273,10 +1273,31 @@ def _render_clock_widget(
         label_visibility="collapsed",
         accept_multiple_files=False,
     )
-    if snapshot:
-        st.image(snapshot, width=180, caption="Preview")
 
-    # ── Location section: auto-detect → fallback to manual pick ─
+    # ── Persist photo bytes in session_state immediately on upload ───────────
+    # st.file_uploader can return None on the rerun triggered by button press,
+    # so we cache the raw bytes as soon as the user uploads the photo.
+    _img_bytes_key = f"{key_prefix}_img_bytes_{action}"
+    if snapshot is not None:
+        st.session_state[_img_bytes_key] = snapshot.getvalue()
+    _cached_img_bytes = st.session_state.get(_img_bytes_key)
+
+    if _cached_img_bytes:
+        st.image(_cached_img_bytes, width=180, caption="Preview")
+
+    # ── Try to extract GPS from photo EXIF (works on HTTP, no browser API) ──
+    _exif_key = f"{key_prefix}_exif_gps_{action}"
+    if _cached_img_bytes:
+        _exif_result = _extract_exif_gps(_cached_img_bytes)
+        if _exif_result:
+            st.session_state[_exif_key] = _exif_result
+        else:
+            st.session_state.pop(_exif_key, None)
+    elif not st.session_state.get(f"{key_prefix}_show_clock_{action}"):
+        st.session_state.pop(_exif_key, None)
+        st.session_state.pop(_img_bytes_key, None)
+
+    # ── Location section: EXIF GPS → auto-detect → fallback to manual pick ─
     st.markdown("**Step 2 — Verify your location 📍**")
 
     # Session keys
@@ -1285,62 +1306,81 @@ def _render_clock_widget(
     if _geo_retry_key not in st.session_state:
         st.session_state[_geo_retry_key] = 0
 
-    # Try automatic geolocation first (requires HTTPS on real devices)
-    _geo_comp_key = f"{key_prefix}_geo_{action}_{st.session_state[_geo_retry_key]}"
-    loc_data = get_location(key=_geo_comp_key)
-
-    _geo_failed = loc_data is not None and bool(loc_data.get("error"))
-    _geo_ok     = loc_data is not None and not loc_data.get("error")
-
-    if _geo_ok:
-        # ── Auto-detect succeeded ─────────────────────────────
-        _lat, _lng = loc_data["lat"], loc_data["lng"]
-        _acc = loc_data.get("accuracy") or 0
-        st.success(f"📍 Location captured automatically — accuracy ±{_acc:.0f} m")
+    # ── Priority 1: GPS from photo EXIF ──────────────────────────
+    _exif_gps = st.session_state.get(_exif_key)
+    if _exif_gps:
+        _lat, _lng = _exif_gps
+        st.success(
+            f"📷 **Location from photo** — GPS embedded in the image "
+            f"({_lat:.6f}, {_lng:.6f})"
+        )
         import pandas as _pd
         st.map(
             _pd.DataFrame({"lat": [_lat], "lon": [_lng]}),
             zoom=15,
             use_container_width=True,
         )
-        # Clear any manual selection since auto succeeded
-        st.session_state.pop(_manual_loc_key, None)
-
+        st.caption(
+            "📌 Your phone's camera embedded GPS in this photo. "
+            "If the pin looks wrong, remove the photo and upload a fresh one taken on-site."
+        )
+        # EXIF GPS found — skip the rest of the location logic
+        loc_data = None
+        _geo_ok  = False
     else:
-        # ── Auto-detect pending or failed ─────────────────────
-        if loc_data is None:
-            st.caption("⏳ Fetching location automatically…")
+        # ── Priority 2: Browser geolocation (needs HTTPS) ────────
+        _geo_comp_key = f"{key_prefix}_geo_{action}_{st.session_state[_geo_retry_key]}"
+        loc_data = get_location(key=_geo_comp_key)
+
+        _geo_ok = loc_data is not None and not loc_data.get("error")
+
+        if _geo_ok:
+            # Auto-detect succeeded
+            _lat, _lng = loc_data["lat"], loc_data["lng"]
+            _acc = loc_data.get("accuracy") or 0
+            st.success(f"📍 Location captured automatically — accuracy ±{_acc:.0f} m")
+            import pandas as _pd
+            st.map(
+                _pd.DataFrame({"lat": [_lat], "lon": [_lng]}),
+                zoom=15,
+                use_container_width=True,
+            )
+            st.session_state.pop(_manual_loc_key, None)
+
         else:
-            # Explain the HTTPS requirement clearly
-            st.warning(
-                "📍 **Automatic location blocked by browser.**\n\n"
-                "This happens on local networks (HTTP). "
-                "**Select your office location below** to continue, "
-                "or use **ngrok / HTTPS** for full GPS capture.",
-            )
+            # ── Priority 3: Manual location picker ───────────────
+            if loc_data is None:
+                st.caption("⏳ Fetching location automatically…")
+            else:
+                st.warning(
+                    "📍 **Automatic location blocked by browser.**\n\n"
+                    "This happens on local networks (HTTP). Try one of:\n"
+                    "- **Enable location in camera app** so the photo contains GPS, or\n"
+                    "- **Select your office** below, or\n"
+                    "- Use **ngrok / HTTPS** for full GPS capture.",
+                )
 
-        col_retry, col_manual = st.columns([1, 1])
-        with col_retry:
-            if st.button("🔄 Retry Auto-detect",
-                         key=f"{key_prefix}_geo_retry_btn_{action}",
-                         use_container_width=True):
-                st.session_state[_geo_retry_key] += 1
-                st.session_state.pop(_manual_loc_key, None)
-                st.rerun()
+            col_retry, col_manual = st.columns([1, 1])
+            with col_retry:
+                if st.button("🔄 Retry Auto-detect",
+                             key=f"{key_prefix}_geo_retry_btn_{action}",
+                             use_container_width=True):
+                    st.session_state[_geo_retry_key] += 1
+                    st.session_state.pop(_manual_loc_key, None)
+                    st.rerun()
 
-        # Manual location picker — choose from company locations
-        loc_options = {loc["name"]: loc for loc in locations}
-        loc_names   = ["— Select office location —"] + list(loc_options.keys())
-        with col_manual:
-            _sel = st.selectbox(
-                "Select location",
-                loc_names,
-                key=f"{key_prefix}_loc_select_{action}",
-                label_visibility="collapsed",
-            )
-        if _sel and _sel != "— Select office location —":
-            st.session_state[_manual_loc_key] = loc_options[_sel]
-            st.info(f"📍 Manual location selected: **{_sel}**")
+            loc_options = {loc["name"]: loc for loc in locations}
+            loc_names   = ["— Select office location —"] + list(loc_options.keys())
+            with col_manual:
+                _sel = st.selectbox(
+                    "Select location",
+                    loc_names,
+                    key=f"{key_prefix}_loc_select_{action}",
+                    label_visibility="collapsed",
+                )
+            if _sel and _sel != "— Select office location —":
+                st.session_state[_manual_loc_key] = loc_options[_sel]
+                st.info(f"📍 Manual location selected: **{_sel}**")
 
     if st.button(
         f"✅ Confirm Clock {'In' if action == 'in' else 'Out'}",
@@ -1351,12 +1391,13 @@ def _render_clock_widget(
         now_utc  = datetime.datetime.now(timezone.utc)
         now_time = datetime.datetime.now().time().replace(microsecond=0)
 
-        # Upload snapshot — surface error instead of silently dropping
+        # Upload snapshot using cached bytes (persisted across the button-press rerun)
         snapshot_url = None
-        if snapshot is not None:
+        _img_bytes_to_upload = st.session_state.get(_img_bytes_key)
+        if _img_bytes_to_upload:
             with st.spinner("Uploading photo…"):
                 snapshot_url = _upload_snapshot(
-                    get_company_id(), emp_id, today, action, snapshot.getvalue()
+                    get_company_id(), emp_id, today, action, _img_bytes_to_upload
                 )
             if snapshot_url is None:
                 st.warning(
@@ -1364,13 +1405,22 @@ def _render_clock_widget(
                     "Check that the **dtr-snapshots** storage bucket exists and is set to **Public**."
                 )
 
-        # Process location — prefer auto-detect, fall back to manual pick
+        # Process location — priority: EXIF GPS → browser auto-detect → manual pick
         clat = clng = cdist = cloc_id = None
         is_oor = False
-        _manual_loc = st.session_state.get(_manual_loc_key)
+        _manual_loc  = st.session_state.get(_manual_loc_key)
+        _exif_gps_cv = st.session_state.get(_exif_key)   # confirmed EXIF coords
 
-        if _geo_ok:
-            # GPS coordinates available
+        if _exif_gps_cv:
+            # Best: GPS embedded in the uploaded photo
+            clat, clng = _exif_gps_cv
+            nearest = nearest_location(clat, clng, locations)
+            if nearest:
+                cdist   = nearest["distance_m"]
+                cloc_id = nearest["id"]
+                is_oor  = cdist > nearest["radius_m"]
+        elif _geo_ok:
+            # Good: browser geolocation (requires HTTPS)
             clat, clng = loc_data["lat"], loc_data["lng"]
             nearest = nearest_location(clat, clng, locations)
             if nearest:
@@ -1378,9 +1428,9 @@ def _render_clock_widget(
                 cloc_id = nearest["id"]
                 is_oor  = cdist > nearest["radius_m"]
         elif _manual_loc:
-            # Manual office selection — store location id, mark in-range
+            # Fallback: employee manually selected their office
             cloc_id = _manual_loc["id"]
-            is_oor  = False   # trusted because employee consciously chose their site
+            is_oor  = False   # trusted: employee consciously chose their site
 
         # Resolve schedule
         schedules, overrides = _load_employee_schedules(emp)
@@ -1454,6 +1504,8 @@ def _render_clock_widget(
                     f"**{now_time.strftime('%H:%M')}**."
                 )
             st.session_state.pop(show_key, None)
+            st.session_state.pop(_img_bytes_key, None)
+            st.session_state.pop(_exif_key, None)
             st.rerun()
         except Exception as ex:
             st.error(f"Error saving time log: {ex}")
@@ -1688,25 +1740,116 @@ def _submit_dtr_correction(employee_id: str, work_date: str, time_log_id: str | 
     }).execute()
 
 
+def _extract_exif_gps(img_bytes: bytes) -> tuple[float, float] | None:
+    """
+    Extract GPS coordinates from JPEG/PNG EXIF metadata.
+
+    Returns (lat, lng) decimal degrees, or None if GPS data is absent.
+    Phone cameras embed GPS in EXIF when "Location" is enabled in the camera app.
+    This works entirely server-side — no browser geolocation API required.
+    """
+    try:
+        from PIL import Image
+        import io as _io
+
+        img = Image.open(_io.BytesIO(img_bytes))
+        exif = img.getexif()
+        if not exif:
+            return None
+
+        gps_ifd = exif.get_ifd(0x8825)   # 0x8825 = GPSInfo IFD tag
+        if not gps_ifd:
+            return None
+
+        lat_ref = gps_ifd.get(1)   # 'N' or 'S'
+        lat_dms = gps_ifd.get(2)   # (degrees, minutes, seconds) — each may be IFDRational or tuple
+        lng_ref = gps_ifd.get(3)   # 'E' or 'W'
+        lng_dms = gps_ifd.get(4)
+
+        if not (lat_ref and lat_dms and lng_ref and lng_dms):
+            return None
+
+        def _rat(val) -> float:
+            """Convert IFDRational or (num, den) tuple to float."""
+            if hasattr(val, "numerator"):   # IFDRational
+                return float(val)
+            if isinstance(val, tuple) and len(val) == 2:
+                return val[0] / val[1] if val[1] else 0.0
+            return float(val)
+
+        def _dms_to_dec(dms, ref: str) -> float:
+            d, m, s = _rat(dms[0]), _rat(dms[1]), _rat(dms[2])
+            dec = d + m / 60.0 + s / 3600.0
+            if ref in ("S", "W"):
+                dec = -dec
+            return round(dec, 7)
+
+        return _dms_to_dec(lat_dms, lat_ref), _dms_to_dec(lng_dms, lng_ref)
+    except Exception:
+        return None
+
+
+def _compress_snapshot(img_bytes: bytes, max_px: int = 640, quality: int = 55) -> bytes:
+    """
+    Resize + JPEG-compress a snapshot before uploading.
+
+    Phone cameras produce 3–8 MB JPEGs. For DTR verification we only need a
+    small face photo — 640 px on the long edge at quality=55 gives ~60–120 KB,
+    a 30–60× reduction that keeps Supabase storage well within free-tier limits.
+
+    Returns compressed JPEG bytes, or the original bytes if Pillow fails.
+    """
+    try:
+        import io as _io
+        from PIL import Image, ExifTags
+
+        img = Image.open(_io.BytesIO(img_bytes))
+
+        # Honour EXIF orientation so the photo isn't rotated after resize
+        try:
+            exif = img.getexif()
+            orient_tag = next(
+                (k for k, v in ExifTags.TAGS.items() if v == "Orientation"), None
+            )
+            if orient_tag and orient_tag in exif:
+                orient = exif[orient_tag]
+                _rot = {3: 180, 6: 270, 8: 90}
+                if orient in _rot:
+                    img = img.rotate(_rot[orient], expand=True)
+        except Exception:
+            pass
+
+        # Convert palette / RGBA to RGB (JPEG doesn't support alpha)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+
+        # Resize to fit within max_px × max_px, preserving aspect ratio
+        img.thumbnail((max_px, max_px), Image.LANCZOS)
+
+        buf = _io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality, optimize=True)
+        return buf.getvalue()
+    except Exception:
+        return img_bytes   # fallback: upload as-is if Pillow unavailable
+
+
 def _upload_snapshot(company_id: str, employee_id: str, work_date: date,
                      suffix: str, img_bytes: bytes) -> str | None:
     """
-    Upload a face snapshot to Supabase Storage bucket 'dtr-snapshots'.
+    Compress then upload a face snapshot to Supabase Storage bucket 'dtr-snapshots'.
     Returns the public URL or None on failure.
     Bucket must be created in Supabase dashboard:
       Storage → New bucket → name: dtr-snapshots → Public = ON
     """
     try:
-        # Detect PNG vs JPEG from magic bytes
-        is_png = img_bytes[:4] == b'\x89PNG'
-        ext     = "png" if is_png else "jpg"
-        ctype   = "image/png" if is_png else "image/jpeg"
-        path    = f"{company_id}/{employee_id}/{work_date}_{suffix}.{ext}"
+        # Always upload as JPEG (compressed); ~60–120 KB vs 3–8 MB raw
+        compressed = _compress_snapshot(img_bytes)
+        path = f"{company_id}/{employee_id}/{work_date}_{suffix}.jpg"
 
         get_db().storage.from_("dtr-snapshots").upload(
             path=path,
-            file=img_bytes,
-            file_options={"content-type": ctype, "upsert": "true"},
+            file=compressed,
+            file_options={"content-type": "image/jpeg", "upsert": "true"},
         )
         return get_db().storage.from_("dtr-snapshots").get_public_url(path)
     except Exception as e:

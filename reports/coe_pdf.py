@@ -15,6 +15,7 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reports.pdf_fonts import FONT, FONT_BOLD
 
 
 # ── Brand colours (matches payslip palette) ───────────────────────────────────
@@ -63,7 +64,7 @@ def generate_coe_pdf(company: dict, employee: dict, include_salary: bool = True)
         fontSize=18,
         leading=22,
         textColor=_BRAND_DARK,
-        fontName="Helvetica-Bold",
+        fontName=FONT_BOLD,
         alignment=TA_CENTER,
         spaceAfter=2,
     )
@@ -72,7 +73,7 @@ def generate_coe_pdf(company: dict, employee: dict, include_salary: bool = True)
         fontSize=9,
         leading=13,
         textColor=_TEXT_MUTED,
-        fontName="Helvetica",
+        fontName=FONT,
         alignment=TA_CENTER,
         spaceAfter=0,
     )
@@ -81,7 +82,7 @@ def generate_coe_pdf(company: dict, employee: dict, include_salary: bool = True)
         fontSize=13,
         leading=18,
         textColor=_BRAND_DARK,
-        fontName="Helvetica-Bold",
+        fontName=FONT_BOLD,
         alignment=TA_CENTER,
         spaceBefore=14,
         spaceAfter=4,
@@ -90,7 +91,7 @@ def generate_coe_pdf(company: dict, employee: dict, include_salary: bool = True)
         "DateLine",
         fontSize=9,
         textColor=_TEXT_MUTED,
-        fontName="Helvetica",
+        fontName=FONT,
         alignment=TA_CENTER,
         spaceAfter=18,
     )
@@ -99,7 +100,7 @@ def generate_coe_pdf(company: dict, employee: dict, include_salary: bool = True)
         fontSize=11,
         leading=18,
         textColor=_TEXT_MAIN,
-        fontName="Helvetica",
+        fontName=FONT,
         alignment=TA_LEFT,
         spaceBefore=0,
         spaceAfter=12,
@@ -109,14 +110,14 @@ def generate_coe_pdf(company: dict, employee: dict, include_salary: bool = True)
         "Label",
         fontSize=9,
         textColor=_TEXT_MUTED,
-        fontName="Helvetica-Bold",
+        fontName=FONT_BOLD,
         alignment=TA_LEFT,
         spaceAfter=2,
     )
     sig_name_style = ParagraphStyle(
         "SigName",
         fontSize=11,
-        fontName="Helvetica-Bold",
+        fontName=FONT_BOLD,
         textColor=_TEXT_MAIN,
         alignment=TA_LEFT,
         spaceAfter=2,
@@ -124,7 +125,7 @@ def generate_coe_pdf(company: dict, employee: dict, include_salary: bool = True)
     sig_title_style = ParagraphStyle(
         "SigTitle",
         fontSize=9,
-        fontName="Helvetica",
+        fontName=FONT,
         textColor=_TEXT_MUTED,
         alignment=TA_LEFT,
     )
@@ -238,7 +239,7 @@ def generate_coe_pdf(company: dict, employee: dict, include_salary: bool = True)
             "Footer",
             fontSize=7.5,
             textColor=_TEXT_MUTED,
-            fontName="Helvetica",
+            fontName=FONT,
             alignment=TA_CENTER,
         ),
     ))

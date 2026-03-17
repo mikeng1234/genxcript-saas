@@ -11,11 +11,16 @@ load_dotenv()
 from db.connection import get_supabase_admin_client
 
 
-@st.cache_resource
+@st.cache_resource(ttl=2700)   # Recreate every 45 min — prevents stale gotrue state
 def get_db():
     """Returns a Supabase admin client (cached across reruns).
     Uses service role key — RLS is bypassed, but all queries manually
-    filter by company_id from the authenticated user's session."""
+    filter by company_id from the authenticated user's session.
+
+    ttl=2700 (45 min): Belt-and-suspenders guard. The underlying admin client
+    already disables auto_refresh_token, but recreating the client periodically
+    ensures no internal gotrue state can accumulate and produce JWT errors.
+    """
     return get_supabase_admin_client()
 
 

@@ -15,6 +15,7 @@ from datetime import date
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
+from reports.pdf_fonts import FONT, FONT_BOLD
 
 
 # ── Page constants (Portrait A4) ──────────────────────────────────────────────
@@ -70,7 +71,7 @@ def _bar(c, x, y, w, h, text, fs=6.5, bg=None, fg=None):
     _fill(c, x, y, w, h, bg)
     c.rect(x, y, w, h, fill=0, stroke=1)
     c.saveState()
-    c.setFont("Helvetica-Bold", fs)
+    c.setFont(FONT_BOLD, fs)
     c.setFillColor(fg)
     c.drawString(x + 3, y + (h - fs) / 2 + 0.5, text)
     c.restoreState()
@@ -85,14 +86,14 @@ def _field(c, x, y, w, h, num, label, value="", lsz=4.8, vsz=7.5, bold=False):
     c.rect(x, y, w, h, fill=0, stroke=1)
     c.saveState()
     if num:
-        c.setFont("Helvetica", 4.3)
+        c.setFont(FONT, 4.3)
         c.setFillColor(colors.Color(0.35, 0.35, 0.35))
         c.drawString(x + 1.5, y + h - 5.8, str(num))
-    c.setFont("Helvetica", lsz)
+    c.setFont(FONT, lsz)
     c.setFillColor(colors.black)
     c.drawString(x + (7.5 if num else 2), y + h - 5.8, label)
     if value:
-        c.setFont("Helvetica-Bold" if bold else "Helvetica", vsz)
+        c.setFont(FONT_BOLD if bold else FONT, vsz)
         c.drawString(x + 2, y + 2.5, str(value))
     c.restoreState()
 
@@ -115,13 +116,13 @@ def _crow(c, y, rh, num, desc, amt="", shaded=False, bold=False, dsz=5.3):
     c.rect(RCOL_X + R_NUM,          y, R_DESC, rh, fill=0, stroke=1)
     c.rect(RCOL_X + R_NUM + R_DESC, y, R_AMT,  rh, fill=0, stroke=1)
     c.saveState()
-    c.setFont("Helvetica-Bold" if bold else "Helvetica", 5.5)
+    c.setFont(FONT_BOLD if bold else FONT, 5.5)
     if num:
         c.drawCentredString(RCOL_X + R_NUM / 2, y + (rh - 5.5) / 2, str(num))
-    c.setFont("Helvetica-Bold" if bold else "Helvetica", dsz)
+    c.setFont(FONT_BOLD if bold else FONT, dsz)
     c.drawString(RCOL_X + R_NUM + 2, y + (rh - dsz) / 2, desc)
     if amt:
-        c.setFont("Helvetica", 6.5)
+        c.setFont(FONT, 6.5)
         c.drawRightString(RCOL_X + R_NUM + R_DESC + R_AMT - 2, y + (rh - 6.5) / 2, amt)
     c.restoreState()
 
@@ -137,13 +138,13 @@ def _srow(c, x, y, w, rh, num, label, amt="", shaded=False, lsz=5.3, bold=False)
     c.rect(x + num_w,       y, desc_w, rh, fill=0, stroke=1)
     c.rect(x + num_w + desc_w, y, amt_w, rh, fill=0, stroke=1)
     c.saveState()
-    c.setFont("Helvetica", 5.5)
+    c.setFont(FONT, 5.5)
     if num:
         c.drawCentredString(x + num_w / 2, y + (rh - 5.5) / 2, str(num))
-    c.setFont("Helvetica-Bold" if bold else "Helvetica", lsz)
+    c.setFont(FONT_BOLD if bold else FONT, lsz)
     c.drawString(x + num_w + 2, y + (rh - lsz) / 2, label)
     if amt:
-        c.setFont("Helvetica", 7)
+        c.setFont(FONT, 7)
         c.drawRightString(x + w - 2, y + (rh - 7) / 2, amt)
     c.restoreState()
 
@@ -249,10 +250,10 @@ def generate_bir2316_pdf(
     HDR_Y = BODY_TOP - HDR_H
 
     c.saveState()
-    c.setFont("Helvetica", 6.5)
+    c.setFont(FONT, 6.5)
     c.drawString(ML + 3, HDR_Y + HDR_H - 11, "Republic of the Philippines")
     c.drawString(ML + 3, HDR_Y + HDR_H - 19, "Department of Finance")
-    c.setFont("Helvetica-Bold", 6.5)
+    c.setFont(FONT_BOLD, 6.5)
     c.drawString(ML + 3, HDR_Y + HDR_H - 27, "Bureau of Internal Revenue")
     c.restoreState()
 
@@ -260,24 +261,24 @@ def generate_bir2316_pdf(
     FN_W = 95; FN_X = ML + BODY_W - FN_W
     c.rect(FN_X, HDR_Y, FN_W, HDR_H, fill=0, stroke=1)
     c.saveState()
-    c.setFont("Helvetica", 5.5)
+    c.setFont(FONT, 5.5)
     c.drawString(FN_X + 3, HDR_Y + HDR_H - 9, "BIR Form No.")
-    c.setFont("Helvetica-Bold", 18)
+    c.setFont(FONT_BOLD, 18)
     c.drawString(FN_X + 5, HDR_Y + HDR_H - 27, "2316")
-    c.setFont("Helvetica", 5.5)
+    c.setFont(FONT, 5.5)
     c.drawString(FN_X + 3, HDR_Y + 7, "September 2021 (ENCS)")
     c.restoreState()
 
     # Center title
     CTR_X = ML + 80; CTR_W = BODY_W - 80 - FN_W
     c.saveState()
-    c.setFont("Helvetica-Bold", 9.5)
+    c.setFont(FONT_BOLD, 9.5)
     c.drawCentredString(CTR_X + CTR_W / 2, HDR_Y + HDR_H - 11,
                         "Certificate of Compensation Payment / Tax Withheld")
-    c.setFont("Helvetica", 7)
+    c.setFont(FONT, 7)
     c.drawCentredString(CTR_X + CTR_W / 2, HDR_Y + HDR_H - 20,
                         "For Compensation Payment With or Without Tax Withheld")
-    c.setFont("Helvetica", 6)
+    c.setFont(FONT, 6)
     c.drawCentredString(CTR_X + CTR_W / 2, HDR_Y + HDR_H - 29,
                         'Fill in all applicable spaces. Mark all appropriate boxes with an "X".')
     c.restoreState()
@@ -309,7 +310,7 @@ def generate_bir2316_pdf(
     _fill(c, RCOL_X, ry, RCOL_W, NT_H, GRAY_BG)
     c.rect(RCOL_X, ry, RCOL_W, NT_H, fill=0, stroke=1)
     c.saveState()
-    c.setFont("Helvetica-Bold", 5.5)
+    c.setFont(FONT_BOLD, 5.5)
     c.drawString(RCOL_X + R_NUM + 2, ry + 2.8,
                  "A.  NON-TAXABLE / EXEMPT COMPENSATION INCOME")
     c.drawRightString(RCOL_X + RCOL_W - 2, ry + 2.8, "Amount")
@@ -340,7 +341,7 @@ def generate_bir2316_pdf(
     _fill(c, RCOL_X, ry, RCOL_W, NT_H, GRAY_BG)
     c.rect(RCOL_X, ry, RCOL_W, NT_H, fill=0, stroke=1)
     c.saveState()
-    c.setFont("Helvetica-Bold", 5.5)
+    c.setFont(FONT_BOLD, 5.5)
     c.drawString(RCOL_X + R_NUM + 2, ry + 2.8,
                  "B.  TAXABLE COMPENSATION INCOME                REGULAR")
     c.restoreState()
@@ -480,7 +481,7 @@ def generate_bir2316_pdf(
     _fill(c, LCOL_X, ly, LCOL_W, NT_H, GRAY_BG)
     c.rect(LCOL_X, ly, LCOL_W, NT_H, fill=0, stroke=1)
     c.saveState()
-    c.setFont("Helvetica-Bold", 5.3)
+    c.setFont(FONT_BOLD, 5.3)
     c.drawString(LCOL_X + 3, ly + 2.8, "  No.    Description")
     c.drawRightString(LCOL_X + LCOL_W - 2, ly + 2.8, "Amount")
     c.restoreState()
@@ -512,7 +513,7 @@ def generate_bir2316_pdf(
         ("issued under authority thereof. I/we give consent to the processing of my/our information under the Data Privacy Act of 2012 (R.A. No. 10173)."),
     ]
     c.saveState()
-    c.setFont("Helvetica", 4.7)
+    c.setFont(FONT, 4.7)
     for i, line in enumerate(decl):
         c.drawString(ML + 3, MB + SIG_H - 8 - i * 5.5, line)
     c.restoreState()
@@ -525,34 +526,34 @@ def generate_bir2316_pdf(
     EMP_LINE_Y = MB + 28
     c.line(ML + 8, EMP_LINE_Y, MID_SIG_X - 8, EMP_LINE_Y)
     c.saveState()
-    c.setFont("Helvetica", 5)
+    c.setFont(FONT, 5)
     c.drawCentredString(ML + (MID_SIG_X - ML) / 2, EMP_LINE_Y - 7,
                         "Present Employer / Authorized Agent Signature over Printed Name")
     c.drawString(ML + 8, EMP_LINE_Y - 14,
                  "(Head of Accounting / Human Resource or Authorized Representative)")
-    c.setFont("Helvetica", 5.5)
+    c.setFont(FONT, 5.5)
     c.drawString(ML + 8, EMP_LINE_Y - 22, "Date Signed: _____________________")
     c.restoreState()
 
     # Right half — Conforme / Employee
     c.saveState()
-    c.setFont("Helvetica-Bold", 6)
+    c.setFont(FONT_BOLD, 6)
     c.drawString(MID_SIG_X + 5, MB + SIG_H - 11, "CONFORME:")
     c.restoreState()
     EE_LINE_Y = MB + 28
     c.line(MID_SIG_X + 8, EE_LINE_Y, ML + BODY_W - 8, EE_LINE_Y)
     c.saveState()
-    c.setFont("Helvetica", 5)
+    c.setFont(FONT, 5)
     c.drawCentredString(MID_SIG_X + (BODY_W / 2) / 2, EE_LINE_Y - 7,
                         "Employee Signature over Printed Name             Date Signed")
-    c.setFont("Helvetica", 4.7)
+    c.setFont(FONT, 4.7)
     c.drawString(MID_SIG_X + 8, EE_LINE_Y - 16,
                  "To be accomplished under substituted filing (BIR Form No. 1700).")
     c.restoreState()
 
     # BIR note
     c.saveState()
-    c.setFont("Helvetica", 4.5)
+    c.setFont(FONT, 4.5)
     c.drawString(ML + 3, MB + 3,
                  "*NOTE: The BIR Data Privacy notice is available at the BIR website (www.bir.gov.ph)")
     c.restoreState()
