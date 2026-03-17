@@ -758,6 +758,77 @@ def _delete_schedule(sched_id: str):
     get_db().table("schedules").delete().eq("id", sched_id).execute()
 
 
+# ============================================================
+# Database operations — Company Locations (geofencing)
+# ============================================================
+
+def _load_locations() -> list[dict]:
+    return (
+        get_db().table("company_locations")
+        .select("*")
+        .eq("company_id", get_company_id())
+        .order("name")
+        .execute()
+    ).data or []
+
+
+def _create_location(data: dict) -> dict:
+    data["company_id"] = get_company_id()
+    result = get_db().table("company_locations").insert(data).execute()
+    return result.data[0]
+
+
+def _update_location(loc_id: str, data: dict) -> dict:
+    result = get_db().table("company_locations").update(data).eq("id", loc_id).execute()
+    return result.data[0]
+
+
+def _delete_location(loc_id: str):
+    get_db().table("company_locations").delete().eq("id", loc_id).execute()
+
+
+def _location_form(form_key: str, defaults: dict | None = None, submit_label: str = "Save Location") -> dict | None:
+    """Render add/edit form for a company location. Returns dict on submit or None."""
+    d = defaults or {}
+    with st.form(form_key, border=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            name = st.text_input("Location Name *", value=d.get("name", ""), placeholder="e.g. Main Office")
+        with col2:
+            address = st.text_input("Address", value=d.get("address", "") or "", placeholder="Building / Street / City")
+
+        col3, col4, col5 = st.columns(3)
+        with col3:
+            lat = st.number_input("Latitude *", value=float(d.get("latitude", 14.5995)),
+                                  format="%.7f", min_value=-90.0, max_value=90.0,
+                                  help="Decimal degrees, e.g. 14.5995 for Manila")
+        with col4:
+            lng = st.number_input("Longitude *", value=float(d.get("longitude", 120.9842)),
+                                  format="%.7f", min_value=-180.0, max_value=180.0,
+                                  help="Decimal degrees, e.g. 120.9842 for Manila")
+        with col5:
+            radius = st.number_input("Allowed Radius (m)", value=int(d.get("radius_m", 100)),
+                                     min_value=10, max_value=50000, step=10,
+                                     help="Employees clocking in beyond this distance will be flagged")
+
+        is_active = st.checkbox("Active (visible for check-in)", value=bool(d.get("is_active", True)))
+
+        submitted = st.form_submit_button(submit_label, type="primary")
+        if submitted:
+            if not name.strip():
+                st.error("Location name is required.")
+                return None
+            return {
+                "name": name.strip(),
+                "address": address.strip() or None,
+                "latitude": lat,
+                "longitude": lng,
+                "radius_m": radius,
+                "is_active": is_active,
+            }
+    return None
+
+
 def _hours_per_day(start: str, end: str, break_min: int, overnight: bool) -> float:
     """Compute net hours worked per day from shift times."""
     from datetime import datetime as _dt
@@ -985,6 +1056,120 @@ def _render_schedules_tab():
         st.divider()
 
 
+def _render_locations_tab():
+    st.subheader("Office Locations & Geofencing")
+    st.caption(
+        "Define named GPS locations for your office(s) or branches. "
+        "When employees clock in via the portal, their distance from the nearest active location "
+        "is recorded. Time-ins beyond the allowed radius are flagged for HR review."
+    )
+
+    add_col, _ = st.columns([1, 3])
+    with add_col:
+        if st.button("+ Add Location", key="loc_add_btn"):
+            st.session_state.show_add_location = True
+
+    if st.session_state.get("show_add_location"):
+        st.markdown("**New Location**")
+        new_data = _location_form("add_location_form", submit_label="Add Location")
+        if new_data is not None:
+            try:
+                result = _create_location(new_data)
+                log_action("created", "company_location", result["id"], new_data["name"])
+                st.session_state.show_add_location = False
+                st.success(f"Location **{new_data['name']}** added.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
+        cancel_col, _ = st.columns([1, 4])
+        with cancel_col:
+            if st.button("Cancel", key="loc_add_cancel"):
+                st.session_state.show_add_location = False
+                st.rerun()
+
+    locations = _load_locations()
+
+    if not locations:
+        st.info(
+            "No locations defined yet. Click **+ Add Location** to set up your first office site. "
+            "Geofencing will be enabled for employees clocking in via the portal once at least one "
+            "active location is configured."
+        )
+        return
+
+    hdr = st.columns([2.5, 3, 1.2, 1.2, 1.2, 1.8])
+    for col, lbl in zip(hdr, ["Name", "Address", "Latitude", "Longitude", "Radius", "Actions"]):
+        col.markdown(f"**{lbl}**")
+
+    for loc in locations:
+        active_badge = "🟢 Active" if loc.get("is_active") else "🔴 Inactive"
+        row = st.columns([2.5, 3, 1.2, 1.2, 1.2, 1.8])
+        row[0].markdown(f"{loc['name']}  \n{active_badge}")
+        row[1].caption(loc.get("address") or "—")
+        row[2].text(f"{float(loc['latitude']):.5f}")
+        row[3].text(f"{float(loc['longitude']):.5f}")
+        row[4].text(f"±{loc['radius_m']} m")
+
+        maps_url = f"https://www.google.com/maps?q={loc['latitude']},{loc['longitude']}"
+
+        act1, act2 = row[5].columns(2)
+        with act1:
+            if st.button("Edit", key=f"loc_edit_{loc['id']}", width="stretch"):
+                if st.session_state.get("editing_location_id") == loc["id"]:
+                    st.session_state.editing_location_id = None
+                else:
+                    st.session_state.editing_location_id = loc["id"]
+                    st.session_state.show_add_location = False
+                st.rerun()
+        with act2:
+            if st.button("Del", key=f"loc_del_{loc['id']}", width="stretch"):
+                st.session_state[f"loc_del_confirm_{loc['id']}"] = True
+                st.rerun()
+
+        st.markdown(f"[📍 View on Google Maps]({maps_url})", unsafe_allow_html=False)
+
+        if st.session_state.get(f"loc_del_confirm_{loc['id']}"):
+            st.warning(f"Delete **{loc['name']}**? Existing time log entries referencing this location will not be deleted.")
+            dc1, dc2, _ = st.columns([1, 1, 3])
+            with dc1:
+                if st.button("Confirm Delete", key=f"loc_del_yes_{loc['id']}", type="primary"):
+                    try:
+                        _delete_location(loc["id"])
+                        log_action("deleted", "company_location", loc["id"], loc["name"])
+                        st.session_state.pop(f"loc_del_confirm_{loc['id']}", None)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            with dc2:
+                if st.button("Cancel", key=f"loc_del_no_{loc['id']}"):
+                    st.session_state.pop(f"loc_del_confirm_{loc['id']}", None)
+                    st.rerun()
+
+        if st.session_state.get("editing_location_id") == loc["id"]:
+            st.markdown(f"**Editing: {loc['name']}**")
+            updated = _location_form(
+                f"edit_location_{loc['id']}",
+                defaults=loc,
+                submit_label="Save Changes",
+            )
+            if updated is not None:
+                try:
+                    _update_location(loc["id"], updated)
+                    log_action("updated", "company_location", loc["id"], updated["name"])
+                    st.session_state.editing_location_id = None
+                    st.success(f"Location **{updated['name']}** updated.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+            cancel2, _ = st.columns([1, 4])
+            with cancel2:
+                if st.button("Cancel Edit", key=f"loc_edit_cancel_{loc['id']}"):
+                    st.session_state.editing_location_id = None
+                    st.rerun()
+
+        st.divider()
+
+
 # ============================================================
 # Main Page Render
 # ============================================================
@@ -1004,11 +1189,12 @@ def render():
         st.error("No company found. Please contact your administrator.")
         return
 
-    tab_settings, tab_templates, tab_holidays, tab_schedules, tab_log = st.tabs([
+    tab_settings, tab_templates, tab_holidays, tab_schedules, tab_locations, tab_log = st.tabs([
         "⚙️ Company Settings",
         "🏖 Leave Templates",
         "📅 Holidays",
         "🕐 Schedules",
+        "📍 Locations",
         "📋 Activity Log",
     ])
 
@@ -1113,6 +1299,9 @@ def render():
 
     with tab_schedules:
         _render_schedules_tab()
+
+    with tab_locations:
+        _render_locations_tab()
 
     with tab_log:
         _render_activity_log_tab()

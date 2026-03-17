@@ -224,6 +224,7 @@ PAGES = [
     "Payslips",
     "Payroll Comparison",
     "OT Analytics",
+    "Attendance",
     "Government Reports",
     "Calendar",
     "Company Setup",
@@ -295,7 +296,7 @@ page = st.session_state.nav_page
 _NAV_ICONS = {
     "Dashboard": "📊", "Employees": "👥", "Payroll Run": "💸",
     "Payslips": "📄", "Payroll Comparison": "📈", "OT Analytics": "🔥",
-    "Government Reports": "🏛️", "Calendar": "📅",
+    "Attendance": "🕐", "Government Reports": "🏛️", "Calendar": "📅",
     "Company Setup": "🏢", "Preferences": "⚙️",
 }
 _nav_json = ", ".join(
@@ -554,6 +555,10 @@ elif page == "Payroll Comparison":
 elif page == "OT Analytics":
     from app.pages.ot_heatmap import render as render_ot
     render_ot()
+
+elif page == "Attendance":
+    from app.pages.dtr import render as render_dtr
+    render_dtr()
 
 elif page == "Government Reports":
     from app.pages.government_reports import render as render_gov_reports

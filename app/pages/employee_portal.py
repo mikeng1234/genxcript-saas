@@ -9,13 +9,18 @@ Employees can:
 
 import streamlit as st
 import datetime
-from datetime import date
+from datetime import date, timedelta, timezone
 from app.db_helper import get_db, get_company_id
 from app.auth import get_current_user_email
 from app.styles import inject_css, status_badge
 from reports.payslip_pdf import generate_payslip_pdf
 from reports.coe_pdf import generate_coe_pdf
 from reports.bir2316_pdf import generate_bir2316_pdf
+from backend.dtr import (
+    compute_dtr, resolve_schedule_for_date, schedule_expected_hours,
+    nearest_location, haversine_distance_m, _parse_time,
+)
+from app.components.geolocation import get_location
 
 
 # ============================================================
@@ -1014,9 +1019,11 @@ def _render_time_leave(emp: dict, company: dict):
 
     st.divider()
 
-    # ── Request history ────────────────────────────────────────────────────────
-    st.markdown("##### Request History")
-    hist_leave, hist_ot = st.tabs(["Leave Requests", "Overtime Requests"])
+    # ── Request history + Attendance ───────────────────────────────────────────
+    st.markdown("##### Request History & Attendance")
+    hist_leave, hist_ot, hist_dtr = st.tabs([
+        "Leave Requests", "Overtime Requests", "⏱️ Attendance"
+    ])
 
     with hist_leave:
         leave_reqs = _get_leave_requests(emp["id"])
@@ -1044,6 +1051,378 @@ def _render_time_leave(emp: dict, company: dict):
                 if r.get("admin_notes"):
                     note += f"  ·  HR note: {r['admin_notes']}"
                 st.markdown(_request_card_html(title, subtitle, r["status"], note), unsafe_allow_html=True)
+
+    with hist_dtr:
+        _render_employee_dtr(emp, company)
+
+
+# ============================================================
+# Section 4B: DTR / Attendance Sub-tab helpers
+# ============================================================
+
+def _load_own_time_logs(employee_id: str, start: date, end: date) -> list[dict]:
+    return (
+        get_db().table("time_logs")
+        .select("*")
+        .eq("employee_id", employee_id)
+        .gte("work_date", str(start))
+        .lte("work_date", str(end))
+        .order("work_date", desc=True)
+        .execute()
+    ).data or []
+
+
+def _load_active_locations() -> list[dict]:
+    return (
+        get_db().table("company_locations")
+        .select("*")
+        .eq("company_id", get_company_id())
+        .eq("is_active", True)
+        .execute()
+    ).data or []
+
+
+def _load_employee_schedules(emp: dict) -> tuple[dict, dict]:
+    """Returns (schedules_dict, overrides_dict) for the employee."""
+    schedules_rows = (
+        get_db().table("schedules")
+        .select("*")
+        .eq("company_id", get_company_id())
+        .execute()
+    ).data or []
+    schedules = {r["id"]: r for r in schedules_rows}
+    return schedules, {}
+
+
+def _upsert_portal_time_log(row: dict):
+    existing = (
+        get_db().table("time_logs")
+        .select("id")
+        .eq("employee_id", row["employee_id"])
+        .eq("work_date", row["work_date"])
+        .execute()
+    ).data
+    if existing:
+        get_db().table("time_logs").update(row).eq("id", existing[0]["id"]).execute()
+    else:
+        row["company_id"] = get_company_id()
+        get_db().table("time_logs").insert(row).execute()
+
+
+def _submit_dtr_correction(employee_id: str, work_date: str, time_log_id: str | None,
+                            req_in, req_out, reason: str):
+    get_db().table("dtr_corrections").insert({
+        "company_id":          get_company_id(),
+        "employee_id":         employee_id,
+        "time_log_id":         time_log_id,
+        "work_date":           work_date,
+        "requested_time_in":   str(req_in) if req_in else None,
+        "requested_time_out":  str(req_out) if req_out else None,
+        "reason":              reason,
+    }).execute()
+
+
+def _upload_snapshot(company_id: str, employee_id: str, work_date: date,
+                     suffix: str, img_bytes: bytes) -> str | None:
+    """
+    Upload a face snapshot to Supabase Storage bucket 'dtr-snapshots'.
+    Returns the public URL or None on failure.
+    Bucket must be created in Supabase dashboard (Storage → New bucket → 'dtr-snapshots', public).
+    """
+    try:
+        path = f"{company_id}/{employee_id}/{work_date}_{suffix}.jpg"
+        get_db().storage.from_("dtr-snapshots").upload(
+            path=path,
+            file=img_bytes,
+            file_options={"content-type": "image/jpeg", "upsert": "true"},
+        )
+        return get_db().storage.from_("dtr-snapshots").get_public_url(path)
+    except Exception:
+        return None
+
+
+def _fmt_time_portal(t) -> str:
+    if t is None:
+        return "—"
+    if isinstance(t, str):
+        return t[:5]
+    return t.strftime("%H:%M")
+
+
+def _dtr_status_badge(status: str) -> str:
+    mapping = {
+        "present":    ("✅ Present",    "#15803d", "#dcfce7"),
+        "half_day":   ("½ Half Day",   "#92400e", "#fef3c7"),
+        "absent":     ("❌ Absent",     "#b91c1c", "#fee2e2"),
+        "on_leave":   ("🏖 On Leave",  "#1e40af", "#dbeafe"),
+        "holiday":    ("🎉 Holiday",   "#6d28d9", "#ede9fe"),
+        "rest_day":   ("😴 Rest Day",  "#475569", "#f1f5f9"),
+        "no_schedule": ("— No Sched",  "#475569", "#f1f5f9"),
+    }
+    label, color, bg = mapping.get(status, ("? Unknown", "#6b7280", "#f3f4f6"))
+    return (
+        f'<span style="background:{bg};color:{color};padding:2px 10px;'
+        f'border-radius:4px;font-size:12px;font-weight:600;">{label}</span>'
+    )
+
+
+@st.dialog("File DTR Correction")
+def _correction_dialog(emp_id: str, log: dict):
+    work_date = log["work_date"]
+    st.caption(f"Correction request for **{work_date}**")
+    st.text(f"Current Time In:  {_fmt_time_portal(log.get('time_in'))}")
+    st.text(f"Current Time Out: {_fmt_time_portal(log.get('time_out'))}")
+    st.divider()
+    req_in  = st.time_input("Correct Time In",  value=datetime.time(8, 0))
+    req_out = st.time_input("Correct Time Out", value=datetime.time(17, 0))
+    reason  = st.text_area("Reason *", placeholder="e.g. Forgot to punch out, worked from site office")
+    if st.button("Submit Correction", type="primary", width="stretch"):
+        if not reason.strip():
+            st.error("Please enter a reason.")
+        else:
+            try:
+                _submit_dtr_correction(
+                    emp_id, work_date, log.get("id"), req_in, req_out, reason.strip()
+                )
+                st.success("Correction request submitted. HR will review shortly.")
+                st.rerun()
+            except Exception as ex:
+                st.error(f"Error: {ex}")
+
+
+def _render_employee_dtr(emp: dict, company: dict):
+    """DTR view + web clock-in/out for the employee portal."""
+    today = date.today()
+    emp_id = emp["id"]
+
+    # ── Web Clock-In / Clock-Out ──────────────────────────────────────────────
+    locations = _load_active_locations()
+    if locations:
+        st.markdown("#### Clock In / Clock Out")
+        # Check if there's already a log for today
+        today_log = (
+            get_db().table("time_logs")
+            .select("*")
+            .eq("employee_id", emp_id)
+            .eq("work_date", str(today))
+            .execute()
+        ).data
+        today_log = today_log[0] if today_log else None
+
+        has_in  = today_log and today_log.get("time_in")
+        has_out = today_log and today_log.get("time_out")
+
+        if has_in and has_out:
+            st.success(
+                f"✅ You've clocked in at **{_fmt_time_portal(today_log['time_in'])}** "
+                f"and out at **{_fmt_time_portal(today_log['time_out'])}** today."
+            )
+        elif has_in:
+            st.info(f"Clocked in at **{_fmt_time_portal(today_log['time_in'])}**. Remember to clock out!")
+        else:
+            st.info("You haven't clocked in yet today.")
+
+        action = None
+        if not has_in:
+            action = "in"
+        elif has_in and not has_out:
+            action = "out"
+
+        if action:
+            btn_label = "🕐 Clock In" if action == "in" else "🕐 Clock Out"
+            if st.button(btn_label, type="primary", key=f"dtr_clock_{action}"):
+                st.session_state[f"dtr_show_clock_{action}"] = True
+
+            if st.session_state.get(f"dtr_show_clock_{action}"):
+                st.markdown(f"**Step 1 — Take a photo**")
+                snapshot = st.camera_input("Face snapshot for verification",
+                                           key=f"dtr_cam_{action}",
+                                           label_visibility="collapsed")
+
+                st.markdown("**Step 2 — Allow location access**")
+                st.caption("Click Allow when your browser asks for location permission.")
+                loc_data = get_location(key=f"dtr_geo_{action}")
+
+                # Allow submit even without snapshot/location (graceful degradation)
+                can_submit = True  # always allow, data stored if available
+                if st.button("Confirm Clock " + ("In" if action == "in" else "Out"),
+                             type="primary", key=f"dtr_confirm_{action}"):
+                    now_utc = datetime.datetime.now(timezone.utc)
+                    now_time = datetime.datetime.now().time()
+
+                    # Upload snapshot
+                    snapshot_url = None
+                    if snapshot is not None:
+                        img_bytes = snapshot.getvalue()
+                        snapshot_url = _upload_snapshot(
+                            get_company_id(), emp_id, today, action, img_bytes
+                        )
+
+                    # Process location
+                    clat = clng = cdist = None
+                    cloc_id = None
+                    is_oor = False
+                    if loc_data and not loc_data.get("error"):
+                        clat = loc_data["lat"]
+                        clng = loc_data["lng"]
+                        nearest = nearest_location(clat, clng, locations)
+                        if nearest:
+                            cdist    = nearest["distance_m"]
+                            cloc_id  = nearest["id"]
+                            is_oor   = cdist > nearest["radius_m"]
+                    elif loc_data and loc_data.get("error"):
+                        st.warning(f"Location not available: {loc_data['error']}")
+
+                    # Resolve schedule for DTR computation
+                    schedules, overrides = _load_employee_schedules(emp)
+                    sched = resolve_schedule_for_date(emp, schedules, overrides, today)
+
+                    if action == "in":
+                        log_row: dict = {
+                            "employee_id":      emp_id,
+                            "work_date":        str(today),
+                            "time_in":          str(now_time.replace(microsecond=0)),
+                            "time_in_at":       now_utc.isoformat(),
+                            "time_in_method":   "portal",
+                            "time_in_lat":      clat,
+                            "time_in_lng":      clng,
+                            "time_in_distance_m": cdist,
+                            "time_in_location_id": cloc_id,
+                            "time_in_snapshot_url": snapshot_url,
+                            "is_out_of_range":  is_oor,
+                        }
+                        if sched:
+                            log_row.update({
+                                "schedule_id":    sched["id"],
+                                "expected_start": str(_parse_time(sched["start_time"])),
+                                "expected_end":   str(_parse_time(sched["end_time"])),
+                                "expected_hours": schedule_expected_hours(sched),
+                            })
+                    else:
+                        # Clock out — compute DTR
+                        result = None
+                        if today_log and today_log.get("time_in") and sched:
+                            exp_h = schedule_expected_hours(sched)
+                            result = compute_dtr(
+                                _parse_time(today_log["time_in"]),
+                                now_time.replace(microsecond=0),
+                                _parse_time(sched["start_time"]),
+                                _parse_time(sched["end_time"]),
+                                exp_h,
+                                int(sched.get("break_minutes", 60)),
+                                bool(sched.get("is_overnight", False)),
+                            )
+                        log_row = {
+                            "employee_id":       emp_id,
+                            "work_date":         str(today),
+                            "time_out":          str(now_time.replace(microsecond=0)),
+                            "time_out_at":       now_utc.isoformat(),
+                            "time_out_method":   "portal",
+                            "time_out_lat":      clat,
+                            "time_out_lng":      clng,
+                            "time_out_distance_m": cdist,
+                            "time_out_snapshot_url": snapshot_url,
+                        }
+                        if result:
+                            log_row.update({
+                                "gross_hours":        result.gross_hours,
+                                "late_minutes":       result.late_minutes,
+                                "undertime_minutes":  result.undertime_minutes,
+                                "ot_hours":           result.ot_hours,
+                                "status":             result.status,
+                            })
+
+                    try:
+                        _upsert_portal_time_log(log_row)
+                        if is_oor:
+                            st.warning(
+                                f"⚠️ Clocked {'in' if action == 'in' else 'out'} successfully, "
+                                f"but you are **{cdist}m** from the nearest office location "
+                                f"(allowed: {locations[0]['radius_m']}m). "
+                                "HR will be notified."
+                            )
+                        else:
+                            st.success(
+                                f"✅ Clocked {'in' if action == 'in' else 'out'} at "
+                                f"**{now_time.strftime('%H:%M')}**."
+                            )
+                        st.session_state.pop(f"dtr_show_clock_{action}", None)
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"Error saving time log: {ex}")
+
+        st.divider()
+
+    # ── DTR History Table ─────────────────────────────────────────────────────
+    st.markdown("#### My Attendance Record")
+    col1, col2 = st.columns(2)
+    with col1:
+        from_date = st.date_input("From", value=today - timedelta(days=30),
+                                  key="dtr_portal_from")
+    with col2:
+        to_date = st.date_input("To", value=today, key="dtr_portal_to")
+
+    logs = _load_own_time_logs(emp_id, from_date, to_date)
+
+    if not logs:
+        st.info("No attendance records found for this period.")
+        return
+
+    # Headers
+    h_cols = [1.2, 1, 1.3, 1.3, 1, 1, 1.8, 1.5]
+    hdr = st.columns(h_cols)
+    for c, lbl in zip(hdr, ["Date", "Day", "Time In", "Time Out", "Late", "OT", "Status", "Action"]):
+        c.markdown(f"**{lbl}**")
+
+    for log in logs:
+        d = date.fromisoformat(log["work_date"])
+        row = st.columns(h_cols)
+        row[0].text(d.strftime("%m/%d/%y"))
+        row[1].text(d.strftime("%a"))
+        row[2].text(_fmt_time_portal(log.get("time_in")))
+        row[3].text(_fmt_time_portal(log.get("time_out")))
+        lm = log.get("late_minutes") or 0
+        row[4].text(f"{lm}m" if lm else "—")
+        ot = float(log.get("ot_hours") or 0)
+        row[5].text(f"{ot:.1f}h" if ot else "—")
+        row[6].markdown(_dtr_status_badge(log.get("status", "absent")), unsafe_allow_html=True)
+        with row[7]:
+            if st.button("File Correction", key=f"dtr_corr_{log['id']}",
+                         help="Request a correction for this day's record"):
+                _correction_dialog(emp_id, log)
+
+    # ── Corrections history ───────────────────────────────────────────────────
+    st.divider()
+    st.markdown("#### Correction Requests")
+    corrections = (
+        get_db().table("dtr_corrections")
+        .select("*")
+        .eq("employee_id", emp_id)
+        .order("created_at", desc=True)
+        .limit(20)
+        .execute()
+    ).data or []
+
+    if not corrections:
+        st.caption("No correction requests filed yet.")
+    else:
+        for c in corrections:
+            status_color = {
+                "pending":  "#92400e",
+                "approved": "#15803d",
+                "rejected": "#b91c1c",
+            }.get(c["status"], "#6b7280")
+            st.markdown(
+                f'<div style="padding:10px;border-radius:6px;background:var(--gxp-surface2);'
+                f'margin-bottom:8px;">'
+                f'<b>{c["work_date"]}</b> &nbsp;·&nbsp; '
+                f'<span style="color:{status_color};font-weight:600">{c["status"].upper()}</span>'
+                f'<br/><small>Requested: In {_fmt_time_portal(c.get("requested_time_in"))} · '
+                f'Out {_fmt_time_portal(c.get("requested_time_out"))}</small>'
+                f'{"<br/><small>HR note: " + c["admin_notes"] + "</small>" if c.get("admin_notes") else ""}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 
 # ============================================================

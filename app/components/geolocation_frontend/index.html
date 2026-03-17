@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { margin: 0; padding: 0; height: 0; overflow: hidden; }
+  </style>
+</head>
+<body>
+<script>
+  // Wait for Streamlit to initialise the component bridge before firing
+  window.addEventListener("message", function onInit(e) {
+    if (e.data && e.data.type === "streamlit:render") {
+      window.removeEventListener("message", onInit);
+
+      if (!navigator.geolocation) {
+        window.parent.Streamlit.setComponentValue({
+          lat: null, lng: null, accuracy: null,
+          error: "Geolocation is not supported by this browser."
+        });
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        function(pos) {
+          window.parent.Streamlit.setComponentValue({
+            lat:      pos.coords.latitude,
+            lng:      pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            error:    null
+          });
+        },
+        function(err) {
+          window.parent.Streamlit.setComponentValue({
+            lat: null, lng: null, accuracy: null,
+            error: err.message
+          });
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    }
+  });
+
+  // Tell Streamlit the component is ready
+  window.parent.Streamlit.setFrameHeight(0);
+</script>
+</body>
+</html>

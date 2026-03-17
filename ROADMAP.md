@@ -1,6 +1,6 @@
 # GenXcript Payroll — Product Roadmap
 
-> Last updated: 2026-03-17
+> Last updated: 2026-03-18
 > Strategy: Payroll-first → HR Compliance → Attendance → Advanced Payroll → Portal → BI → Scale
 > Each phase unlocks the next. Features within a phase are ordered by dependency.
 
@@ -66,6 +66,20 @@
 - [ ] Leave deductions in payroll — unpaid absences auto-deduct from gross pay *(deferred: requires Phase 4B DTR first)*
 - [x] Leave summary report — admin "📊 Leave Balances" tab: all employees, VL/SL/CL used/remaining with progress bars, year selector, dept filter *(employees.py)*
 
+### 3D — User Roles & Access Control *(prerequisite for multi-user companies and 2-level approvals)*
+- [ ] Role definitions — Admin, HR Manager, Payroll Processor, Supervisor, Employee (read-only portal)
+- [ ] Role-based page access — HR Manager cannot touch Company Setup; Payroll Processor cannot modify employee records; Supervisor sees only their team
+- [ ] Supervisor assignment — each employee can be assigned a reporting supervisor; used for 2-level approval chain in Phase 4C
+- [ ] Role selector in user management UI — Company Setup "Users & Roles" tab
+- [ ] RLS policy updates in Supabase to enforce role boundaries at DB level
+
+### 3E — Employee Exit & Offboarding
+- [ ] Exit initiation — HR records last working day, reason (resignation / termination / end of contract), and clearance deadline (DOLE 30-day rule)
+- [ ] Clearance checklist — per-item (equipment returned, ID surrendered, accounts deactivated, etc.) with checked-by and date fields
+- [ ] Final pay computation trigger — links to Phase 5B (pro-rated 13th month + convertible leave cash-out + separation pay if applicable)
+- [ ] Portal access auto-deactivation on last working day
+- [ ] Exit summary report — HR-printable PDF of final pay breakdown and clearance status
+
 ---
 
 ## Phase 4: Attendance & Time
@@ -77,20 +91,27 @@
 - [x] Single-day schedule override table — `schedule_overrides` with rest-day flag and reason *(migration 012, UI deferred to Phase 4B DTR page)*
 - [ ] Compensatory Time-off (CTO) — OT hours converted to leave credits *(deferred: needs DTR computation first)*
 
-### 4B — DTR / Time Logs *(depends on 4A for late/undertime thresholds)*
-- [ ] Manual time log entry (daily punch-in / punch-out per employee)
-- [ ] Daily Time Record (DTR) view — formatted timesheet per employee per period
-- [ ] Late, undertime, and absent computation against scheduled shift
-- [ ] DTR correction requests (employee submits → supervisor approves)
-- [ ] BTR correction request history
+### 4B — DTR / Time Logs ✅ Complete
+- [x] Manual time log entry (daily punch-in / punch-out per employee) — admin per-date view: all employees for one day, inline time_in/time_out inputs with live late/undertime feedback *(app/pages/dtr.py)*
+- [x] Daily Time Record (DTR) view — formatted timesheet per employee per period (Attendance Summary tab with day-by-day detail expandable) *(app/pages/dtr.py)*
+- [x] Late, undertime, and absent computation against scheduled shift — pure engine in backend/dtr.py; compute_dtr() + resolve_schedule_for_date() *(backend/dtr.py)*
+- [x] DTR correction requests — employee submits via portal dialog (requested time in/out + reason); admin reviews in Corrections tab; approve auto-applies and re-computes DTR *(app/pages/dtr.py, employee_portal.py)*
+- [x] DTR correction request history — employee sees own correction requests with status badges *(employee_portal.py)*
+
+**Web-based Time-In Verification** ✅ Complete *(no mobile app required — browser APIs only)*
+- [x] Geofencing — browser Geolocation API via declared component captures lat/long on clock-in; distance computed via Haversine formula; validated against company-defined site radius *(app/components/geolocation.py + geolocation_frontend/index.html)*
+- [x] Face snapshot — `st.camera_input()` captures photo at clock-in/out; uploaded to Supabase Storage bucket `dtr-snapshots`; URL stored per log entry *(employee_portal.py)*
+- [x] Company Setup: "📍 Locations" tab — named GPS sites CRUD with latitude/longitude/radius/active toggle + Google Maps link *(company_setup.py)*
+- [x] Time-in record stores: timestamp, coordinates, distance from nearest site, location_id, snapshot URL, method ('manual'/'portal') *(time_logs table in migration 013)*
+- [x] Out-of-range alert — portal warns employee if distance > allowed radius; flag stored in time_logs.is_out_of_range *(employee_portal.py)*
 
 ### 4C — OT & Leave Request Workflows *(partially done; depends on 4B for full DTR-backed computation)*
 - [x] Overtime request form — employee portal submits OT request with date/time/hours *(employee_portal.py)*
 - [x] Leave request form — employee portal submits leave with balance check warning *(employee_portal.py)*
 - [x] Admin approval — single-level approve/reject with notes; Leave & OT Approvals tab *(employees.py)*
 - [x] Request history list — employee sees own requests + statuses *(employee_portal.py)*
-- [ ] 2-level approval (Supervisor → HR/Admin) *(deferred: requires schedule/reporting structure)*
-- [ ] Auto-email notifications to supervisor on submission *(deferred: needs 2-level approval first)*
+- [ ] 2-level approval (Supervisor → HR/Admin) — *depends on Phase 3D role + supervisor assignment*
+- [ ] Auto-email notifications — employee notified on approval/rejection; supervisor notified on new submission *(depends on 2-level approval)*
 
 ---
 
@@ -103,26 +124,30 @@
 - [ ] Amortization schedule auto-computation
 - [ ] Auto-deduction in payroll run per period
 
-### 5B — Special Payroll Runs
-- [ ] 13th Month Pay computation (dedicated run type — Jan 31 deadline)
-- [ ] Mid-year bonus / performance bonus runs (custom multiplier)
+### 5B — Special Payroll Runs *(high priority — legally mandated)*
+- [ ] **13th Month Pay** — dedicated run type; automatically computes 1/12 of total basic pay earned in the calendar year per employee; Jan 31 DOLE deadline; generates 13th month payslips and summary report
+- [ ] **Backpay & Separation Pay** — final pay run for separated employees; computes: unpaid salary for days worked, pro-rated 13th month, cash conversion of unused convertible leave credits, and separation pay (½ month per year of service for authorized causes per DOLE Art. 298); links to Phase 3E exit record; generates final payslip
+- [ ] Mid-year bonus / performance bonus runs — custom multiplier, ad-hoc disbursement runs
 
 ### 5C — Flexible Transactions
-- [ ] Payroll adjustments (ad-hoc corrections within a pay run)
-- [ ] Custom transaction types (define your own earning/deduction codes)
+- [ ] **Night Differential** — DOLE-mandated 10% additional pay for hours worked 10PM–6AM; configurable rate (default 10%); night diff hours input per employee per period in payroll run (alongside OT); night diff reflected on payslip line and included in gross pay for contribution computations
+- [ ] Night diff + OT combination — "OT on night shift" rate (DOLE: regular OT 125% + night diff 10% = 137.5%); rate table shown in Company Setup alongside holiday pay reference
+- [ ] Payroll adjustments — ad-hoc corrections within a pay run (positive or negative)
+- [ ] Custom transaction types — define your own earning/deduction codes (e.g., "Rice Allowance", "Uniform Deduction")
 - [ ] Custom transaction entries per employee per period
-- [ ] Payroll rate profiles (per-group rate sets — e.g. Rank & File vs Managerial)
-- [ ] Payroll code profiles (earning/deduction code dictionary)
+- [ ] Payroll rate profiles — per-group rate sets (e.g., Rank & File vs. Managerial)
+- [ ] Payroll code profiles — earning/deduction code dictionary
 
-### 5D — Piece Work / Output-Based Pay
+### 5D — Bank Disbursement *(moved up: clients request this after first payroll run)*
+- [ ] Bank account per employee (bank name, account number, account type)
+- [ ] Bank file generation — BDO, BPI, Metrobank, UnionBank CSV/DAT formats at end of payroll finalization
+- [ ] Salary disbursement record — mark as disbursed, disbursement date, reference number
+- [ ] Disbursement status on payslip — "Disbursed via [Bank] on [Date]" footer line
+
+### 5E — Piece Work / Output-Based Pay
 - [ ] Piece rate definitions (rate per unit)
 - [ ] Piece rate multipliers (holiday, OT, night diff factors on piece work)
 - [ ] Per-employee piece work entries per period
-
-### 5E — Bank Disbursement
-- [ ] Bank account per employee (bank name, account number, account type)
-- [ ] Bank file generation (BDO, BPI, Metrobank formats) at end of payroll run
-- [ ] Salary disbursement record (mark as disbursed, disbursement date)
 
 ---
 
@@ -130,12 +155,15 @@
 > Connects all Phase 3–5 features to the self-service portal. Employees become active users, not just recipients.
 
 - [x] **Preferences tab** — Personalise appearance, date formats, display settings, and notifications from within the employee portal (embedded as 5th tab alongside Profile / Payslips / Time & Leave / Documents)
+- [ ] **Attendance Certification PDF** — Employee or HR generates a PDF certifying attendance record for a date range (used for bank loans, visa applications, government transactions); downloadable from employee portal and admin employee view
+- [ ] **Email & In-App Notifications** — Automated emails on: leave/OT request approved or rejected, payslip available for the period, DTR correction resolved, account password changed; admin configurable on/off per notification type
 - [ ] View daily time record (DTR) per period
-- [ ] View full time log history
+- [ ] View full time log history with face snapshot thumbnails
 - [ ] Submit leave request (with leave balance shown)
 - [ ] View leave request history + statuses
 - [ ] Submit overtime request
 - [ ] View overtime request history + statuses
+- [ ] Web-based time-in/time-out — employee clocks in from browser; triggers geolocation check and face snapshot capture *(depends on Phase 4B verification setup)*
 - [ ] Submit DTR correction request
 - [ ] View DTR correction history + statuses
 - [ ] View/acknowledge assigned schedule
@@ -183,15 +211,22 @@
 Phase 1 (Payroll Core)
   └── Phase 2 (UX + Visibility)
         └── Phase 3 (Core HR)
-              ├── 3A Holidays ──────────────── → Phase 5 (OT multipliers)
-              ├── 3B Employee Info ──────────── → standalone, no deps
-              └── 3C Leave Foundation ──────── → Phase 4C (Leave requests)
+              ├── 3A Holidays ──────────────── → Phase 5C (Night diff + OT multipliers)
+              ├── 3B Employee Info ──────────── → 3E Exit Workflow
+              ├── 3C Leave Foundation ──────── → Phase 4C (Leave requests)
+              ├── 3D User Roles ────────────── → Phase 4C (2-level approvals)
+              └── 3E Exit & Offboarding ─────── → Phase 5B (Final pay / backpay)
                     └── Phase 4 (Attendance)
                           ├── 4A Scheduling ── → 4B DTR
                           ├── 4B DTR ──────── → 4C Workflows + Phase 5
+                          │     └── Web Geofencing + Face Snapshot
                           └── 4C Workflows ── → Phase 6 Portal
                                 └── Phase 5 (Advanced Payroll)
-                                      └── Phase 6 (Portal Expansion)
-                                            └── Phase 7 (BI)
-                                                  └── Phase 8 (Scale)
+                                      ├── 5B Special Runs (13th Month, Backpay)
+                                      ├── 5C Night Diff + Flexible Transactions
+                                      └── 5D Bank Disbursement
+                                            └── Phase 6 (Portal Expansion)
+                                                  ├── Time-in/out + Notifications
+                                                  └── Phase 7 (BI)
+                                                        └── Phase 8 (Scale)
 ```
