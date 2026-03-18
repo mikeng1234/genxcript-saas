@@ -1,6 +1,6 @@
 # GenXcript Payroll — Product Roadmap
 
-> Last updated: 2026-03-18 (evening)
+> Last updated: 2026-03-19
 > Strategy: Payroll-first → HR Compliance → Attendance → Advanced Payroll → Portal → BI → Scale
 > Each phase unlocks the next. Features within a phase are ordered by dependency.
 
@@ -40,7 +40,7 @@
 - [x] **Custom left sidebar** — Replaces horizontal top nav; collapsed=54px (icons) / expanded=214px (icons + labels) / peek on hover; ◀/▶ toggle; localStorage persistence; Streamlit sidebar hidden and JS-routed
 - [ ] **Remittance Tracking UI** — Record and view actual government remittance submissions per agency per month; mark as filed with reference number and amount; `remittance_records` table ready (migration 014)
 - [x] **Leave Entitlement Templates** — Named leave tiers (e.g., "0–1 Year", "Regular Staff") with configurable VL/SL/CL days; assignable per employee; defaults to 15/15/5 if unassigned
-- [x] **OT Heat Maps** — Visualize which days and cost centers drive overtime spikes; baseline for Phase 7 BI analytics
+- [x] **Workforce Analytics** (formerly "OT Heatmap") — 4 tabs: OT Analytics (heatmap + top contributors with dept/shift), Late Monitoring (ranked list + 3-month bubble calendar per employee), Undertime (mirrors Late), Break Monitoring (real portal break data + implied fallback + overbreak column)
 - [ ] **PWA cache** — Offline-capable for areas with unstable internet *(low priority, skip for now)*
 
 ---
@@ -57,9 +57,9 @@
 - [x] **Holiday pay multiplier reference** — DOLE-mandated rate table (Regular 200%/260% OT, Special NW 130%/169% OT, rest day combos) in Company Setup as expandable reference for HR staff
 
 ### 3B — Employee Extended Information ✅ Complete
-- [x] Regularization date, resignation date fields *(migration 010)*
+- [x] Regularization date, separation date fields *(migration 010; renamed from "Resignation Date" to "Separation Date")*
 - [ ] Birthday leave trigger *(deferred — low priority, company-specific)*
-- [x] Classification / profession type *(migration 010)*
+- [x] Classification / profession type *(migration 010; removed from visible form — stored but not shown)*
 - [x] Educational background (degree, school, year graduated) *(migration 010)*
 - [x] Additional contact info (personal email, home/mobile/work phone, Facebook, LinkedIn) *(migration 010)*
 - [x] Permanent vs current address distinction *(done in Phase 2 employee portal)*
@@ -97,11 +97,13 @@
 - [ ] Compensatory Time-off (CTO) — OT hours converted to leave credits *(deferred: needs DTR computation first)*
 
 ### 4B — DTR / Time Logs ✅ Complete
-- [x] Manual time log entry (daily punch-in / punch-out per employee) — admin per-date view: all employees for one day, inline time_in/time_out inputs with live late/undertime feedback *(app/pages/dtr.py)*
-- [x] Daily Time Record (DTR) view — formatted timesheet per employee per period (Attendance Summary tab with day-by-day detail expandable) *(app/pages/dtr.py)*
-- [x] Late, undertime, and absent computation against scheduled shift — pure engine in backend/dtr.py; compute_dtr() + resolve_schedule_for_date() *(backend/dtr.py)*
-- [x] DTR correction requests — employee submits via portal dialog (requested time in/out + reason); admin reviews in Corrections tab; approve auto-applies and re-computes DTR *(app/pages/dtr.py, employee_portal.py)*
-- [x] DTR correction request history — employee sees own correction requests with status badges *(employee_portal.py)*
+- [x] Manual time log entry (daily punch-in / punch-out per employee) — admin per-date view: all employees for one day, inline time_in/time_out inputs with live late/undertime feedback; includes **Shift** column showing schedule name + start–end times *(app/pages/_dtr.py)*
+- [x] Daily Time Record (DTR) view — formatted timesheet per employee per period (Attendance Summary tab with day-by-day detail expandable); shows **NSD Hrs** column *(app/pages/_dtr.py)*
+- [x] Late, undertime, absent computation against scheduled shift — pure engine; **OT corrected** to time past scheduled_end only (never offsets late arrival); early clock-in never generates OT *(backend/dtr.py)*
+- [x] **Night Shift Differential (NSD)** — compute_nsd_hours() per DOLE Art. 86: 10% premium for 10PM–6AM hours; nsd_hours stored in time_logs (migration 020); shown in DTR summary + payroll suggestions *(backend/dtr.py)*
+- [x] **Holiday observed dates** — observed_date column on holidays (migration 019); Company Setup holiday form shows optional observed date override for weekend-maximizing moves
+- [x] DTR correction requests + approval — employee submits via portal dialog; approve auto-applies and re-computes DTR including nsd_hours *(app/pages/_dtr.py, _employee_portal.py)*
+- [x] **Portal break tracking** — ☕ Start Break / End Break buttons in clock widget; records break_out/break_in timestamps; computes actual_break_minutes and overbreak_minutes vs scheduled break (migration 020) *(app/pages/_employee_portal.py)*
 
 **Web-based Time-In Verification** ✅ Complete *(no mobile app required — browser APIs only)*
 - [x] Geofencing — browser Geolocation API via declared component captures lat/long on clock-in; distance computed via Haversine formula; validated against company-defined site radius *(app/components/geolocation.py + geolocation_frontend/index.html)*
@@ -144,7 +146,8 @@
 - [ ] Mid-year bonus / performance bonus runs — custom multiplier, ad-hoc disbursement runs
 
 ### 5C — Flexible Transactions
-- [ ] **Night Differential** — DOLE-mandated 10% additional pay for hours worked 10PM–6AM; configurable rate (default 10%); night diff hours input per employee per period in payroll run (alongside OT); night diff reflected on payslip line and included in gross pay for contribution computations
+- [x] **Night Differential** — NSD hours computed from DTR (10PM–6AM per DOLE Art. 86); payroll run Night Diff input auto-pre-fills from nsd_hours × hourly_rate × 10% when no saved entry exists; DTR Insights panel shows suggestion vs actual *(migration 020, backend/dtr.py, _payroll_run.py)*
+- [x] **OT from approved requests** — Overtime input in payroll run auto-pre-fills from approved overtime_requests × hourly_rate × 125%; DTR Insights panel shows approved OT vs DTR-computed OT *(\_payroll_run.py)*
 - [ ] Night diff + OT combination — "OT on night shift" rate (DOLE: regular OT 125% + night diff 10% = 137.5%); rate table shown in Company Setup alongside holiday pay reference
 - [ ] Payroll adjustments — ad-hoc corrections within a pay run (positive or negative)
 - [ ] Custom transaction types — define your own earning/deduction codes (e.g., "Rice Allowance", "Uniform Deduction")
@@ -219,6 +222,24 @@
 
 ---
 
+## Phase 9: Security Hardening
+> To be run as a dedicated audit pass before any public/production launch. Covers secrets management, API surface, RLS completeness, and supply-chain hygiene.
+
+- [ ] **Secrets audit** — verify zero hardcoded credentials in tracked files; all keys loaded exclusively from environment variables (`os.environ`) or `st.secrets`; `.env` permanently in `.gitignore` and confirmed not tracked
+- [ ] **Frontend credential exposure** — audit all `streamlit.components.v1.html()` and `_stc.html()` injections; ensure no Supabase URLs, anon keys, or tokens ever appear in rendered HTML/JS; CDN script loads (`tsparticles`, etc.) pinned to exact SRI-hashed versions
+- [ ] **RLS completeness audit** — run `EXPLAIN` + policy review on every table; confirm no table has accidental permissive `SELECT` for `public` role; verify `service_role` key is never used client-side
+- [ ] **Session security** — review `sid` token in URL query params (visible in browser history); consider httpOnly cookie alternative; add session expiry + inactivity timeout (currently 45-min TTL via `@st.cache_resource(ttl=2700)`)
+- [ ] **Input sanitization** — audit all `st.text_input` values passed to `.eq()`, `.ilike()` Supabase calls; confirm supabase-py parameterizes queries (no raw SQL f-string injection)
+- [ ] **File upload security** — DTR snapshots: validate MIME type + size server-side before Storage upload; reject non-image files; confirm bucket policy is `private` (no anonymous reads)
+- [ ] **PDF/report security** — confirm generated PDFs are served directly to the requesting user and not cached in a public path; add company_id assertion before fetching payroll data for PDF generation
+- [ ] **Dependency pinning** — pin all `requirements.txt` to exact versions with hashes (`pip-compile --generate-hashes`); add Dependabot or manual quarterly review for CVEs
+- [ ] **Error message hardening** — ensure no raw Python tracebacks or database errors are shown to end users; wrap all DB calls in try/except with user-friendly messages
+- [ ] **HTTPS enforcement** — document that production deployment must run behind TLS (Nginx + Certbot, Railway, or Cloudflare Tunnel); never run production on plain HTTP
+- [ ] **Rate limiting on login** — add server-side attempt counter (e.g., 5 failed logins → 15-min lockout) stored in Supabase or `st.cache_resource` dict to prevent brute-force attacks
+- [ ] **Penetration test** — run OWASP ZAP scan on the ngrok/production URL; fix any HIGH/CRITICAL findings before go-live
+
+---
+
 ## Feature Dependency Map
 
 ```
@@ -243,4 +264,5 @@ Phase 1 (Payroll Core)
                                                   ├── Time-in/out + Notifications
                                                   └── Phase 7 (BI)
                                                         └── Phase 8 (Scale)
+                                                              └── Phase 9 (Security Hardening)
 ```

@@ -27,11 +27,19 @@ from app.auth import (
     exchange_recovery_code, set_new_password, get_user_from_access_token,
 )
 
-# Hide Streamlit's auto-generated page navigation (it scans the pages/
-# folder and shows all files as links, bypassing our auth gate).
-# We use our own sidebar radio for navigation instead.
+# ── Sidebar: hide everything on first paint ───────────────────────────────────
+# This fires in the very first CSS batch Streamlit sends to the browser,
+# eliminating the flash of the auto-detected pages/ nav on the login screen.
+# Authenticated users get the sidebar re-shown further below (after auth check).
 st.markdown(
-    "<style>[data-testid='stSidebarNav'] { display: none; }</style>",
+    "<style>"
+    # Auto-generated pages/ nav — never shown (we use our own radio nav)
+    "[data-testid='stSidebarNav'],"
+    # Full sidebar panel + the collapsed-state toggle arrow
+    "[data-testid='stSidebar'],"
+    "[data-testid='stSidebarCollapsedControl']"
+    "{ display:none !important; }"
+    "</style>",
     unsafe_allow_html=True,
 )
 
@@ -66,7 +74,7 @@ if not is_logged_in():
             st.markdown("#### Set New Password")
             st.divider()
             _ru = st.session_state["pw_reset_user"]
-            st.info(f"Setting password for **{_ru['email']}**", icon="🔑")
+            st.info(f"Setting password for **{_ru['email']}**", icon=":material/key:")
             with st.form("set_pw_form"):
                 _new_pw   = st.text_input("New password", type="password",
                                           help="Minimum 6 characters")
@@ -82,12 +90,12 @@ if not is_logged_in():
                     _ok, _err = set_new_password(_ru["user_id"], _new_pw)
                     if _ok:
                         st.session_state.pop("pw_reset_user", None)
-                        st.success("✅ Password updated! You can now sign in.")
+                        st.success("Password updated! You can now sign in.")
                         st.balloons()
                     else:
                         st.error(_err)
     elif st.session_state.get("show_register"):
-        from app.pages.register import render as render_register
+        from app.pages._register import render as render_register
         render_register()
     else:
         # ── Implicit flow: #access_token=TOKEN in URL hash ────
@@ -119,14 +127,27 @@ if not is_logged_in():
             _, _col, _ = st.columns([1, 1.5, 1])
             with _col:
                 st.markdown("## GenXcript Payroll")
-                st.error(f"⚠️ Reset link expired or invalid — {_err_msg}\n\nPlease request a new password reset link.")
+                st.error(f"Reset link expired or invalid — {_err_msg}\n\nPlease request a new password reset link.")
                 if st.button("← Back to Sign In", use_container_width=True):
                     st.rerun()
             st.stop()
 
-        from app.pages.login import render as render_login
+        from app.pages._login import render as render_login
         render_login()
     st.stop()
+
+# ── Authenticated path — re-show sidebar ──────────────────────────────────────
+# The hide-all CSS above fires first (top of file, first paint).
+# This override runs only when the user IS logged in; the later position in
+# the DOM means it wins the !important cascade for authenticated sessions.
+st.markdown(
+    "<style>"
+    "[data-testid='stSidebar'],"
+    "[data-testid='stSidebarCollapsedControl']"
+    "{ display:flex !important; }"
+    "</style>",
+    unsafe_allow_html=True,
+)
 
 # ============================================================
 # Sidebar (only shown when logged in)
@@ -150,9 +171,10 @@ if is_employee_role():
 
     if st.sidebar.button("Sign Out", width="stretch"):
         logout()
-        st.rerun()
+        components.html('<script>window.parent.location.reload(true);</script>', height=0)
+        st.stop()
 
-    from app.pages.employee_portal import render as render_portal
+    from app.pages._employee_portal import render as render_portal
     render_portal()
     st.stop()
 
@@ -162,57 +184,12 @@ if is_employee_role():
 # multi-company feature (server-cache cleared, old sid token, etc.)
 ensure_accessible_companies_loaded()
 
-# ============================================================
-# Company Switcher (sidebar)
-# ============================================================
-
-accessible = st.session_state.get("accessible_companies") or []
-
-if len(accessible) > 1:
-    # Build options list and display names
-    company_ids   = [c["id"]   for c in accessible]
-    company_names = {c["id"]: c["name"] for c in accessible}
-
-    current_id = st.session_state.get("company_id", company_ids[0])
-    # Fallback if current_id somehow not in the list
-    if current_id not in company_ids:
-        current_id = company_ids[0]
-
-    selected_id = st.sidebar.selectbox(
-        "Active Company",
-        options=company_ids,
-        format_func=lambda cid: company_names.get(cid, cid),
-        index=company_ids.index(current_id),
-        key="company_switcher",
-    )
-
-    if selected_id != current_id:
-        new_role = next(
-            (c["role"] for c in accessible if c["id"] == selected_id), "admin"
-        )
-        new_name = company_names.get(selected_id, "")
-        update_active_company(selected_id, new_role, new_name)
-        # Return to Dashboard after switching so stale data doesn't show
-        st.session_state.nav_page = "Dashboard"
-        st.rerun()
-
-    st.sidebar.divider()
-
-elif len(accessible) == 1:
-    # Single company — show name as a label, not a tiny caption
-    st.sidebar.markdown(
-        f"<div style='font-size:13px;font-weight:600;padding:2px 0 4px 0;'>"
-        f"🏢 {accessible[0]['name']}</div>",
-        unsafe_allow_html=True,
-    )
-    st.sidebar.divider()
-
 
 # ============================================================
 # Add New Company dialog
 # ============================================================
 
-@st.dialog("➕ Add New Company")
+@st.dialog("Add New Company")
 def _add_company_dialog():
     st.write("Create a new company. You will be set as admin.")
     new_name = st.text_input("Company Name", max_chars=100)
@@ -281,7 +258,7 @@ def _add_company_dialog():
 
 
 # Show the "Add / Switch Company" button in sidebar (admin/viewer only)
-if st.sidebar.button("➕ Add New Company", width='stretch'):
+if st.sidebar.button("Add Company", width='stretch'):
     _add_company_dialog()
 
 st.sidebar.divider()
@@ -294,7 +271,6 @@ PAGES = [
     "Dashboard",
     "Employees",
     "Payroll Run",
-    "Payslips",
     "Payroll Comparison",
     "OT Analytics",
     "Attendance",
@@ -323,7 +299,7 @@ if "_nav_redirect" in st.session_state:
 # ---- Unsaved-changes guard ----------------------------------------
 # Must check + revert nav_page BEFORE the radio is instantiated —
 # Streamlit forbids writing to a widget key after it renders.
-@st.dialog("⚠️ Unsaved Changes")
+@st.dialog("Unsaved Changes")
 def _unsaved_nav_dialog(intended: str) -> None:
     st.warning(
         "You have an employee edit open. "
@@ -353,15 +329,21 @@ if _dirty_nav:
 
 # ── Grouped sidebar navigation ────────────────────────────────────────────
 _NAV_ICONS = {
-    "Dashboard": "📊", "Employees": "👥", "Payroll Run": "💸",
-    "Payslips": "📄", "Payroll Comparison": "📈", "OT Analytics": "🔥",
-    "Attendance": "🕐", "Government Reports": "🏛️", "Calendar": "📅",
-    "Company Setup": "🏢", "Preferences": "⚙️",
+    "Dashboard":          "view-dashboard",
+    "Employees":          "account-group",
+    "Payroll Run":        "cash-multiple",
+    "Payroll Comparison": "chart-line",
+    "OT Analytics":       "fire",
+    "Attendance":         "clock-outline",
+    "Government Reports": "bank-outline",
+    "Calendar":           "calendar-month-outline",
+    "Company Setup":      "office-building-outline",
+    "Preferences":        "cog-outline",
 }
 _NAV_GROUPS = [
     ("Overview",    ["Dashboard"]),
     ("People",      ["Employees", "Attendance", "Calendar"]),
-    ("Payroll",     ["Payroll Run", "Payslips", "Payroll Comparison", "OT Analytics"]),
+    ("Payroll",     ["Payroll Run", "Payroll Comparison", "OT Analytics"]),
     ("Compliance",  ["Government Reports"]),
     ("Settings",    ["Company Setup", "Preferences"]),
 ]
@@ -409,17 +391,31 @@ _grp_json = ", ".join(
     )
     for grp in _NAV_GROUPS
 )
-_acct_label = "👤 My Account"
+_acct_label = "My Account"
 _signout_label = "Sign Out"
+
+import json as _json
+_accessible_now = st.session_state.get("accessible_companies") or []
+_cos_json       = _json.dumps([{"id": c["id"], "name": c["name"]} for c in _accessible_now])
+_cur_co_id      = st.session_state.get("company_id", "")
 
 components.html(f"""
 <script>
 (function(){{
   var d=window.parent.document;
+
+  // ── Remove login-page artifacts so sidebar is not hidden post-login ──────
+  ['gxp-login-bg','gxp-login-style'].forEach(function(id){{
+    var e=d.getElementById(id); if(e) e.remove();
+  }});
+
   var PAGES=[{_page_json}];
   var GROUPS=[{_grp_json}];
   var ACTIVE="{page}";
   var ACCT_LABEL="{_acct_label}", SIGNOUT_LABEL="{_signout_label}";
+  var CO_LIST={_cos_json};
+  var CUR_CO_ID="{_cur_co_id}";
+  var COSW_PFX="__cosw__";
   var ID='gxp-lnav', CSS_ID='gxp-lnav-css', LS='gxp-lnav-c';
   var EW=214, CW=54, PW=188;
 
@@ -437,6 +433,16 @@ components.html(f"""
     for(var i=0;i<btns.length;i++){{
       if(btns[i].textContent.indexOf(name)!==-1){{ btns[i].click(); return; }}
     }}
+  }}
+
+  // ── Inject MDI font ───────────────────────────────────────────────────
+  function injectMDI(){{
+    if(d.getElementById('gxp-mdi-css')) return;
+    var link=d.createElement('link');
+    link.id='gxp-mdi-css';
+    link.rel='stylesheet';
+    link.href='https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css';
+    d.head.appendChild(link);
   }}
 
   // ── Inject CSS: hide Streamlit sidebar + top toolbar, remove layout gaps ─
@@ -563,7 +569,7 @@ components.html(f"""
     var brand=d.createElement('div');
     brand.style.cssText='display:flex;align-items:center;gap:7px;overflow:hidden;min-width:0;';
     brand.innerHTML=
-      '<span style="font-size:19px;flex-shrink:0;">💰</span>'+
+      '<span style="font-size:20px;flex-shrink:0;line-height:1;"><i class="mdi mdi-cash" style="color:'+ac+';"></i></span>'+
       '<span class="ln-brand" style="font-size:13px;font-weight:700;color:'+tx+';'+
       'white-space:nowrap;letter-spacing:-0.3px;overflow:hidden;'+
       'transition:opacity 0.18s,max-width 0.18s;'+
@@ -606,8 +612,8 @@ components.html(f"""
 
         var ico=d.createElement('span');
         ico.style.cssText=
-          'font-size:17px;flex-shrink:0;width:24px;text-align:center;line-height:1;';
-        ico.textContent=pi.i||'\u2022';
+          'font-size:18px;flex-shrink:0;width:24px;text-align:center;line-height:1;display:flex;align-items:center;justify-content:center;';
+        ico.innerHTML='<i class="mdi mdi-'+(pi.i||'circle-small')+'" style="font-size:18px;"></i>';
 
         var lbl=d.createElement('span');
         lbl.className='ln-lbl';
@@ -629,17 +635,136 @@ components.html(f"""
 
     inner.appendChild(body);
 
-    // ── Footer: Account + Sign out ─────────────────────────────────────
+    // ── Footer: Company switcher + Account + Sign out ──────────────────
     var foot=d.createElement('div');
     foot.style.cssText=
       'flex-shrink:0;border-top:1px solid '+br+';padding:8px 0;';
 
-    // [clickTarget, displayText, icon]
+    // Company switcher (custom dropdown — only rendered when >1 company)
+    if(CO_LIST.length>1){{
+      var curCoName=CO_LIST.reduce(function(a,c){{return c.id===CUR_CO_ID?c.name:a;}},'');
+
+      var coWrap=d.createElement('div');
+      coWrap.style.cssText=
+        'padding:6px 10px 8px;border-bottom:1px solid '+br+';margin-bottom:4px;position:relative;';
+
+      // Group label (hidden when collapsed)
+      var coLbl=d.createElement('div');
+      coLbl.className='ln-lbl';
+      coLbl.style.cssText=
+        'font-size:9.5px;font-weight:700;letter-spacing:0.08em;'+
+        'color:'+t2+';text-transform:uppercase;margin-bottom:5px;'+
+        'overflow:hidden;white-space:nowrap;'+
+        'transition:opacity 0.18s,max-width 0.18s;'+
+        (isC?'opacity:0;max-width:0;height:0;margin:0;':'opacity:1;max-width:160px;');
+      coLbl.textContent='Active Company';
+
+      // Trigger button
+      var coTrig=d.createElement('button');
+      coTrig.style.cssText=
+        'display:flex;align-items:center;gap:8px;width:100%;'+
+        'padding:7px 10px;background:'+sf2+';color:'+tx+';'+
+        'border:1px solid '+br+';border-radius:7px;cursor:pointer;'+
+        'font-size:12px;font-family:inherit;text-align:left;outline:none;'+
+        'transition:border-color 0.15s,background 0.15s;'+
+        'overflow:hidden;white-space:nowrap;'+
+        (isC?'justify-content:center;':'');
+
+      var coIcon=d.createElement('span');
+      coIcon.innerHTML='<i class="mdi mdi-office-building-outline" style="font-size:15px;flex-shrink:0;"></i>';
+
+      var coName=d.createElement('span');
+      coName.className='ln-lbl';
+      coName.style.cssText=
+        'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+
+        'transition:opacity 0.18s,max-width 0.18s;'+
+        (isC?'opacity:0;max-width:0;':'opacity:1;max-width:140px;');
+      coName.textContent=curCoName||'Select Company';
+
+      var coArrow=d.createElement('span');
+      coArrow.className='ln-lbl';
+      coArrow.style.cssText=
+        'font-size:10px;flex-shrink:0;color:'+t2+';'+
+        'transition:opacity 0.18s,max-width 0.18s,transform 0.15s;'+
+        (isC?'opacity:0;max-width:0;':'opacity:1;max-width:16px;');
+      coArrow.textContent='▾';
+
+      coTrig.appendChild(coIcon);
+      coTrig.appendChild(coName);
+      coTrig.appendChild(coArrow);
+      coTrig.onmouseenter=function(){{this.style.borderColor=ac;this.style.background=ab;}};
+      coTrig.onmouseleave=function(){{this.style.borderColor=br;this.style.background=sf2;}};
+
+      // Dropdown panel (floating, shown on click)
+      var coPanel=d.createElement('div');
+      coPanel.style.cssText=
+        'display:none;position:absolute;left:10px;right:10px;'+
+        'bottom:calc(100% + 2px);'+
+        'background:'+sf+';border:1px solid '+br+';border-radius:8px;'+
+        'box-shadow:0 -4px 24px rgba(0,0,0,0.4);'+
+        'overflow:hidden;z-index:999999;';
+
+      CO_LIST.forEach(function(co){{
+        var row=d.createElement('button');
+        var isActive=co.id===CUR_CO_ID;
+        row.style.cssText=
+          'display:flex;align-items:center;gap:8px;width:100%;'+
+          'padding:9px 12px;background:'+(isActive?ab:'transparent')+';'+
+          'color:'+(isActive?ac:tx)+';border:none;cursor:pointer;'+
+          'font-size:12px;font-family:inherit;text-align:left;outline:none;'+
+          'transition:background 0.12s;white-space:nowrap;overflow:hidden;';
+
+        var rIcon=d.createElement('span');
+        rIcon.innerHTML=isActive
+          ?'<i class="mdi mdi-check-circle" style="font-size:14px;color:'+ac+';flex-shrink:0;"></i>'
+          :'<i class="mdi mdi-office-building-outline" style="font-size:14px;flex-shrink:0;opacity:0.5;"></i>';
+
+        var rName=d.createElement('span');
+        rName.style.cssText='flex:1;overflow:hidden;text-overflow:ellipsis;';
+        rName.textContent=co.name;
+
+        row.appendChild(rIcon); row.appendChild(rName);
+        if(!isActive){{
+          row.onmouseenter=function(){{this.style.background=sf2;}};
+          row.onmouseleave=function(){{this.style.background='transparent';}};
+        }}
+        row.onclick=(function(id){{return function(){{
+          coPanel.style.display='none';
+          coArrow.style.transform='rotate(0deg)';
+          clickNav(COSW_PFX+id);
+        }};}})(co.id);
+        coPanel.appendChild(row);
+      }});
+
+      // Toggle panel on trigger click
+      var panelOpen=false;
+      coTrig.onclick=function(){{
+        panelOpen=!panelOpen;
+        coPanel.style.display=panelOpen?'block':'none';
+        coArrow.style.transform=panelOpen?'rotate(180deg)':'rotate(0deg)';
+      }};
+
+      // Close panel when clicking outside
+      d.addEventListener('click',function(e){{
+        if(panelOpen&&!coWrap.contains(e.target)){{
+          panelOpen=false;
+          coPanel.style.display='none';
+          coArrow.style.transform='rotate(0deg)';
+        }}
+      }});
+
+      coWrap.appendChild(coLbl);
+      coWrap.appendChild(coTrig);
+      coWrap.appendChild(coPanel);
+      foot.appendChild(coWrap);
+    }}
+
+    // [clickTarget, displayText, mdiIcon]
     [
-      [ACCT_LABEL, 'My Account', '\U0001F464'],
-      [SIGNOUT_LABEL, 'Sign Out', '\U0001F6AA']
+      [ACCT_LABEL, 'My Account', 'account-circle-outline'],
+      [SIGNOUT_LABEL, 'Sign Out', 'logout']
     ].forEach(function(item){{
-      var clickTarget=item[0], displayText=item[1], ico=item[2];
+      var clickTarget=item[0], displayText=item[1], mdiIcon=item[2];
       var fbtn=d.createElement('button');
       fbtn.style.cssText=
         'display:flex;align-items:center;gap:10px;width:100%;'+
@@ -648,8 +773,8 @@ components.html(f"""
         'font-size:13px;font-family:inherit;white-space:nowrap;overflow:hidden;'+
         'transition:background 0.12s,color 0.12s;outline:none;';
       var fi=d.createElement('span');
-      fi.style.cssText='font-size:16px;flex-shrink:0;width:24px;text-align:center;';
-      fi.textContent=ico;
+      fi.style.cssText='font-size:18px;flex-shrink:0;width:24px;text-align:center;display:flex;align-items:center;justify-content:center;';
+      fi.innerHTML='<i class="mdi mdi-'+mdiIcon+'" style="font-size:18px;"></i>';
       var fl=d.createElement('span');
       fl.className='ln-lbl';
       fl.style.cssText=
@@ -680,7 +805,7 @@ components.html(f"""
   }}
 
   function start(){{
-    injectCSS(); build();
+    injectMDI(); injectCSS(); build();
     // Re-run on Streamlit hot-reload (sidebar element replaced)
     new MutationObserver(function(ml){{
       for(var i=0;i<ml.length;i++){{
@@ -700,81 +825,6 @@ components.html(f"""
 </script>
 """, height=0, scrolling=False)
 
-# ── Global loading overlay (shows on every button click during Streamlit rerun) ──
-components.html("""
-<script>
-(function(){{
-  var d=window.parent.document;
-  if(d.getElementById('gxp-ld')) return;  // already injected this session
-
-  // Spin keyframe
-  var ks=d.createElement('style');
-  ks.textContent='@keyframes gxp-spin{{to{{transform:rotate(360deg)}}}}';
-  d.head.appendChild(ks);
-
-  // Overlay
-  var ov=d.createElement('div'); ov.id='gxp-ld';
-  ov.style.cssText=
-    'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999999;'+
-    'background:rgba(10,14,20,0.52);backdrop-filter:blur(2px);'+
-    'display:none;align-items:center;justify-content:center;'+
-    'flex-direction:column;gap:12px;pointer-events:all;';
-
-  // Spinner ring
-  var ring=d.createElement('div');
-  ring.style.cssText=
-    'width:46px;height:46px;border-radius:50%;'+
-    'border:3px solid rgba(255,255,255,0.14);'+
-    'border-top-color:#3b82f6;'+
-    'animation:gxp-spin 0.72s linear infinite;';
-
-  // Label
-  var lbl=d.createElement('div');
-  lbl.style.cssText=
-    'color:rgba(255,255,255,0.65);font-size:11px;'+
-    'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;'+
-    'letter-spacing:0.6px;';
-  lbl.textContent='Loading\u2026';
-
-  ov.appendChild(ring); ov.appendChild(lbl);
-  d.body.appendChild(ov);
-
-  var active=false, tid=null;
-  function show(){{ ov.style.display='flex'; active=true; }}
-  function hide(){{ ov.style.display='none'; active=false; if(tid){{clearTimeout(tid);tid=null;}} }}
-
-  function pollUntilIdle(){{
-    function check(){{
-      if(!active) return;
-      var sw=d.querySelector('[data-testid="stStatusWidget"]');
-      // Status widget present with a spinner means still running
-      if(sw && sw.querySelector('svg')){{
-        tid=setTimeout(check,180);
-      }} else {{
-        // Idle — hide with tiny delay so content renders first
-        tid=setTimeout(hide,120);
-      }}
-    }}
-    // Give Streamlit a moment to start the rerun before we begin polling
-    tid=setTimeout(check,250);
-    // Hard safety cap
-    setTimeout(function(){{if(active)hide();}},8000);
-  }}
-
-  d.addEventListener('click',function(e){{
-    var btn=e.target.closest('button');
-    if(!btn) return;
-    if(btn.closest('#gxp-lnav')) return;          // sidebar nav
-    if(btn.getAttribute('aria-label')==='Close') return; // dialog X
-    if(btn.closest('[role="dialog"]')&&
-       btn.getAttribute('type')==='button'&&
-       !btn.closest('[data-testid="stButton"]')) return; // internal dialog controls
-    show();
-    pollUntilIdle();
-  }},true);
-}})();
-</script>
-""", height=0, scrolling=False)
 
 # Keep URL in sync so F5 refresh lands on the right page.
 
@@ -782,21 +832,35 @@ if st.query_params.get("page") != page:
     st.query_params["page"] = page
 
 st.sidebar.divider()
+
+# ============================================================
+# Hidden company-switch trigger buttons
+# The JS overlay's <select> calls clickNav("__cosw__{id}")
+# which finds these hidden buttons and clicks them.
+# ============================================================
+for _co in _accessible_now:
+    _cosw_key = f"__cosw__{_co['id']}"
+    if st.sidebar.button(_cosw_key, key=f"_cosw_{_co['id']}"):
+        update_active_company(_co["id"], _co["role"], _co["name"])
+        st.session_state.nav_page = "Dashboard"
+        st.rerun()
+
 st.sidebar.caption("GenXcript Payroll SaaS v0.1.0")
 
-if st.sidebar.button("👤 My Account", width="stretch"):
+if st.sidebar.button("My Account", width="stretch"):
     st.session_state["_show_my_account"] = True
     st.rerun()
 
 if st.sidebar.button("Sign Out", width="stretch"):
     logout()
-    st.rerun()
+    components.html('<script>window.parent.location.reload(true);</script>', height=0)
+    st.stop()
 
 # ============================================================
 # My Account dialog
 # ============================================================
 
-@st.dialog("👤 My Account")
+@st.dialog("My Account")
 def _my_account_dialog():
     email = get_current_user_email()
     display_name = get_current_display_name()
@@ -818,7 +882,7 @@ def _my_account_dialog():
         else:
             ok, err = update_own_display_name(new_name)
             if ok:
-                st.toast("Display name updated!", icon="✅")
+                st.toast("Display name updated!", icon=":material/check_circle:")
                 st.rerun()
             else:
                 st.error(err)
@@ -855,47 +919,43 @@ if st.session_state.pop("_show_my_account", False):
 
 def _render_page(page: str) -> None:
     if page == "Dashboard":
-        from app.pages.dashboard import render as render_dashboard
+        from app.pages._dashboard import render as render_dashboard
         render_dashboard()
 
     elif page == "Employees":
-        from app.pages.employees import render
+        from app.pages._employees import render
         render()
 
     elif page == "Payroll Run":
-        from app.pages.payroll_run import render as render_payroll
+        from app.pages._payroll_run import render as render_payroll
         render_payroll()
 
-    elif page == "Payslips":
-        from app.pages.payslips import render as render_payslips
-        render_payslips()
-
     elif page == "Payroll Comparison":
-        from app.pages.payroll_comparison import render as render_comparison
+        from app.pages._payroll_comparison import render as render_comparison
         render_comparison()
 
     elif page == "OT Analytics":
-        from app.pages.ot_heatmap import render as render_ot
+        from app.pages._ot_heatmap import render as render_ot
         render_ot()
 
     elif page == "Attendance":
-        from app.pages.dtr import render as render_dtr
+        from app.pages._dtr import render as render_dtr
         render_dtr()
 
     elif page == "Government Reports":
-        from app.pages.government_reports import render as render_gov_reports
+        from app.pages._government_reports import render as render_gov_reports
         render_gov_reports()
 
     elif page == "Calendar":
-        from app.pages.calendar_view import render as render_calendar
+        from app.pages._calendar_view import render as render_calendar
         render_calendar()
 
     elif page == "Company Setup":
-        from app.pages.company_setup import render as render_company
+        from app.pages._company_setup import render as render_company
         render_company()
 
     elif page == "Preferences":
-        from app.pages.preferences import render as render_preferences
+        from app.pages._preferences import render as render_preferences
         render_preferences()
 
 
@@ -912,8 +972,8 @@ except Exception as _page_exc:
             pass
         logout()
         st.error(
-            "⚠️ Your session has expired. Please sign in again.",
-            icon="🔒",
+            "Your session has expired. Please sign in again.",
+            icon=":material/lock:",
         )
         st.rerun()
     else:

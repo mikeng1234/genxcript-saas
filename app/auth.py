@@ -131,6 +131,14 @@ def _store_session(
     st.session_state.accessible_companies  = accessible_companies
     st.session_state.company_name          = company_name
 
+    # Load persisted theme / display preferences for this user
+    try:
+        from app.pages._preferences import load_user_prefs
+        load_user_prefs(user_id)
+        st.session_state._gxp_prefs_loaded = user_id  # sentinel
+    except Exception:
+        pass
+
     token = str(uuid.uuid4())
     _session_cache()[token] = {
         "user_id":               user_id,
@@ -168,6 +176,18 @@ def restore_from_query_params() -> bool:
     st.session_state.user_role            = session.get("user_role", "admin")
     st.session_state.accessible_companies = session.get("accessible_companies", [])
     st.session_state.company_name         = session.get("company_name", "")
+
+    # Load persisted preferences once per user per server session
+    # (sentinel avoids a DB hit on every page navigation rerun)
+    uid = session["user_id"]
+    if st.session_state.get("_gxp_prefs_loaded") != uid:
+        try:
+            from app.pages._preferences import load_user_prefs
+            load_user_prefs(uid)
+            st.session_state._gxp_prefs_loaded = uid
+        except Exception:
+            pass
+
     return True
 
 
@@ -220,11 +240,9 @@ def add_accessible_company(company: dict) -> None:
 
 def ensure_accessible_companies_loaded() -> None:
     """
-    Lazy-load accessible_companies for sessions created before this feature
-    (e.g. server cache was cleared).  No-op if already populated.
+    Always reload accessible_companies from DB so newly-granted company
+    access is picked up without requiring a logout/login cycle.
     """
-    if st.session_state.get("accessible_companies"):
-        return
     user_id = st.session_state.get("user_id")
     if not user_id:
         return

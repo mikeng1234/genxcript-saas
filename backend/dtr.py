@@ -18,7 +18,7 @@ Usage:
         grace_minutes=5,
     )
     # DTRResult(gross_hours=7.25, late_minutes=40, undertime_minutes=0,
-    #           ot_hours=0.0, status='present')
+    #           ot_hours=0.0, nsd_hours=0.0, status='present')
 """
 
 import math
@@ -35,6 +35,7 @@ class DTRResult:
     late_minutes: int         # Minutes arrived after grace period
     undertime_minutes: int    # Minutes left before scheduled end
     ot_hours: float           # Hours worked beyond expected shift
+    nsd_hours: float          # Hours worked in NSD window (10PM–6AM, DOLE mandated +10%)
     status: str               # 'present' | 'absent' | 'half_day'
 
 
@@ -80,6 +81,39 @@ def nearest_location(lat: float, lng: float, locations: list[dict]) -> Optional[
     return best
 
 
+def compute_nsd_hours(time_in: time, time_out: time, is_overnight: bool) -> float:
+    """
+    Compute hours worked within the Night Shift Differential window.
+
+    Under DOLE regulations (Labor Code Art. 86), NSD is mandated for every
+    hour worked between 10:00 PM and 6:00 AM — a 10% premium on top of the
+    regular hourly rate.
+
+    Returns total NSD hours as a float (e.g. 2.5).
+    """
+    in_m  = _to_min(time_in)
+    out_m = _to_min(time_out)
+
+    # For overnight shifts extend out_m past midnight
+    if is_overnight and out_m <= in_m:
+        out_m += 1440
+
+    def _overlap(w_start: int, w_end: int) -> int:
+        """Return overlap in minutes between [in_m, out_m] and [w_start, w_end]."""
+        return max(0, min(out_m, w_end) - max(in_m, w_start))
+
+    nsd_min = 0
+    # Window A: 10 PM–midnight on day 1  (1320–1440)
+    nsd_min += _overlap(22 * 60, 24 * 60)
+    # Window B: midnight–6 AM on day 1   (0–360) — for shifts starting after midnight
+    nsd_min += _overlap(0, 6 * 60)
+    # Window C: midnight–6 AM on day 2   (1440–1800) — for overnight shifts
+    if out_m > 1440:
+        nsd_min += _overlap(1440, 1440 + 6 * 60)
+
+    return round(nsd_min / 60, 2)
+
+
 # ── Core computation ──────────────────────────────────────────────────────────
 
 def compute_dtr(
@@ -116,6 +150,7 @@ def compute_dtr(
             late_minutes=0,
             undertime_minutes=0,
             ot_hours=0.0,
+            nsd_hours=0.0,
             status="absent",
         )
 
@@ -145,10 +180,18 @@ def compute_dtr(
     gross_h   = round(gross_min / 60, 2)
 
     # ── OT ────────────────────────────────────────────────────────────────────
-    # Hours worked beyond expected shift length
-    exp_min = max(0, int(expected_hours * 60))
-    ot_min  = max(0, gross_min - exp_min)
-    ot_h    = round(ot_min / 60, 2)
+    # OT is time worked PAST the scheduled end, independent of clock-in time.
+    # This means:
+    #   • A late employee who still leaves after the scheduled end gets full OT.
+    #   • An early clock-in does NOT generate OT (start is clamped to s_m).
+    #   • Consistent with DOLE: overtime starts when regular working hours end.
+    ot_min = max(0, out_m - e_m)
+    ot_h   = round(ot_min / 60, 2)
+
+    # ── Night Shift Differential (NSD) ────────────────────────────────────────
+    # DOLE Labor Code Art. 86: 10% premium for every hour between 10PM–6AM.
+    # Computed separately; used by payroll to apply the NSD premium.
+    nsd_h = compute_nsd_hours(time_in, time_out, is_overnight)
 
     # ── Status ────────────────────────────────────────────────────────────────
     if gross_h < 0.5:
@@ -163,6 +206,7 @@ def compute_dtr(
         late_minutes=late_min,
         undertime_minutes=undertime_min,
         ot_hours=ot_h,
+        nsd_hours=nsd_h,
         status=status,
     )
 

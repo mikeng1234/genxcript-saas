@@ -139,6 +139,9 @@ ALTER TABLE dtr_corrections   ENABLE ROW LEVEL SECURITY;
 -- Admin/viewer: full CRUD
 -- Employee: read all active locations for their company (needed for geofencing check)
 
+DROP POLICY IF EXISTS "loc_admin"          ON company_locations;
+DROP POLICY IF EXISTS "loc_employee_read"  ON company_locations;
+
 CREATE POLICY "loc_admin" ON company_locations
   FOR ALL USING (
     company_id IN (
@@ -157,6 +160,11 @@ CREATE POLICY "loc_employee_read" ON company_locations
 -- ── time_logs ─────────────────────────────────────────────────────────────────
 -- Admin/viewer: full CRUD for all employees in their company
 -- Employee: SELECT own rows only (to view their own DTR)
+
+DROP POLICY IF EXISTS "tlog_admin"           ON time_logs;
+DROP POLICY IF EXISTS "tlog_employee_read"   ON time_logs;
+DROP POLICY IF EXISTS "tlog_employee_write"  ON time_logs;
+DROP POLICY IF EXISTS "tlog_employee_update" ON time_logs;
 
 CREATE POLICY "tlog_admin" ON time_logs
   FOR ALL USING (
@@ -192,6 +200,10 @@ CREATE POLICY "tlog_employee_update" ON time_logs
 -- ── dtr_corrections ───────────────────────────────────────────────────────────
 -- Admin/viewer: full access (review + approve/reject)
 -- Employee: SELECT + INSERT own records only
+
+DROP POLICY IF EXISTS "dtrcorr_admin"           ON dtr_corrections;
+DROP POLICY IF EXISTS "dtrcorr_employee_read"   ON dtr_corrections;
+DROP POLICY IF EXISTS "dtrcorr_employee_insert" ON dtr_corrections;
 
 CREATE POLICY "dtrcorr_admin" ON dtr_corrections
   FOR ALL USING (

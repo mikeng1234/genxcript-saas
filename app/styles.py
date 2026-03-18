@@ -7,6 +7,7 @@ Call inject_css() once per page render.
 """
 
 import streamlit as st
+import streamlit.components.v1 as _components
 
 
 # ============================================================
@@ -16,7 +17,7 @@ import streamlit as st
 THEMES: dict[str, dict] = {
     "midnight": {
         "label": "Midnight Navy",
-        "emoji": "🌙",
+        "emoji": '<i class="mdi mdi-weather-night"></i>',
         "swatches": ["#0f172a", "#1e2530", "#3b82f6", "#93c5fd"],
         "vars": {
             "--gxp-bg":         "#0f172a",
@@ -42,7 +43,7 @@ THEMES: dict[str, dict] = {
     },
     "lavender": {
         "label": "Lavender Dusk",
-        "emoji": "💜",
+        "emoji": '<i class="mdi mdi-star-four-points"></i>',
         "swatches": ["#100d1e", "#1a1530", "#a78bfa", "#ddd6fe"],
         "vars": {
             "--gxp-bg":         "#100d1e",
@@ -68,7 +69,7 @@ THEMES: dict[str, dict] = {
     },
     "forest": {
         "label": "Forest Moss",
-        "emoji": "🌿",
+        "emoji": '<i class="mdi mdi-leaf"></i>',
         "swatches": ["#0d1a12", "#162118", "#4ade80", "#bbf7d0"],
         "vars": {
             "--gxp-bg":         "#0d1a12",
@@ -94,7 +95,7 @@ THEMES: dict[str, dict] = {
     },
     "rose": {
         "label": "Rose Quartz",
-        "emoji": "🌹",
+        "emoji": '<i class="mdi mdi-flower-poppy"></i>',
         "swatches": ["#1a1014", "#251520", "#fb7185", "#fecdd3"],
         "vars": {
             "--gxp-bg":         "#1a1014",
@@ -120,7 +121,7 @@ THEMES: dict[str, dict] = {
     },
     "amber": {
         "label": "Amber Ember",
-        "emoji": "🔥",
+        "emoji": '<i class="mdi mdi-fire"></i>',
         "swatches": ["#1a1508", "#251e0d", "#fbbf24", "#fef3c7"],
         "vars": {
             "--gxp-bg":         "#1a1508",
@@ -146,7 +147,7 @@ THEMES: dict[str, dict] = {
     },
     "ocean": {
         "label": "Ocean Mist",
-        "emoji": "🌊",
+        "emoji": '<i class="mdi mdi-waves"></i>',
         "swatches": ["#0d1820", "#132030", "#22d3ee", "#a5f3fc"],
         "vars": {
             "--gxp-bg":         "#0d1820",
@@ -172,7 +173,7 @@ THEMES: dict[str, dict] = {
     },
     "sakura": {
         "label": "Sakura",
-        "emoji": "🌸",
+        "emoji": '<i class="mdi mdi-flower"></i>',
         "swatches": ["#180f14", "#221520", "#f472b6", "#fce7f3"],
         "vars": {
             "--gxp-bg":         "#180f14",
@@ -198,7 +199,7 @@ THEMES: dict[str, dict] = {
     },
     "slate": {
         "label": "Charcoal Slate",
-        "emoji": "🪨",
+        "emoji": '<i class="mdi mdi-hexagon-outline"></i>',
         "swatches": ["#111827", "#1f2937", "#60a5fa", "#bfdbfe"],
         "vars": {
             "--gxp-bg":         "#111827",
@@ -226,7 +227,7 @@ THEMES: dict[str, dict] = {
     # ── Light Themes ─────────────────────────────────────────
     "cloud": {
         "label": "Cloud",
-        "emoji": "☁️",
+        "emoji": '<i class="mdi mdi-cloud-outline"></i>',
         "light": True,
         "swatches": ["#f8fafc", "#ffffff", "#3b82f6", "#1e40af"],
         "vars": {
@@ -253,7 +254,7 @@ THEMES: dict[str, dict] = {
     },
     "parchment": {
         "label": "Parchment",
-        "emoji": "📜",
+        "emoji": '<i class="mdi mdi-file-outline"></i>',
         "light": True,
         "swatches": ["#fdf8f0", "#ffffff", "#b45309", "#78350f"],
         "vars": {
@@ -280,7 +281,7 @@ THEMES: dict[str, dict] = {
     },
     "mint": {
         "label": "Mint Fresh",
-        "emoji": "🍃",
+        "emoji": '<i class="mdi mdi-sprout"></i>',
         "light": True,
         "swatches": ["#f0fdf4", "#ffffff", "#059669", "#065f46"],
         "vars": {
@@ -307,7 +308,7 @@ THEMES: dict[str, dict] = {
     },
     "blush": {
         "label": "Blush",
-        "emoji": "🌷",
+        "emoji": '<i class="mdi mdi-flower-tulip"></i>',
         "light": True,
         "swatches": ["#fdf2f8", "#ffffff", "#db2777", "#831843"],
         "vars": {
@@ -334,7 +335,7 @@ THEMES: dict[str, dict] = {
     },
     "sky": {
         "label": "Sky",
-        "emoji": "🩵",
+        "emoji": '<i class="mdi mdi-weather-partly-cloudy"></i>',
         "light": True,
         "swatches": ["#f0f9ff", "#ffffff", "#0284c7", "#075985"],
         "vars": {
@@ -361,7 +362,7 @@ THEMES: dict[str, dict] = {
     },
     "lavender_light": {
         "label": "Lavender Mist",
-        "emoji": "🪻",
+        "emoji": '<i class="mdi mdi-flower-outline"></i>',
         "light": True,
         "swatches": ["#faf5ff", "#ffffff", "#7c3aed", "#4c1d95"],
         "vars": {
@@ -388,7 +389,7 @@ THEMES: dict[str, dict] = {
     },
     "sand": {
         "label": "Sand Dune",
-        "emoji": "🏜️",
+        "emoji": '<i class="mdi mdi-weather-sunny"></i>',
         "light": True,
         "swatches": ["#fefce8", "#fffef5", "#ca8a04", "#713f12"],
         "vars": {
@@ -415,7 +416,7 @@ THEMES: dict[str, dict] = {
     },
     "sage": {
         "label": "Sage",
-        "emoji": "🌾",
+        "emoji": '<i class="mdi mdi-barley"></i>',
         "light": True,
         "swatches": ["#f7fee7", "#ffffff", "#4d7c0f", "#1a2e05"],
         "vars": {
@@ -490,6 +491,12 @@ GOV_COLORS = {
 
 def inject_css():
     """Inject shared CSS with active theme variables. Call once per page render()."""
+    # Load MDI font — @import inside <style> is reliably processed by all browsers
+    st.markdown(
+        "<style>@import url('https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css');</style>",
+        unsafe_allow_html=True,
+    )
+
     theme   = _get_theme()
     t_vars  = theme["vars"]
     is_light = theme.get("light", False)
@@ -678,6 +685,7 @@ def inject_css():
         display: flex;
         flex-direction: column;
         height: 100%;
+        min-height: 116px;
         box-sizing: border-box;
     }
     .gxp-remit-card h4 {
@@ -849,15 +857,22 @@ def inject_css():
         transition: box-shadow 0.15s ease, transform 0.15s ease;
     }
 
-    /*
-     * ── Reminder + Alert pills — scoped with :not() so ONLY the leaf column
-     *    that holds exactly ONE marker fires, blocking false matches on the
-     *    outer col_alerts (which contains ALL markers) and on sibling columns
-     *    that contain NONE of the markers.
-     * ─────────────────────────────────────────────────────────────────────── */
+    /* ── Reminder pills — stat-card pattern, guarded against col_alerts bleed ──
+     *
+     * PROBLEM: stHorizontalBlock:has(.gxp-remind-leave) matches BOTH the inner
+     * 2-col reminders row AND the outer 3-col row (col_alerts|col_charts|col_remit),
+     * because the outer row contains those markers as descendants.  col_alerts is
+     * nth-child(1) of that outer row, so hovering any alert card (inside col_alerts)
+     * also triggers the reminder pill hover via the outer stHorizontalBlock → col_alerts.
+     *
+     * FIX: add :not(:has(.gxp-alert-gov-marker)) to the stColumn condition.
+     *   col_l / col_r  → no alert marker → MATCHES (correct)
+     *   col_alerts     → has alert marker as descendant → EXCLUDED
+     * ──────────────────────────────────────────────────────────────────────── */
 
-    /* ── BASE: Leave pill (inner leave-column only) ── */
-    [data-testid="stColumn"]:has(.gxp-remind-leave):not(:has(.gxp-remind-ot))
+    /* Base: collapsed pill — only in reminder leaf columns, not in col_alerts */
+    [data-testid="stHorizontalBlock"]
+        > [data-testid="stColumn"]:has(.gxp-remind-leave, .gxp-remind-ot):not(:has(.gxp-alert-gov-marker))
         [data-testid="stButton"] button {
         height:        10px              !important;
         min-height:    0                 !important;
@@ -866,16 +881,20 @@ def inject_css():
         color:         rgba(255,255,255,0) !important;
         border:        none              !important;
         border-radius: 99px             !important;
-        background:    rgba(124,58,237,0.18) !important;
+        background:    var(--gxp-border) !important;
         box-shadow:    none              !important;
         cursor:        pointer           !important;
         overflow:      hidden            !important;
         letter-spacing: 0.3px           !important;
         font-weight:   600               !important;
-        transition:    background 0.2s, box-shadow 0.2s, height 0.18s, color 0.15s !important;
+        transition:    background 0.2s ease,
+                       box-shadow 0.2s ease,
+                       height     0.18s ease,
+                       color      0.15s ease !important;
     }
-    /* Hover: purple glow */
-    [data-testid="stColumn"]:has(.gxp-remind-leave):not(:has(.gxp-remind-ot)):hover
+    /* col_l hover: leave pill — purple */
+    [data-testid="stHorizontalBlock"]
+        > [data-testid="stColumn"]:has(.gxp-remind-leave):not(:has(.gxp-alert-gov-marker)):hover
         [data-testid="stButton"] button {
         height:     26px  !important;
         font-size:  9px   !important;
@@ -884,27 +903,9 @@ def inject_css():
         box-shadow: 0 0 0 3px rgba(124,58,237,0.25),
                     0 0 16px 5px rgba(124,58,237,0.45) !important;
     }
-
-    /* ── BASE: OT pill (inner OT-column only) ── */
-    [data-testid="stColumn"]:has(.gxp-remind-ot):not(:has(.gxp-remind-leave))
-        [data-testid="stButton"] button {
-        height:        10px              !important;
-        min-height:    0                 !important;
-        padding:       0 8px            !important;
-        font-size:     0                 !important;
-        color:         rgba(255,255,255,0) !important;
-        border:        none              !important;
-        border-radius: 99px             !important;
-        background:    rgba(2,132,199,0.18) !important;
-        box-shadow:    none              !important;
-        cursor:        pointer           !important;
-        overflow:      hidden            !important;
-        letter-spacing: 0.3px           !important;
-        font-weight:   600               !important;
-        transition:    background 0.2s, box-shadow 0.2s, height 0.18s, color 0.15s !important;
-    }
-    /* Hover: blue glow */
-    [data-testid="stColumn"]:has(.gxp-remind-ot):not(:has(.gxp-remind-leave)):hover
+    /* col_r hover: OT pill — blue */
+    [data-testid="stHorizontalBlock"]
+        > [data-testid="stColumn"]:has(.gxp-remind-ot):not(:has(.gxp-alert-gov-marker)):hover
         [data-testid="stButton"] button {
         height:     26px  !important;
         font-size:  9px   !important;
@@ -913,11 +914,12 @@ def inject_css():
         box-shadow: 0 0 0 3px rgba(2,132,199,0.25),
                     0 0 16px 5px rgba(2,132,199,0.45) !important;
     }
-
-    /* Card lifts on hover (scoped same way) */
-    [data-testid="stColumn"]:has(.gxp-remind-leave):not(:has(.gxp-remind-ot)):hover
+    /* Card lift on column hover */
+    [data-testid="stHorizontalBlock"]
+        > [data-testid="stColumn"]:has(.gxp-remind-leave):not(:has(.gxp-alert-gov-marker)):hover
         .gxp-remind-leave,
-    [data-testid="stColumn"]:has(.gxp-remind-ot):not(:has(.gxp-remind-leave)):hover
+    [data-testid="stHorizontalBlock"]
+        > [data-testid="stColumn"]:has(.gxp-remind-ot):not(:has(.gxp-alert-gov-marker)):hover
         .gxp-remind-ot {
         box-shadow: 0 8px 24px rgba(0,0,0,0.10) !important;
         transform:  translateY(-4px) !important;
@@ -1182,31 +1184,31 @@ def inject_css():
     /* Every nav button: flat, left-aligned, icon + label */
     [data-testid="stSidebarContent"] .gxp-nav-marker
         + [data-testid="stButton"] button {
-        background:      transparent !important;
-        border:          none        !important;
-        box-shadow:      none        !important;
-        text-align:      left        !important;
-        justify-content: flex-start  !important;
-        padding:         6px 10px    !important;
-        border-radius:   7px         !important;
-        font-size:       13px        !important;
-        font-weight:     400         !important;
-        color:           #374151     !important;
-        width:           100%        !important;
+        background:      transparent           !important;
+        border:          none                  !important;
+        box-shadow:      none                  !important;
+        text-align:      left                  !important;
+        justify-content: flex-start            !important;
+        padding:         6px 10px             !important;
+        border-radius:   7px                   !important;
+        font-size:       13px                  !important;
+        font-weight:     400                   !important;
+        color:           var(--gxp-text2)      !important;
+        width:           100%                  !important;
         transition:      background .12s ease, color .12s ease;
     }
     [data-testid="stSidebarContent"] .gxp-nav-marker
         + [data-testid="stButton"] button:hover {
-        background: #f3f4f6 !important;
-        color:      #111827 !important;
+        background: var(--gxp-surface2) !important;
+        color:      var(--gxp-text)     !important;
     }
 
     /* Active page highlight */
     [data-testid="stSidebarContent"] .gxp-nav-marker.gxp-nav-active
         + [data-testid="stButton"] button {
-        background:  #eff6ff !important;
-        color:       #1d4ed8 !important;
-        font-weight: 600     !important;
+        background:  var(--gxp-accent-bg) !important;
+        color:       var(--gxp-accent-fg) !important;
+        font-weight: 600                  !important;
     }
 
     /* Remove Streamlit's default gap between marker+button pairs */
@@ -1236,7 +1238,162 @@ def inject_css():
     </style>
     """, unsafe_allow_html=True)
 
-    # ── 3. Table row-density CSS (compact / normal / relaxed) ─────
+    # ── 3. Button hover / press / ripple effects ──────────────────
+    st.markdown(
+        f"""<style>
+        /* ── Base: buttons have position:relative so ripple spans work ── */
+        .stButton > button,
+        [data-testid^="stBaseButton"] button {{
+            position: relative !important;
+            overflow: hidden !important;
+            transition:
+                transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+                filter 0.18s ease !important;
+        }}
+
+        /* ── Hover: lift + deepen shadow + accent glow ── */
+        .stButton > button:hover,
+        [data-testid^="stBaseButton"] button:hover {{
+            transform: scale(1.035) !important;
+            box-shadow:
+                0 2px 6px rgba(0,0,0,0.14),
+                0 6px 18px rgba(0,0,0,0.16),
+                0 0 0 3px {accent}26 !important;
+            filter: brightness(1.05) !important;
+        }}
+
+        /* ── Primary button: stronger accent glow on hover ── */
+        [data-testid="stBaseButton-primary"] button:hover {{
+            box-shadow:
+                0 2px 6px rgba(0,0,0,0.2),
+                0 8px 22px rgba(0,0,0,0.2),
+                0 0 0 4px {accent}40 !important;
+        }}
+
+        /* ── Press / active: scale down + inward shadow (tactile) ── */
+        .stButton > button:active,
+        [data-testid^="stBaseButton"] button:active {{
+            transform: scale(0.97) !important;
+            transition:
+                transform 0.08s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.08s cubic-bezier(0.4, 0, 0.2, 1),
+                filter 0.08s ease !important;
+            box-shadow:
+                inset 0 2px 4px rgba(0,0,0,0.18),
+                inset 0 1px 2px rgba(0,0,0,0.12) !important;
+            filter: brightness(0.96) !important;
+        }}
+
+        /* ── Ripple span ── */
+        @keyframes gxp-ripple {{
+            0%   {{ transform: scale(0);   opacity: 0.38; }}
+            70%  {{ transform: scale(2.8); opacity: 0.1; }}
+            100% {{ transform: scale(3.2); opacity: 0; }}
+        }}
+        .gxp-ripple-wave {{
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.45);
+            width: 120px;
+            height: 120px;
+            margin-top: -60px;
+            margin-left: -60px;
+            pointer-events: none;
+            animation: gxp-ripple 0.65s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+        }}
+        </style>""",
+        unsafe_allow_html=True,
+    )
+
+    # ── Ripple JS — listens for clicks in window.parent.document ──
+    _components.html("""
+<script>
+(function(){
+  var d = window.parent.document;
+  if (d._gxpRippleInit) return;
+  d._gxpRippleInit = true;
+
+  function attachRipple(btn) {
+    if (btn._gxpRipple) return;
+    btn._gxpRipple = true;
+    btn.addEventListener('pointerdown', function(e) {
+      var wave = d.createElement('span');
+      wave.className = 'gxp-ripple-wave';
+      var rect = btn.getBoundingClientRect();
+      wave.style.left = (e.clientX - rect.left) + 'px';
+      wave.style.top  = (e.clientY - rect.top)  + 'px';
+      btn.appendChild(wave);
+      wave.addEventListener('animationend', function() { wave.remove(); });
+    });
+  }
+
+  function scanButtons() {
+    d.querySelectorAll('.stButton > button, [data-testid^="stBaseButton"] button')
+      .forEach(attachRipple);
+  }
+
+  // Initial scan + re-scan on Streamlit re-renders
+  scanButtons();
+  new MutationObserver(function(ml) {
+    var changed = false;
+    for (var i = 0; i < ml.length; i++) {
+      if (ml[i].addedNodes.length) { changed = true; break; }
+    }
+    if (changed) scanButtons();
+  }).observe(d.body, { childList: true, subtree: true });
+})();
+</script>
+""", height=0, scrolling=False)
+
+    # ── 4. Dark-mode font visibility catch-all ───────────────────────
+    if not is_light:
+        st.markdown(
+            f"""<style>
+            /* ── Dark theme: ensure MDI icons inherit parent color ── */
+            i.mdi {{ color: inherit; }}
+
+            /* ── Caption / small helper text ── */
+            [data-testid="stCaptionContainer"] p,
+            [data-testid="stCaptionContainer"] span,
+            .stCaptionContainer p {{ color: {text2} !important; }}
+
+            /* ── Expander headers ── */
+            .stExpander summary p,
+            .stExpander summary span,
+            [data-testid="stExpander"] summary p {{ color: {text} !important; }}
+            [data-testid="stExpanderToggleIcon"] svg {{ color: {text2} !important; }}
+
+            /* ── Select / multiselect dropdown items ── */
+            [data-baseweb="menu"] li,
+            [data-baseweb="option"] {{ color: {text} !important; background: {surface} !important; }}
+            [data-baseweb="option"]:hover {{ background: {t_vars["--gxp-surface2"]} !important; }}
+
+            /* ── Multiselect tags ── */
+            [data-baseweb="tag"] span {{ color: {text} !important; }}
+
+            /* ── st.info / st.success / st.warning / st.error text ── */
+            .stAlert p, .stAlert div {{ color: inherit !important; }}
+
+            /* ── Markdown horizontal rule / divider ── */
+            hr {{ border-color: {border} !important; opacity: 0.5; }}
+
+            /* ── Code blocks ── */
+            .stCode pre, .stCode code {{ color: {text} !important; background: {t_vars["--gxp-surface2"]} !important; }}
+
+            /* ── Radio and checkbox label text ── */
+            .stRadio label span, .stCheckbox label span {{ color: {text} !important; }}
+
+            /* ── Number input arrows ── */
+            [data-testid="stNumberInput"] button {{ color: {text2} !important; }}
+
+            /* ── Plotly chart text (axis labels, legend) ── */
+            .stPlotlyChart text {{ fill: {text2} !important; }}
+            </style>""",
+            unsafe_allow_html=True,
+        )
+
+    # ── 5. Table row-density CSS (compact / normal / relaxed) ─────
     _density_px = {"compact": 24, "normal": 36, "relaxed": 52}
     _row_h = _density_px.get(
         st.session_state.get("gxp_table_density", "normal"), 36
@@ -1294,7 +1451,7 @@ def render_theme_picker():
             f'border:1px solid {swatch_border};"></span>'
             for c in theme["swatches"]
         )
-        check = "✓ " if is_active else ""
+        check = '<i class="mdi mdi-check" style="color:'+accent+';margin-right:2px;"></i> ' if is_active else ""
 
         st.markdown(
             f"""<div style="border:{border};border-radius:8px;padding:8px 10px;
@@ -1313,10 +1470,11 @@ def render_theme_picker():
                 st.session_state["gxp_theme"] = key
                 st.rerun()
 
-    with st.sidebar.expander("🎨 Themes", expanded=False):
+    with st.sidebar.expander("Themes", expanded=False):
         st.markdown(
             "<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
-            "letter-spacing:0.8px;color:#94a3b8;margin-bottom:6px;'>🌙 Dark</div>",
+            "letter-spacing:0.8px;color:#94a3b8;margin-bottom:6px;'>"
+            "<i class='mdi mdi-weather-night'></i>&nbsp;Dark</div>",
             unsafe_allow_html=True,
         )
         for key, theme in dark_themes.items():
@@ -1324,7 +1482,8 @@ def render_theme_picker():
 
         st.markdown(
             "<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
-            "letter-spacing:0.8px;color:#94a3b8;margin:10px 0 6px;'>☀️ Light</div>",
+            "letter-spacing:0.8px;color:#94a3b8;margin:10px 0 6px;'>"
+            "<i class='mdi mdi-weather-sunny'></i>&nbsp;Light</div>",
             unsafe_allow_html=True,
         )
         for key, theme in light_themes.items():
