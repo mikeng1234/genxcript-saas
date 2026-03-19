@@ -85,6 +85,29 @@ BEGIN
   END IF;
 
   -- ═══════════════════════════════════════════════════════════════════════════
+  -- 0. CLEANUP  (makes the script re-runnable / idempotent)
+  --    Delete all data previously seeded for this company so we can start fresh.
+  -- ═══════════════════════════════════════════════════════════════════════════
+
+  -- Clear FK references on employees before dropping schedules / templates
+  UPDATE employees SET schedule_id = NULL, leave_template_id = NULL
+    WHERE company_id = v_cid;
+
+  -- Cascade-delete pay_periods → payroll_entries
+  DELETE FROM pay_periods        WHERE company_id = v_cid;
+
+  -- Direct deletes (no cascade needed)
+  DELETE FROM time_logs          WHERE company_id = v_cid;
+  DELETE FROM leave_requests     WHERE company_id = v_cid;
+  DELETE FROM overtime_requests  WHERE company_id = v_cid;
+
+  -- Schedules and templates
+  DELETE FROM schedules                    WHERE company_id = v_cid;
+  DELETE FROM leave_entitlement_templates  WHERE company_id = v_cid;
+
+  RAISE NOTICE 'Cleanup complete — re-seeding fresh data.';
+
+  -- ═══════════════════════════════════════════════════════════════════════════
   -- 1. SCHEDULES
   -- ═══════════════════════════════════════════════════════════════════════════
 
