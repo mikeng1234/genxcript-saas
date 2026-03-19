@@ -197,14 +197,11 @@ def _render_daily_entry():
             st.error(msg)
 
     # ── Date navigation ──────────────────────────────────────
-    # Separate backing key so the Today button can write freely without
-    # hitting Streamlit's rule that forbids writing to a widget's own key
-    # after it has been instantiated in the same run.
-    if "dtr_nav_date" not in st.session_state:
-        st.session_state["dtr_nav_date"] = date.today()
-
-    # Pre-set the widget key BEFORE st.date_input() — only safe window.
-    st.session_state["dtr_date_picker"] = st.session_state["dtr_nav_date"]
+    # Initialise the widget key once; after that the widget owns its own value.
+    # The Today button writes directly to the key before st.rerun() so the
+    # upcoming widget instantiation picks up the forced date.
+    if "dtr_date_picker" not in st.session_state:
+        st.session_state["dtr_date_picker"] = date.today()
 
     col_date, _ = st.columns([2, 3])
     with col_date:
@@ -213,11 +210,9 @@ def _render_daily_entry():
             key="dtr_date_picker",
             label_visibility="collapsed",
         )
-        # Sync manual calendar picks back to the backing key
-        st.session_state["dtr_nav_date"] = work_date
 
     if st.button("Today", key="dtr_today", help="Jump to today"):
-        st.session_state["dtr_nav_date"] = date.today()
+        st.session_state["dtr_date_picker"] = date.today()
         st.rerun()
 
     st.caption(f"**{work_date.strftime('%A, %B %d, %Y')}**")
