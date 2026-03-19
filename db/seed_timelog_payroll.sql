@@ -116,7 +116,7 @@ BEGIN
     (company_id, name, vl_days, sl_days, cl_days,
      carry_over_cap, convertible_to_cash, conversion_rate)
   VALUES
-    (v_cid, 'Standard (Regular)', 15, 15, 5, 5, TRUE, 100000)
+    (v_cid, 'Standard (Regular)', 15, 15, 5, 5, TRUE, 1.00)
   RETURNING id INTO t_std;
 
   UPDATE employees SET leave_template_id = t_std WHERE company_id = v_cid;
