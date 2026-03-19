@@ -202,22 +202,23 @@ def _upsert_payroll_entry(pay_period_id: str, employee_id: str, data: dict) -> d
 
 
 def _load_dtr_summary_for_period(emp_id: str, p_start: str, p_end: str) -> dict:
-    """Sum nsd_hours and ot_hours from time_logs for an employee within a pay period."""
+    """Sum nsd_hours, ot_hours, and absent_days from time_logs for an employee within a pay period."""
     try:
         rows = (
             get_db().table("time_logs")
-            .select("nsd_hours,ot_hours")
+            .select("nsd_hours,ot_hours,status")
             .eq("employee_id", emp_id)
             .gte("work_date", p_start)
             .lte("work_date", p_end)
             .execute()
         ).data or []
         return {
-            "nsd_hours": round(sum(float(r.get("nsd_hours") or 0) for r in rows), 2),
-            "ot_hours":  round(sum(float(r.get("ot_hours")  or 0) for r in rows), 2),
+            "nsd_hours":   round(sum(float(r.get("nsd_hours") or 0) for r in rows), 2),
+            "ot_hours":    round(sum(float(r.get("ot_hours")  or 0) for r in rows), 2),
+            "absent_days": sum(1 for r in rows if r.get("status") == "absent"),
         }
     except Exception:
-        return {"nsd_hours": 0.0, "ot_hours": 0.0}
+        return {"nsd_hours": 0.0, "ot_hours": 0.0, "absent_days": 0}
 
 
 def _load_approved_ot_hours(emp_id: str, p_start: str, p_end: str) -> float:
@@ -237,13 +238,13 @@ def _load_approved_ot_hours(emp_id: str, p_start: str, p_end: str) -> float:
         return 0.0
 
 
-def _hourly_rate_centavos(emp: dict) -> float:
+def _hourly_rate_centavos(emp: dict, divisor: int = 26) -> float:
     """Compute the per-hour rate in centavos from the employee's basic_salary."""
     bs = emp.get("basic_salary") or 0
     salary_type = (emp.get("salary_type") or "monthly").lower()
     if salary_type == "daily":
-        return bs / 8.0          # daily_rate ÷ 8 hours
-    return bs / (26 * 8)         # monthly → 26 working days × 8 hours
+        return bs / 8.0
+    return bs / (divisor * 8)    # monthly → company divisor × 8 hours
 
 
 # ============================================================
@@ -321,9 +322,10 @@ def _render_pay_period_selector() -> dict | None:
     if st.session_state.get("show_new_period"):
         st.subheader("Create Pay Period")
 
-        # Load company pay frequency once
+        # Load company settings once
         company = _load_company()
         pay_frequency = company.get("pay_frequency", "semi-monthly")
+        daily_rate_divisor = int(company.get("daily_rate_divisor") or 26)
 
         # Compute sensible default start date based on frequency
         today = date.today()
@@ -441,14 +443,19 @@ def _render_employee_payroll(
             if _p_start and _p_end:
                 _dtr  = _load_dtr_summary_for_period(emp["id"], _p_start, _p_end)
                 _appr_ot_h = _load_approved_ot_hours(emp["id"], _p_start, _p_end)
-                _hr   = _hourly_rate_centavos(emp)
+                _hr   = _hourly_rate_centavos(emp, daily_rate_divisor)
 
                 _nsd_sugg   = _hr * _dtr["nsd_hours"] * 0.10
                 _ot_sugg    = _hr * _appr_ot_h        * 1.25
+                # Daily rate = basic_salary / company divisor (monthly) or as-is (daily)
+                _bs = emp.get("basic_salary") or 0
+                _salary_type = (emp.get("salary_type") or "monthly").lower()
+                _daily_rate  = _bs if _salary_type == "daily" else int(_bs / daily_rate_divisor)
+                _absent_sugg = _daily_rate * _dtr["absent_days"]
 
-                if _dtr["nsd_hours"] > 0 or _appr_ot_h > 0 or _dtr["ot_hours"] > 0:
-                    with st.expander("📊 DTR Insights for this period", expanded=False):
-                        _di1, _di2, _di3, _di4 = st.columns(4)
+                if _dtr["nsd_hours"] > 0 or _appr_ot_h > 0 or _dtr["ot_hours"] > 0 or _dtr["absent_days"] > 0:
+                    with st.expander("📊 DTR Insights for this period", expanded=_dtr["absent_days"] > 0):
+                        _di1, _di2, _di3, _di4, _di5, _di6 = st.columns(6)
                         _di1.metric("NSD Hours (DTR)", f"{_dtr['nsd_hours']:.2f} h",
                                     help="Total hours worked 10 PM–6 AM in this period per DTR.")
                         _di2.metric("NSD Suggested Pay",
@@ -459,11 +466,24 @@ def _render_employee_payroll(
                         _di4.metric("OT Suggested Pay",
                                     f"₱{_ot_sugg/100:,.2f}",
                                     help="Approved OT hrs × hourly rate × 125%")
+                        _di5.metric("Absent Days (DTR)", f"{_dtr['absent_days']} day(s)",
+                                    help="Days with status='absent' in DTR for this period.")
+                        _di6.metric("Absent Deduction",
+                                    f"₱{_absent_sugg/100:,.2f}",
+                                    delta=f"-₱{_absent_sugg/100:,.2f}" if _dtr["absent_days"] > 0 else None,
+                                    delta_color="inverse",
+                                    help="Daily rate × absent days. Auto-filled in deductions below.")
                         if _dtr["ot_hours"] != _appr_ot_h:
                             st.caption(
                                 f"ℹ️ DTR-computed OT: **{_dtr['ot_hours']:.2f} h** "
                                 f"vs. Approved OT: **{_appr_ot_h:.2f} h**. "
                                 "Payroll uses **approved** OT only."
+                            )
+                        if _dtr["absent_days"] > 0:
+                            st.caption(
+                                f"ℹ️ {_dtr['absent_days']} absent day(s) × "
+                                f"₱{_daily_rate/100:,.2f} daily rate = "
+                                f"**₱{_absent_sugg/100:,.2f}** auto-filled in Absent Deduction below."
                             )
 
         # --- Earnings input form ---
@@ -486,7 +506,7 @@ def _render_employee_payroll(
                     _p_e = period.get("period_end", "")
                     if _p_s and _p_e:
                         _appr_h = _load_approved_ot_hours(emp["id"], _p_s, _p_e)
-                        _ot_default = int(_hourly_rate_centavos(emp) * _appr_h * 1.25)
+                        _ot_default = int(_hourly_rate_centavos(emp, daily_rate_divisor) * _appr_h * 1.25)
                 overtime_pay = st.number_input(
                     "Overtime (₱)", min_value=0.0,
                     value=_centavos_to_pesos(_ot_default or 0),
@@ -508,7 +528,7 @@ def _render_employee_payroll(
                     _p_e2 = period.get("period_end", "")
                     if _p_s2 and _p_e2:
                         _dtr2 = _load_dtr_summary_for_period(emp["id"], _p_s2, _p_e2)
-                        _nd_default = int(_hourly_rate_centavos(emp) * _dtr2["nsd_hours"] * 0.10)
+                        _nd_default = int(_hourly_rate_centavos(emp, daily_rate_divisor) * _dtr2["nsd_hours"] * 0.10)
                 night_diff = st.number_input(
                     "Night Diff (₱)", min_value=0.0,
                     value=_centavos_to_pesos(_nd_default or 0),
@@ -550,29 +570,48 @@ def _render_employee_payroll(
 
             # --- Other deductions ---
             st.markdown("**Other Deductions**")
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
+                # Auto-suggest absent deduction from DTR if not yet saved
+                _absent_default = saved.get("absent_deduction")
+                if _absent_default is None and period and not is_finalized:
+                    _p_s3 = period.get("period_start", "")
+                    _p_e3 = period.get("period_end", "")
+                    if _p_s3 and _p_e3:
+                        _dtr3 = _load_dtr_summary_for_period(emp["id"], _p_s3, _p_e3)
+                        _bs3 = emp.get("basic_salary") or 0
+                        _st3 = (emp.get("salary_type") or "monthly").lower()
+                        _dr3 = _bs3 if _st3 == "daily" else int(_bs3 / daily_rate_divisor)
+                        _absent_default = _dr3 * _dtr3["absent_days"]
+                absent_ded = st.number_input(
+                    "Absent Deduction (₱)", min_value=0.0,
+                    value=_centavos_to_pesos(_absent_default or 0),
+                    step=100.0, format="%.2f",
+                    key=f"absent_{period_id}_{emp['id']}",
+                    help="Auto-computed: daily rate × absent days from DTR. Editable.",
+                )
+            with col2:
                 sss_loan = st.number_input(
                     "SSS Loan (₱)", min_value=0.0,
                     value=_centavos_to_pesos(saved.get("sss_loan", 0)),
                     step=100.0, format="%.2f",
                     key=f"sssl_{period_id}_{emp['id']}",
                 )
-            with col2:
+            with col3:
                 pagibig_loan = st.number_input(
                     "Pag-IBIG Loan (₱)", min_value=0.0,
                     value=_centavos_to_pesos(saved.get("pagibig_loan", 0)),
                     step=100.0, format="%.2f",
                     key=f"pil_{period_id}_{emp['id']}",
                 )
-            with col3:
+            with col4:
                 cash_advance = st.number_input(
                     "Cash Advance (₱)", min_value=0.0,
                     value=_centavos_to_pesos(saved.get("cash_advance", 0)),
                     step=100.0, format="%.2f",
                     key=f"ca_{period_id}_{emp['id']}",
                 )
-            with col4:
+            with col5:
                 other_ded = st.number_input(
                     "Other Deductions (₱)", min_value=0.0,
                     value=_centavos_to_pesos(saved.get("other_deductions", 0)),
@@ -592,13 +631,15 @@ def _render_employee_payroll(
             at_c = _pesos_to_centavos(allowances_t)
             comm_c = _pesos_to_centavos(commission)
             thirteenth_c = _pesos_to_centavos(thirteenth)
+            absent_c = _pesos_to_centavos(absent_ded)
             sssl_c = _pesos_to_centavos(sss_loan)
             pil_c = _pesos_to_centavos(pagibig_loan)
             ca_c = _pesos_to_centavos(cash_advance)
             other_c = _pesos_to_centavos(other_ded)
 
-            # Gross pay = sum of all earnings
-            gross = basic_c + ot_c + hol_c + nd_c + ant_c + at_c + comm_c + thirteenth_c
+            # Gross pay = earnings - absent deduction (before contributions)
+            gross = basic_c + ot_c + hol_c + nd_c + ant_c + at_c + comm_c + thirteenth_c - absent_c
+            gross = max(gross, 0)
 
             # Run computation engine
             result = compute_payroll(
@@ -606,7 +647,7 @@ def _render_employee_payroll(
                 nontaxable_allowances=ant_c,
             )
 
-            # Total voluntary deductions
+            # Total voluntary deductions (loans, advances, other)
             vol_deductions = sssl_c + pil_c + ca_c + other_c
 
             # Save to database
@@ -619,6 +660,7 @@ def _render_employee_payroll(
                 "allowances_taxable": at_c,
                 "commission": comm_c,
                 "thirteenth_month_accrual": thirteenth_c,
+                "absent_deduction": absent_c,
                 "gross_pay": gross,
                 "sss_employee": result.sss_employee,
                 "philhealth_employee": result.philhealth_employee,

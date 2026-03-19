@@ -22,6 +22,9 @@ class SSSRates:
     employer_rate: float    # 0.10
     msc_min: int            # minimum Monthly Salary Credit (centavos)
     msc_max: int            # maximum Monthly Salary Credit (centavos)
+    ec_low: int             # Employees' Compensation low bracket (centavos)   = 1_000 (₱10)
+    ec_high: int            # Employees' Compensation high bracket (centavos)  = 3_000 (₱30)
+    ec_threshold: int       # MSC at which EC switches to high (centavos)      = 1_500_000 (₱15,000)
 
 
 @dataclass
@@ -86,6 +89,9 @@ DEFAULT_SSS_RATES = SSSRates(
     employer_rate=0.10,
     msc_min=500_000,       # ₱5,000
     msc_max=3_500_000,     # ₱35,000
+    ec_low=1_000,          # ₱10  — MSC < ₱15,000
+    ec_high=3_000,         # ₱30  — MSC ≥ ₱15,000
+    ec_threshold=1_500_000,# ₱15,000 (SSS Circular 2024-006)
 )
 
 DEFAULT_PHILHEALTH_RATES = PhilHealthRates(
@@ -121,17 +127,24 @@ def compute_sss(monthly_salary: int, rates: SSSRates = DEFAULT_SSS_RATES) -> tup
     """
     Compute SSS contributions (employee share, employer share).
 
-    The Monthly Salary Credit (MSC) is clamped between msc_min and msc_max.
-    Employee pays 5% of MSC, employer pays 10% of MSC.
+    Per SSS Circular No. 2024-006 (effective January 2025):
+    - Employee Total = 5% of MSC (Regular SS + MPF portions, same rate)
+    - Employer Total = 10% of MSC (Regular SS + MPF) + EC
+      EC = ₱10 if MSC < ₱15,000, else ₱30 (Employees' Compensation Fund)
+
+    The MSC is clamped between msc_min (₱5,000) and msc_max (₱35,000).
 
     Returns:
-        (employee_share, employer_share) in centavos.
+        (employee_total, employer_total) in centavos.
+        employer_total already includes the EC amount.
     """
     # Clamp salary to MSC range
     msc = max(rates.msc_min, min(monthly_salary, rates.msc_max))
 
     employee = int(round(msc * rates.employee_rate))
-    employer = int(round(msc * rates.employer_rate))
+    employer_ss = int(round(msc * rates.employer_rate))
+    ec = rates.ec_high if msc >= rates.ec_threshold else rates.ec_low
+    employer = employer_ss + ec
 
     return employee, employer
 

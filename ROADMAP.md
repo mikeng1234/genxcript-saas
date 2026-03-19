@@ -55,6 +55,8 @@
 - [x] Remittance deadline adjustment — deadlines auto-shift past weekends and holidays *(done in backend/deadlines.py)*
 - [x] **Holiday Management UI** — Company Setup "Holidays" tab: national holidays read-only list with type badges, company-specific custom holiday CRUD *(migration 009)*
 - [x] **Holiday pay multiplier reference** — DOLE-mandated rate table (Regular 200%/260% OT, Special NW 130%/169% OT, rest day combos) in Company Setup as expandable reference for HR staff
+- [x] **Holiday observed date** — `observed_date` column on holidays (migration 019); national holidays shared across all companies (PH proclamations apply to all employers); company-added holidays scoped per company; observed_date override is system-wide (correct: government proclamation moves apply to all)
+- [ ] **Per-company holiday override** — allow a company to observe a national holiday on a different date than the proclamation (e.g., internal policy); requires company-specific shadow record instead of editing the shared national row *(deferred)*
 
 ### 3B — Employee Extended Information ✅ Complete
 - [x] Regularization date, separation date fields *(migration 010; renamed from "Resignation Date" to "Separation Date")*
@@ -141,13 +143,16 @@
 - [ ] Auto-deduction in payroll run per period
 
 ### 5B — Special Payroll Runs *(high priority — legally mandated)*
-- [ ] **13th Month Pay** — dedicated run type; automatically computes 1/12 of total basic pay earned in the calendar year per employee; Jan 31 DOLE deadline; generates 13th month payslips and summary report
+- [x] **DOLE 13th Month Pay Compliance Report** — PD 851 / DOLE LA 18-18 PDF with 4 sections: Establishment Info, Summary (total employed / benefitted / amount), Per-Employee breakdown sorted A–Z, Contact Person; new "DOLE 13th Month" tab in Government Reports; year selector, metrics, expandable table, PDF download *(reports/dole_13th_month_pdf.py, migration: thirteenth_month_accrual in annual_entries)*
+- [ ] **13th Month Pay Run** — dedicated payroll run type; auto-computes 1/12 of total basic pay per employee for the calendar year; generates 13th month payslips; links data to DOLE compliance report above *(Jan 31 DOLE deadline)*
 - [ ] **Backpay & Separation Pay** — final pay run for separated employees; computes: unpaid salary for days worked, pro-rated 13th month, cash conversion of unused convertible leave credits, and separation pay (½ month per year of service for authorized causes per DOLE Art. 298); links to Phase 3E exit record; generates final payslip
 - [ ] Mid-year bonus / performance bonus runs — custom multiplier, ad-hoc disbursement runs
 
 ### 5C — Flexible Transactions
 - [x] **Night Differential** — NSD hours computed from DTR (10PM–6AM per DOLE Art. 86); payroll run Night Diff input auto-pre-fills from nsd_hours × hourly_rate × 10% when no saved entry exists; DTR Insights panel shows suggestion vs actual *(migration 020, backend/dtr.py, _payroll_run.py)*
 - [x] **OT from approved requests** — Overtime input in payroll run auto-pre-fills from approved overtime_requests × hourly_rate × 125%; DTR Insights panel shows approved OT vs DTR-computed OT *(\_payroll_run.py)*
+- [x] **Absenteeism deduction** — absent_days from DTR auto-computed as daily_rate × absent_days; displayed as separate line item in Other Deductions; gross = max(basic + earnings − absent_deduction, 0); late/undertime/overbreak are metrics only (no pay deduction) *(\_payroll_run.py)*
+- [x] **Daily rate divisor** — company-level setting (22 = 6-day / 26 = 5-day DOLE standard / 30 = calendar month); migration 021; Payroll Policy section in Company Setup with live preview; governs all daily rate and absent deduction calculations *(\_company_setup.py, migration 021)*
 - [ ] Night diff + OT combination — "OT on night shift" rate (DOLE: regular OT 125% + night diff 10% = 137.5%); rate table shown in Company Setup alongside holiday pay reference
 - [ ] Payroll adjustments — ad-hoc corrections within a pay run (positive or negative)
 - [ ] Custom transaction types — define your own earning/deduction codes (e.g., "Rice Allowance", "Uniform Deduction")

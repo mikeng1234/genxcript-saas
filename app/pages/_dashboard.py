@@ -170,7 +170,7 @@ def _load_current_remittance_status() -> dict[str, dict | None]:
 def _get_deadlines(remittance_status: dict[str, dict | None] | None = None) -> list[dict]:
     db = get_db()
     today = date.today()
-    holidays = load_holiday_set(db, year=today.year)
+    holidays = load_holiday_set(db, year=today.year, company_id=get_company_id())
     remitted_set: set[tuple[str, int, int]] = set()
     if remittance_status:
         for agency, row in remittance_status.items():

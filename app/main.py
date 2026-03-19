@@ -28,19 +28,30 @@ from app.auth import (
 )
 
 # ── Sidebar: hide everything on first paint ───────────────────────────────────
-# This fires in the very first CSS batch Streamlit sends to the browser,
-# eliminating the flash of the auto-detected pages/ nav on the login screen.
-# Authenticated users get the sidebar re-shown further below (after auth check).
-st.markdown(
-    "<style>"
-    # Auto-generated pages/ nav — never shown (we use our own radio nav)
-    "[data-testid='stSidebarNav'],"
-    # Full sidebar panel + the collapsed-state toggle arrow
-    "[data-testid='stSidebar'],"
-    "[data-testid='stSidebarCollapsedControl']"
-    "{ display:none !important; }"
-    "</style>",
-    unsafe_allow_html=True,
+# st.markdown() CSS goes through React's render queue and always arrives a few
+# frames late — causing a visible sidebar flash on the login screen.
+# components.html() injects a <style> tag directly into window.parent.document
+# via JavaScript, which fires synchronously before React finishes painting,
+# eliminating the flash entirely.  The id prevents duplicate injections on reruns.
+components.html(
+    """
+    <script>
+    (function(){
+      var d = window.parent.document;
+      if (d.getElementById('gxp-hide-sidebar-early')) return;
+      var s = d.createElement('style');
+      s.id = 'gxp-hide-sidebar-early';
+      s.textContent =
+        '[data-testid="stSidebar"],'
+        '[data-testid="stSidebarCollapsedControl"],'
+        '[data-testid="stSidebarNav"]'
+        '{display:none!important;}';
+      d.head.appendChild(s);
+    })();
+    </script>
+    """,
+    height=0,
+    scrolling=False,
 )
 
 # ============================================================
@@ -136,17 +147,32 @@ if not is_logged_in():
         render_login()
     st.stop()
 
-# ── Authenticated path — re-show sidebar ──────────────────────────────────────
-# The hide-all CSS above fires first (top of file, first paint).
-# This override runs only when the user IS logged in; the later position in
-# the DOM means it wins the !important cascade for authenticated sessions.
-st.markdown(
-    "<style>"
-    "[data-testid='stSidebar'],"
-    "[data-testid='stSidebarCollapsedControl']"
-    "{ display:flex !important; }"
-    "</style>",
-    unsafe_allow_html=True,
+# ── Authenticated path — remove the early-hide style, re-show sidebar ─────────
+# The components.html() above injected 'gxp-hide-sidebar-early' into <head>
+# which hides the sidebar for ALL renders (login + authenticated).
+# Here we remove that tag so the native sidebar is visible again for logged-in
+# users (our JS overlay then moves it off-screen and builds its own nav).
+# stSidebarNav stays hidden via a separate rule (we use our own radio nav).
+components.html(
+    """
+    <script>
+    (function(){
+      var d = window.parent.document;
+      // Remove the early-hide rule so sidebar is visible for authenticated renders
+      var early = d.getElementById('gxp-hide-sidebar-early');
+      if (early) early.remove();
+      // Keep pages/ auto-nav hidden (we use our own nav)
+      if (!d.getElementById('gxp-hide-sidebar-nav')) {
+        var s = d.createElement('style');
+        s.id = 'gxp-hide-sidebar-nav';
+        s.textContent = '[data-testid="stSidebarNav"]{display:none!important;}';
+        d.head.appendChild(s);
+      }
+    })();
+    </script>
+    """,
+    height=0,
+    scrolling=False,
 )
 
 # ============================================================

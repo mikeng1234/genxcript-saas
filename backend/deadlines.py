@@ -115,28 +115,56 @@ def get_remittance_deadlines(
     return deadlines
 
 
-def load_holiday_set(db, year: int | None = None) -> set[date]:
+def load_holiday_set(db, year: int | None = None, company_id: str | None = None) -> set[date]:
     """
-    Load non-working holidays from the database and return as a set of dates.
+    Load non-working holidays and return as a set of effective dates.
 
-    Only includes 'regular' and 'special_non_working' types.
-    'special_working' days are excluded (they are business days).
+    - National holidays (company_id IS NULL) are included for all companies.
+    - Company-specific rows (company_id = <id>) shadow the same-named national holiday,
+      applying that company's proclaimed observed_date instead of the global one.
+    - 'special_working' days are excluded (they are treated as business days).
+
+    Parameters
+    ----------
+    company_id : str, optional
+        When provided, company-specific overrides for this company are merged in.
     """
-    query = (
+    def _to_date(v):
+        if v is None:
+            return None
+        return date.fromisoformat(v) if isinstance(v, str) else v
+
+    # 1. Load national holidays
+    nat_query = (
         db.table("holidays")
-        .select("holiday_date")
+        .select("name, holiday_date, observed_date")
         .in_("type", ["regular", "special_non_working"])
+        .is_("company_id", "null")
     )
     if year is not None:
-        query = query.eq("year", year)
+        nat_query = nat_query.eq("year", year)
+    national_rows = nat_query.execute().data or []
 
-    result = query.execute()
+    # Build map: name → effective date (prefer observed_date over holiday_date)
+    effective: dict[str, date] = {}
+    for row in national_rows:
+        raw = _to_date(row.get("observed_date")) or _to_date(row["holiday_date"])
+        if raw:
+            effective[row["name"]] = raw
 
-    holidays = set()
-    for row in result.data:
-        d = row["holiday_date"]
-        if isinstance(d, str):
-            holidays.add(date.fromisoformat(d))
-        else:
-            holidays.add(d)
-    return holidays
+    # 2. Merge company-specific overrides (they win over national dates)
+    if company_id:
+        co_query = (
+            db.table("holidays")
+            .select("name, holiday_date, observed_date")
+            .in_("type", ["regular", "special_non_working"])
+            .eq("company_id", company_id)
+        )
+        if year is not None:
+            co_query = co_query.eq("year", year)
+        for row in (co_query.execute().data or []):
+            raw = _to_date(row.get("observed_date")) or _to_date(row["holiday_date"])
+            if raw:
+                effective[row["name"]] = raw  # override national
+
+    return set(effective.values())

@@ -129,6 +129,43 @@ def _delete_custom_holiday(holiday_id: str):
     db.table("holidays").delete().eq("id", holiday_id).execute()
 
 
+def _upsert_national_holiday_override(national_row: dict, observed_date) -> None:
+    """
+    Create or update a company-specific override for a national holiday.
+    Never edits the global row — each company manages its own observed dates.
+    """
+    db  = get_db()
+    cid = get_company_id()
+    # Check if a company override already exists for this holiday (match name + year)
+    existing = (
+        db.table("holidays")
+        .select("id")
+        .eq("company_id", cid)
+        .eq("name", national_row["name"])
+        .eq("year", national_row["year"])
+        .execute()
+    )
+    val = observed_date.isoformat() if observed_date else None
+    if existing.data:
+        db.table("holidays").update({"observed_date": val}).eq("id", existing.data[0]["id"]).execute()
+    else:
+        db.table("holidays").insert({
+            "holiday_date":  national_row["holiday_date"],
+            "name":          national_row["name"],
+            "type":          national_row["type"],
+            "year":          national_row["year"],
+            "company_id":    cid,
+            "observed_date": val,
+        }).execute()
+
+
+def _delete_national_holiday_override(national_row: dict) -> None:
+    """Remove a company-specific override, restoring the national holiday date."""
+    db  = get_db()
+    cid = get_company_id()
+    db.table("holidays").delete().eq("company_id", cid).eq("name", national_row["name"]).eq("year", national_row["year"]).execute()
+
+
 # ============================================================
 # Database operations — Audit Log
 # ============================================================
@@ -591,7 +628,14 @@ def _render_holidays_tab():
 
     holidays = _load_holidays(year)
     national = [h for h in holidays if not h.get("company_id")]
-    custom   = [h for h in holidays if h.get("company_id")]
+    all_company = [h for h in holidays if h.get("company_id")]
+
+    # Build a lookup of company overrides for national holidays: name → override row
+    # These shadow the national row for THIS company only — never touch global rows.
+    _national_names = {h["name"] for h in national}
+    nat_overrides = {h["name"]: h for h in all_company if h["name"] in _national_names}
+    # True custom holidays = company rows that do NOT shadow a national holiday
+    custom = [h for h in all_company if h["name"] not in _national_names]
 
     # ── Add custom holiday ────────────────────────────────────────────────────
     add_col, _ = st.columns([1, 3])
@@ -708,29 +752,96 @@ def _render_holidays_tab():
     else:
         st.caption(f"No company-specific holidays added for {year}. Click **+ Add Company Holiday** to add one.")
 
-    # ── National holidays (read-only) ─────────────────────────────────────────
-    st.markdown(f"**National Holidays — {year}** *(read-only, PH Proclamation)*")
+    # ── National holidays — per-company observed_date override ───────────────
+    st.markdown(f"**National Holidays — {year}**")
+    st.caption(
+        "Dates are fixed by PH Proclamation and shared across all companies. "
+        "When the government moves a holiday for a long weekend (e.g., Rizal Day "
+        "proclaimed observed on Friday), set the **Observed Date** here — "
+        "this override applies to **your company only** and does not affect other accounts."
+    )
     if not national:
         st.info(f"No national holidays loaded for {year}. Run migration 004 to seed PH holidays.")
         return
 
-    hdr2 = st.columns([1.5, 4, 2.5])
-    for col, lbl in zip(hdr2, ["Date", "Name", "Type"]):
-        col.markdown(f"<span style='font-size:12px;color:#6b7280;font-weight:600'>{lbl}</span>",
-                     unsafe_allow_html=True)
+    hdr2 = st.columns([1.5, 3.5, 2.0, 2.0, 1.0])
+    for col, lbl in zip(hdr2, ["Original", "Name", "Type", "Your Observed Date", ""]):
+        col.markdown(
+            f"<span style='font-size:12px;color:#6b7280;font-weight:600'>{lbl}</span>",
+            unsafe_allow_html=True,
+        )
 
     for h in national:
-        row = st.columns([1.5, 4, 2.5])
+        hid = h["id"]
         try:
-            d = datetime.strptime(h["holiday_date"], "%Y-%m-%d").date()
-            row[0].markdown(
-                f"<span style='font-size:13px'>{d.strftime('%b %d')}</span>",
-                unsafe_allow_html=True,
-            )
+            orig_d = datetime.strptime(h["holiday_date"], "%Y-%m-%d").date()
         except Exception:
-            row[0].text(h["holiday_date"])
+            orig_d = None
+
+        # Look up this company's override (if any) for this national holiday
+        override = nat_overrides.get(h["name"])
+        obs_raw  = override.get("observed_date") if override else None
+        try:
+            obs_d = datetime.strptime(obs_raw, "%Y-%m-%d").date() if obs_raw else None
+        except Exception:
+            obs_d = None
+
+        row = st.columns([1.5, 3.5, 2.0, 2.0, 1.0])
+        row[0].markdown(
+            f"<span style='font-size:13px'>{orig_d.strftime('%b %d') if orig_d else h['holiday_date']}</span>",
+            unsafe_allow_html=True,
+        )
         row[1].text(h["name"])
         row[2].markdown(_holiday_type_badge(h["type"]), unsafe_allow_html=True)
+
+        if obs_d:
+            row[3].markdown(
+                f"<span style='color:#b45309;font-weight:600;font-size:13px'>"
+                f"→ {obs_d.strftime('%b %d')}</span>",
+                unsafe_allow_html=True,
+            )
+        else:
+            row[3].markdown(
+                f"<span style='color:#9ca3af;font-size:13px'>—</span>",
+                unsafe_allow_html=True,
+            )
+
+        with row[4]:
+            if st.button("Edit", key=f"nat_hol_edit_{hid}", help="Set your company's observed date"):
+                st.session_state[f"nat_hol_editing_{hid}"] = True
+
+        if st.session_state.get(f"nat_hol_editing_{hid}"):
+            with st.form(f"nat_hol_obs_form_{hid}", clear_on_submit=True):
+                st.markdown(
+                    f"**Observed date for: {h['name']}** *(original: "
+                    f"{orig_d.strftime('%b %d, %Y') if orig_d else h['holiday_date']})*"
+                )
+                new_obs = st.date_input(
+                    "Proclaimed observed date",
+                    value=obs_d or orig_d,
+                    help="The date your company observes this holiday per the latest proclamation.",
+                    key=f"nat_hol_obs_val_{hid}",
+                )
+                fc1, fc2, fc3 = st.columns(3)
+                submitted = fc1.form_submit_button("Save", type="primary")
+                cleared   = fc2.form_submit_button("Clear override")
+                cancelled = fc3.form_submit_button("Cancel")
+
+            if submitted:
+                _upsert_national_holiday_override(h, new_obs)
+                log_action("updated", "holiday", hid, f"{h['name']} company observed_date → {new_obs}")
+                st.session_state.pop(f"nat_hol_editing_{hid}", None)
+                st.success(f"Observed date set to **{new_obs.strftime('%b %d, %Y')}** for your company.")
+                st.rerun()
+            elif cleared:
+                _delete_national_holiday_override(h)
+                log_action("updated", "holiday", hid, f"{h['name']} company observed_date cleared")
+                st.session_state.pop(f"nat_hol_editing_{hid}", None)
+                st.success("Override cleared — national holiday date restored for your company.")
+                st.rerun()
+            elif cancelled:
+                st.session_state.pop(f"nat_hol_editing_{hid}", None)
+                st.rerun()
 
 
 # ============================================================
@@ -1930,6 +2041,41 @@ def render():
                 help="How often employees are paid",
             )
 
+            st.divider()
+
+            # --- Payroll Policy ---
+            st.subheader("Payroll Policy")
+            st.caption(
+                "These settings affect how payroll amounts are computed. "
+                "Changes apply to future payroll runs only."
+            )
+            _DIV_OPTIONS = [22, 26, 30]
+            _div_current = int(company.get("daily_rate_divisor") or 26)
+            if _div_current not in _DIV_OPTIONS:
+                _DIV_OPTIONS = sorted(set(_DIV_OPTIONS + [_div_current]))
+            daily_rate_divisor = st.selectbox(
+                "Daily Rate Divisor",
+                options=_DIV_OPTIONS,
+                index=_DIV_OPTIONS.index(_div_current),
+                format_func=lambda v: {
+                    22: "22 — Actual working days (excludes rest days & holidays)",
+                    26: "26 — DOLE standard (5-day workweek, default)",
+                    30: "30 — Calendar days",
+                }.get(v, str(v)),
+                help=(
+                    "Used to compute the daily rate from monthly salary:\n\n"
+                    "**Daily Rate = Monthly Basic ÷ Divisor**\n\n"
+                    "This affects absent deductions. "
+                    "DOLE guidelines default to 26 for a 5-day workweek."
+                ),
+            )
+            st.caption(
+                f"With your current setting: an employee earning ₱30,000/month "
+                f"has a daily rate of **₱{30_000/daily_rate_divisor:,.2f}**."
+            )
+
+            st.divider()
+
             # --- HR Policy ---
             st.subheader("HR Policy")
             hp1, hp2 = st.columns(2)
@@ -1986,6 +2132,7 @@ def render():
                             "address": address.strip(),
                             "region": region,
                             "pay_frequency": pay_frequency,
+                            "daily_rate_divisor": int(daily_rate_divisor),
                             "probationary_months": int(probationary_months),
                             "ot_min_hours": float(ot_min_hours),
                             "bir_tin": bir_tin.strip(),

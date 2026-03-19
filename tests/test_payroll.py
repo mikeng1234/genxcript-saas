@@ -27,44 +27,54 @@ from backend.payroll import (
 # ============================================================
 
 class TestSSS:
-    """SSS contribution tests (2025 rates: EE 5%, ER 10% of MSC)."""
+    """SSS contribution tests — SSS Circular No. 2024-006 (effective January 2025).
+
+    Employee Total = 5% of clamped MSC (Regular SS + MPF, same rate).
+    Employer Total = 10% of clamped MSC + EC (₱10 if MSC < ₱15k, ₱30 if MSC ≥ ₱15k).
+    """
 
     def test_minimum_salary(self):
-        """Salary below MSC min (₱5,000) should use MSC floor."""
+        """Salary below MSC min (₱5,000) — clamped to floor, EC = ₱10."""
         ee, er = compute_sss(300_000)  # ₱3,000
-        # MSC clamped to ₱5,000 = 500_000 centavos
-        assert ee == 25_000   # 5% of ₱5,000 = ₱250
-        assert er == 50_000   # 10% of ₱5,000 = ₱500
+        # MSC clamped to ₱5,000; EC = ₱10 (MSC < ₱15,000)
+        assert ee == 25_000    # 5%  × ₱5,000 = ₱250
+        assert er == 51_000    # 10% × ₱5,000 + ₱10 EC = ₱510
 
     def test_exact_minimum_msc(self):
-        """Salary exactly at MSC min (₱5,000)."""
+        """Salary exactly at MSC min (₱5,000), EC = ₱10."""
         ee, er = compute_sss(500_000)
-        assert ee == 25_000
-        assert er == 50_000
+        assert ee == 25_000    # ₱250
+        assert er == 51_000    # ₱510
 
     def test_mid_range_salary(self):
-        """₱15,000 salary — MSC = ₱15,000."""
+        """₱15,000 salary — EC jumps to ₱30 (MSC ≥ ₱15,000)."""
         ee, er = compute_sss(1_500_000)
-        assert ee == 75_000    # 5% of ₱15,000 = ₱750
-        assert er == 150_000   # 10% of ₱15,000 = ₱1,500
+        assert ee == 75_000    # 5%  × ₱15,000 = ₱750
+        assert er == 153_000   # 10% × ₱15,000 + ₱30 EC = ₱1,530
+
+    def test_just_below_ec_threshold(self):
+        """₱14,000 salary — EC still ₱10 (MSC < ₱15,000)."""
+        ee, er = compute_sss(1_400_000)
+        assert ee == 70_000    # 5%  × ₱14,000 = ₱700
+        assert er == 141_000   # 10% × ₱14,000 + ₱10 EC = ₱1,410
 
     def test_salary_25000(self):
-        """₱25,000 salary — typical SME employee."""
+        """₱25,000 salary — typical SME employee, EC = ₱30."""
         ee, er = compute_sss(2_500_000)
-        assert ee == 125_000   # 5% of ₱25,000 = ₱1,250
-        assert er == 250_000   # 10% of ₱25,000 = ₱2,500
+        assert ee == 125_000   # 5%  × ₱25,000 = ₱1,250
+        assert er == 253_000   # 10% × ₱25,000 + ₱30 EC = ₱2,530
 
     def test_maximum_msc(self):
-        """Salary at MSC max (₱35,000)."""
+        """Salary at MSC max (₱35,000), EC = ₱30."""
         ee, er = compute_sss(3_500_000)
-        assert ee == 175_000   # 5% of ₱35,000 = ₱1,750
-        assert er == 350_000   # 10% of ₱35,000 = ₱3,500
+        assert ee == 175_000   # 5%  × ₱35,000 = ₱1,750
+        assert er == 353_000   # 10% × ₱35,000 + ₱30 EC = ₱3,530
 
     def test_salary_above_maximum_msc(self):
-        """Salary above MSC max should be capped at ₱35,000."""
+        """Salary above MSC max — capped at ₱35,000, EC = ₱30."""
         ee, er = compute_sss(5_000_000)  # ₱50,000
-        assert ee == 175_000   # capped at MSC max
-        assert er == 350_000
+        assert ee == 175_000   # capped at ₱35,000 MSC
+        assert er == 353_000   # ₱3,500 + ₱30 EC = ₱3,530
 
 
 # ============================================================
@@ -242,9 +252,9 @@ class TestFullPayroll:
         """
         result = compute_payroll(gross_pay=2_500_000)
 
-        # SSS: 5% of ₱25,000 = ₱1,250
+        # SSS: 5% of ₱25,000 = ₱1,250 (employee); 10% × ₱25,000 + ₱30 EC = ₱2,530 (employer)
         assert result.sss_employee == 125_000
-        assert result.sss_employer == 250_000
+        assert result.sss_employer == 253_000
 
         # PhilHealth: 2.5% of ₱25,000 = ₱625
         assert result.philhealth_employee == 62_500
@@ -276,9 +286,9 @@ class TestFullPayroll:
         )
 
         # Contributions based on taxable gross (₱30,000)
-        # SSS: 5% of ₱30,000 = ₱1,500
+        # SSS: 5% of ₱30,000 = ₱1,500 (employee); 10% × ₱30,000 + ₱30 EC = ₱3,030 (employer)
         assert result.sss_employee == 150_000
-        assert result.sss_employer == 300_000
+        assert result.sss_employer == 303_000
 
         # PhilHealth: 2.5% of ₱30,000 = ₱750
         assert result.philhealth_employee == 75_000
@@ -302,9 +312,9 @@ class TestFullPayroll:
         """₱50,000/month — manager level."""
         result = compute_payroll(gross_pay=5_000_000)
 
-        # SSS: MSC capped at ₱35,000. 5% = ₱1,750
+        # SSS: MSC capped at ₱35,000. 5% = ₱1,750 (employee); 10% × ₱35,000 + ₱30 EC = ₱3,530 (employer)
         assert result.sss_employee == 175_000
-        assert result.sss_employer == 350_000
+        assert result.sss_employer == 353_000
 
         # PhilHealth: 2.5% of ₱50,000 = ₱1,250
         assert result.philhealth_employee == 125_000

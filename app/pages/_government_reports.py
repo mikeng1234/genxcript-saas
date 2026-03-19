@@ -24,6 +24,7 @@ from reports.government_reports_pdf import (
 )
 from reports.bir2316_pdf import generate_bir2316_pdf
 from reports.bir1604c_pdf import generate_bir1604c_pdf, generate_bir1604c_alphalist
+from reports.dole_13th_month_pdf import generate_dole_13th_month_pdf
 
 
 # ============================================================
@@ -445,8 +446,8 @@ def render():
     # ============================================================
     # Tab layout
     # ============================================================
-    tab_monthly, tab_annual, tab_remit = st.tabs([
-        "Monthly Reports", "Annual Reports", "Remittance Log",
+    tab_monthly, tab_annual, tab_dole13, tab_remit = st.tabs([
+        "Monthly Reports", "Annual Reports", "DOLE 13th Month", "Remittance Log",
     ])
 
     # ============================================================
@@ -639,6 +640,119 @@ def render():
                     f"Landscape A4 · Schedule 1 — "
                     f"{len(emp_in_year)} employee(s) sorted A-Z"
                 )
+
+    # ============================================================
+    # DOLE 13TH MONTH REPORT TAB
+    # ============================================================
+    with tab_dole13:
+        st.subheader("DOLE 13th Month Pay Compliance Report")
+        st.caption(
+            "Required under **PD 851** and **DOLE Labor Advisory No. 18, s. 2018**. "
+            "Submit to the nearest DOLE Regional Office **not later than January 15** "
+            "of the following year."
+        )
+        st.info(
+            "This report covers the **full calendar year** selected. "
+            "It pulls the accumulated 13th Month Pay amounts from all finalized payroll entries.",
+            icon="📋",
+        )
+
+        today = _date.today()
+        col_yr13, _ = st.columns([2, 5])
+        with col_yr13:
+            year_opts13 = [today.year - i for i in range(0, 3)]
+            sel_year13  = st.selectbox("Report Year", year_opts13, key="dole13_year")
+
+        annual_13 = _load_annual_entries(sel_year13)
+
+        if not annual_13:
+            st.warning(f"No finalized payroll data found for {sel_year13}.")
+        else:
+            benefitted_emps = [
+                e for e in all_employees
+                if (annual_13.get(e["id"]) or {}).get("thirteenth_month_accrual", 0) > 0
+            ]
+            total_13th = sum(
+                (annual_13.get(e["id"]) or {}).get("thirteenth_month_accrual", 0)
+                for e in benefitted_emps
+            )
+
+            # ── Summary metrics ───────────────────────────────────────────────
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Employment", len(all_employees))
+            m2.metric("Workers Benefitted", len(benefitted_emps))
+            m3.metric("Total 13th Month Granted", f"₱{total_13th/100:,.2f}")
+
+            st.divider()
+
+            # ── Per-employee preview ──────────────────────────────────────────
+            with st.expander("Per-Employee Breakdown (Item 6)", expanded=True):
+                rows_preview = []
+                for emp in sorted(benefitted_emps, key=lambda e: (
+                    (e.get("last_name") or "").upper(),
+                    (e.get("first_name") or "").upper(),
+                )):
+                    agg = annual_13.get(emp["id"]) or {}
+                    rows_preview.append({
+                        "Employee No.":  emp.get("employee_no", ""),
+                        "Name":          f"{emp['last_name']}, {emp['first_name']}",
+                        "Monthly Basic": f"₱{(emp.get('basic_salary') or 0)/100:,.2f}",
+                        "13th Month Pay": f"₱{agg.get('thirteenth_month_accrual', 0)/100:,.2f}",
+                    })
+                st.dataframe(rows_preview, hide_index=True, use_container_width=True)
+
+            st.divider()
+
+            # ── Contact info form ─────────────────────────────────────────────
+            st.markdown("**Report Details** — required for DOLE submission")
+            st.caption("These fields appear in the downloaded PDF only and are not saved.")
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                principal_biz = st.text_input(
+                    "Principal Product / Business",
+                    placeholder="e.g. IT Services, Retail, Manufacturing",
+                    key="dole13_biz",
+                )
+                contact_name13 = st.text_input(
+                    "Contact Person Name",
+                    placeholder="Full name",
+                    key="dole13_cname",
+                )
+            with col_b:
+                contact_pos13 = st.text_input(
+                    "Contact Person Position",
+                    placeholder="e.g. HR Manager, Payroll Officer",
+                    key="dole13_cpos",
+                )
+                contact_tel13 = st.text_input(
+                    "Contact Telephone No.",
+                    placeholder="e.g. (02) 8123-4567 / 09171234567",
+                    key="dole13_ctel",
+                )
+
+            st.download_button(
+                label="⬇ Download DOLE 13th Month Report (PDF)",
+                data=generate_dole_13th_month_pdf(
+                    company=company,
+                    employees=all_employees,
+                    annual_entries=annual_13,
+                    year=sel_year13,
+                    principal_business=principal_biz,
+                    contact_name=contact_name13,
+                    contact_position=contact_pos13,
+                    contact_tel=contact_tel13,
+                ),
+                file_name=f"DOLE_13thMonth_{sel_year13}.pdf",
+                mime="application/pdf",
+                type="primary",
+                width="stretch",
+                key=f"dole13_{sel_year13}",
+            )
+            st.caption(
+                "Portrait A4 · Includes establishment info, summary totals, "
+                "per-employee amounts, and contact information per DOLE LA 18-18."
+            )
 
     # ============================================================
     # REMITTANCE LOG TAB

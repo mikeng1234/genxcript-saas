@@ -26,27 +26,60 @@ from backend.deadlines import get_remittance_deadlines, load_holiday_set
 # ============================================================
 
 def _load_holidays(year: int) -> list[dict]:
-    """Return all holiday rows for the year with holiday_date as date objects."""
-    db = get_db()
-    result = (
-        db.table("holidays")
-        .select("holiday_date, name, type")
-        .eq("year", year)
-        .order("holiday_date")
-        .execute()
-    )
-    return [
-        {
-            "holiday_date": (
-                date.fromisoformat(r["holiday_date"])
-                if isinstance(r["holiday_date"], str)
-                else r["holiday_date"]
-            ),
+    """
+    Return merged holiday list for the current company for a given year.
+    - National holidays (company_id IS NULL) are the base.
+    - Company-specific overrides replace the national entry for the same holiday name.
+    - Company-added custom holidays (unique names) are appended.
+    """
+    db  = get_db()
+    cid = get_company_id()
+
+    def _to_date(v):
+        if v is None:
+            return None
+        return date.fromisoformat(v) if isinstance(v, str) else v
+
+    def _parse(r):
+        return {
+            "holiday_date":  _to_date(r["holiday_date"]),
+            "observed_date": _to_date(r.get("observed_date")),
             "name": r["name"],
             "type": r["type"],
         }
-        for r in result.data
+
+    national = [
+        _parse(r) for r in (
+            db.table("holidays")
+            .select("holiday_date, observed_date, name, type")
+            .eq("year", year)
+            .is_("company_id", "null")
+            .order("holiday_date")
+            .execute()
+        ).data
     ]
+    company_rows = [
+        _parse(r) for r in (
+            db.table("holidays")
+            .select("holiday_date, observed_date, name, type")
+            .eq("year", year)
+            .eq("company_id", cid)
+            .order("holiday_date")
+            .execute()
+        ).data
+    ]
+
+    national_names = {h["name"] for h in national}
+    # Company overrides replace the national entry for the same name
+    overrides = {h["name"]: h for h in company_rows if h["name"] in national_names}
+    customs   = [h for h in company_rows if h["name"] not in national_names]
+
+    merged = []
+    for h in national:
+        merged.append(overrides.get(h["name"], h))
+    merged.extend(customs)
+    merged.sort(key=lambda h: h["holiday_date"] or date.min)
+    return merged
 
 
 def _load_pay_periods_overlapping(year: int, month: int) -> list[dict]:
@@ -99,11 +132,14 @@ def _build_day_events(
 
     # ── Holidays ─────────────────────────────────────────────
     for h in holidays:
-        hd = h["holiday_date"]
-        if hd.year == year and hd.month == month:
+        # Use observed_date when set (government-proclaimed movement)
+        obs = h.get("observed_date")
+        effective_d = obs if obs else h["holiday_date"]
+        if effective_d.year == year and effective_d.month == month:
             t   = "hol_reg" if h["type"] == "regular" else "hol_spec"
-            lbl = h["name"][:20] + "…" if len(h["name"]) > 20 else h["name"]
-            add(hd, {"type": t, "label": lbl, "priority": 0})
+            name_short = h["name"][:18] + "…" if len(h["name"]) > 18 else h["name"]
+            lbl = (name_short + " (moved)") if obs else name_short
+            add(effective_d, {"type": t, "label": lbl, "priority": 0})
 
     # ── Pay periods ───────────────────────────────────────────
     for p in pay_periods:
@@ -363,7 +399,16 @@ def _render_holiday_table(holidays: list[dict]):
             f'<span style="background:{bg};color:{fg};padding:2px 8px;'
             f'border-radius:4px;font-size:11px;font-weight:600;">{label}</span>'
         )
-        date_str = h["holiday_date"].strftime("%b %d, %Y (%A)") if hasattr(h["holiday_date"], "strftime") else str(h["holiday_date"])
+        obs = h.get("observed_date")
+        orig_d = h["holiday_date"]
+        if obs:
+            date_str = (
+                f'{obs.strftime("%b %d, %Y (%A)")}'
+                f'<br><span style="color:#9ca3af;font-size:11px;text-decoration:line-through;">'
+                f'orig: {orig_d.strftime("%b %d") if hasattr(orig_d, "strftime") else orig_d}</span>'
+            )
+        else:
+            date_str = orig_d.strftime("%b %d, %Y (%A)") if hasattr(orig_d, "strftime") else str(orig_d)
         rows_html += (
             f'<tr>'
             f'<td style="padding:6px 10px;border-bottom:1px solid var(--gxp-border);'
@@ -490,7 +535,7 @@ def render():
     # ── Load data ─────────────────────────────────────────────
     db          = get_db()
     holidays    = _load_holidays(year)
-    holiday_set = load_holiday_set(db, year=year)
+    holiday_set = load_holiday_set(db, year=year, company_id=get_company_id())
     pay_periods = _load_pay_periods_overlapping(year, month)
 
     # Deadlines for the viewed month.
