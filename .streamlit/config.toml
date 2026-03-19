@@ -2,3 +2,6 @@
 primaryColor           = "#3b82f6"
 font                   = "sans serif"
 
+[client]
+showSidebarNavigation  = false
+

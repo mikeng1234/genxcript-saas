@@ -436,9 +436,16 @@ PREVIEW_FUNCS = {
 # Main Page Render
 # ============================================================
 
-def render():
+def render(show_title: bool = True):
     inject_css()
-    st.title("Government Reports")
+    if show_title:
+        st.title("Government Reports")
+    else:
+        # Remove the top padding inject_css() adds for the page title area
+        st.markdown(
+            "<style>.stMainBlockContainer{padding-top:0.25rem!important;}</style>",
+            unsafe_allow_html=True,
+        )
 
     company      = _load_company()
     all_employees = _load_employees()

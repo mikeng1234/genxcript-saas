@@ -16,6 +16,7 @@ st.set_page_config(
     page_title="GenXcript Payroll",
     page_icon="💰",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 from app.auth import (

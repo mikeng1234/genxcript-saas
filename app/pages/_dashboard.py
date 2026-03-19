@@ -622,7 +622,7 @@ def _render_reminders(pending_leave: int, pending_ot: int):
 def _dlg_gov_reports() -> None:
     """Embed the full Government Reports page inside a dialog."""
     from app.pages._government_reports import render as _gov_render
-    _gov_render()
+    _gov_render(show_title=False)
 
 
 @st.dialog("Employees", width="large")
@@ -637,6 +637,11 @@ def _dlg_employees() -> None:
     pending_lr, pending_ot = _count_pending_admin()
     pending_total = pending_lr + pending_ot
     pending_label = f" ({pending_total})" if pending_total else ""
+
+    # Clear any pending edit so _render_employees_tab() doesn't try to open
+    # _edit_employee_dialog (a @st.dialog) inside this dialog — Streamlit
+    # raises StreamlitAPIException for nested dialogs.
+    st.session_state.pop("editing_id", None)
 
     tab_emp, tab_approvals, tab_balances = st.tabs([
         "Employees",
