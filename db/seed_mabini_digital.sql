@@ -97,6 +97,13 @@ BEGIN
   -- ═══════════════════════════════════════════════════════════════════════════
   -- 0. CLEANUP  (delete old seed companies so script is safe to re-run)
   -- ═══════════════════════════════════════════════════════════════════════════
+  -- Delete child tables that lack ON DELETE CASCADE before removing companies
+  DELETE FROM payroll_entries
+    WHERE employee_id IN (
+      SELECT e.id FROM employees e
+      JOIN companies c ON c.id = e.company_id
+      WHERE c.name IN ('GenXcript Tech Solutions', 'Mabini Digital Co.')
+    );
   DELETE FROM companies WHERE name IN ('GenXcript Tech Solutions', 'Mabini Digital Co.');
   RAISE NOTICE 'Old seed data deleted.';
 
