@@ -24,3 +24,8 @@ Thumbs.db
 
 # Local DTR snapshot archives (can be GBs — do not push to GitHub)
 archives/
+scripts/agent_config.py
+scripts/sim_log.txt
+scripts/employer_log.txt
+scripts/agent_employer_log.txt
+scripts/agent_employee_log.txt

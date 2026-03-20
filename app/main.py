@@ -475,13 +475,20 @@ components.html(f"""
   // ── Inject Material Symbols + Plus Jakarta Sans fonts ─────────────────
   function injectFonts(){{
     if(d.getElementById('gxp-mat-symbols-css')) return;
-    // Material Symbols Outlined
-    var link1=d.createElement('link');
-    link1.id='gxp-mat-symbols-css';
-    link1.rel='stylesheet';
-    link1.href='https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap';
-    d.head.appendChild(link1);
-    // Plus Jakarta Sans
+    // Material Symbols Outlined — served locally to avoid async race condition
+    var matStyle=d.createElement('style');
+    matStyle.id='gxp-mat-symbols-css';
+    matStyle.textContent=[
+      '@font-face{{',
+      '  font-family:"Material Symbols Outlined";',
+      '  font-style:normal;',
+      '  font-weight:100 700;',
+      '  font-display:block;',
+      '  src:url("/app/static/MaterialSymbolsOutlined.woff2") format("woff2");',
+      '}}',
+    ].join('');
+    d.head.insertBefore(matStyle, d.head.firstChild);
+    // Plus Jakarta Sans — from Google Fonts (body text, less critical)
     var link2=d.createElement('link');
     link2.id='gxp-jakarta-css';
     link2.rel='stylesheet';
@@ -508,6 +515,16 @@ components.html(f"""
       // Kill the gap Streamlit reserves for the sidebar
       '[data-testid="stAppViewContainer"]{{padding-left:0!important;}}',
       'section[data-testid="stMain"]{{margin-left:0!important;padding-left:0!important;}}',
+      // Define Material Symbols Outlined class so icons render even if Google Fonts CSS
+      // hasn't fully applied yet (font-face loaded by injectFonts separately)
+      '.material-symbols-outlined{{',
+      '  font-family:"Material Symbols Outlined"!important;',
+      '  font-weight:normal;font-style:normal;font-size:24px;',
+      '  line-height:1;letter-spacing:normal;text-transform:none;',
+      '  display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;',
+      '  -webkit-font-smoothing:antialiased;',
+      '  font-variation-settings:"FILL" 0,"wght" 400,"GRAD" 0,"opsz" 24;',
+      '}}',
     ].join('');
     d.head.appendChild(s);
   }}

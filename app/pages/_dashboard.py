@@ -260,6 +260,268 @@ _SVG = {
 
 
 # ============================================================
+# Phase D: Bento Grid Hero
+# ============================================================
+
+_ENTITY_LABELS = {
+    "employee":         "Employee",
+    "pay_period":       "Pay Period",
+    "payroll_entries":  "Payroll",
+    "leave_request":    "Leave Request",
+    "overtime_request": "OT Request",
+    "company":          "Company",
+    "leave_template":   "Leave Template",
+    "holiday":          "Holiday",
+}
+
+
+def _load_recent_activity(n: int = 4) -> list[dict]:
+    """Fetch last n audit_log entries for the Recent Activity card."""
+    from datetime import timezone, timedelta
+    _PH_TZ = timezone(timedelta(hours=8))
+    try:
+        db     = get_db()
+        result = (
+            db.table("audit_logs")
+            .select("action,entity_type,entity_label,user_email,created_at")
+            .eq("company_id", get_company_id())
+            .order("created_at", desc=True)
+            .limit(n)
+            .execute()
+        )
+        rows = result.data or []
+        entries = []
+        for r in rows:
+            action  = (r.get("action") or "updated").capitalize()
+            etype   = _ENTITY_LABELS.get(r.get("entity_type", ""), r.get("entity_type", "").replace("_", " ").title())
+            elabel  = r.get("entity_label") or ""
+            actor   = (r.get("user_email") or "System").split("@")[0]
+            ts_raw  = r.get("created_at", "")
+            try:
+                from datetime import datetime as _dt2
+                dt  = _dt2.fromisoformat(ts_raw.replace("Z", "+00:00")).astimezone(_PH_TZ)
+                ts  = dt.strftime("%b %d")
+            except Exception:
+                ts = ts_raw[:10]
+            title = f"{action}: {elabel}" if elabel else f"{action} {etype}"
+            entries.append({"title": title[:52], "sub": actor, "date": ts})
+        return entries
+    except Exception:
+        return []
+
+
+_MS = "font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;"
+_CARD  = "background:#ffffff;border-radius:16px;padding:28px;box-shadow:0 20px 40px rgba(45,51,53,0.06);"
+_LABEL = "font-size:10px;font-weight:700;color:#004494;text-transform:uppercase;letter-spacing:.2em;margin-bottom:14px;font-family:'Plus Jakarta Sans',system-ui,sans-serif;"
+_MLBL  = "font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.2em;margin-bottom:14px;font-family:'Plus Jakarta Sans',system-ui,sans-serif;"
+_BADGE = "display:inline-flex;align-items:center;padding:4px 14px;border-radius:9999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;"
+_BADGE_COLORS = {
+    "green":  "background:#89fa9b;color:#005320;",
+    "yellow": "background:#ffdea0;color:#5c4300;",
+    "red":    "background:#ffdad6;color:#93000a;",
+    "blue":   "background:#d8e2ff;color:#001a41;",
+}
+
+
+def _render_bento_hero(
+    next_period: dict | None,
+    active_count: int,
+    total_count: int,
+    latest_period: dict | None,
+    history: list[dict],
+):
+    """Bento grid: Row 1 (Next Pay Date + Active Employees) + Row 2 (Expenditure + Activity)."""
+    from datetime import date as _date
+    today = _date.today()
+
+    # ── Next Pay Date ─────────────────────────────────
+    if next_period:
+        end = next_period["period_end"]
+        try:
+            end_dt    = _date.fromisoformat(str(end))
+            days_left = (end_dt - today).days
+            date_disp = end_dt.strftime("%b %d").upper()
+            if days_left < 0:
+                b_col, b_txt = "red",    f"OVERDUE {abs(days_left)}D"
+            elif days_left == 0:
+                b_col, b_txt = "yellow", "DUE TODAY"
+            elif days_left <= 7:
+                b_col, b_txt = "yellow", f"IN {days_left} DAYS"
+            else:
+                b_col, b_txt = "green",  f"IN {days_left} DAYS"
+        except Exception:
+            date_disp, b_col, b_txt = str(end)[:6].upper(), "blue", "UPCOMING"
+        status_txt  = next_period.get("status", "draft").upper()
+        period_sub  = f"{next_period.get('period_start','')} \u2192 {next_period.get('period_end','')}"
+    else:
+        date_disp   = "\u2014"
+        b_col, b_txt = "blue", "NOT SCHEDULED"
+        status_txt, period_sub = "DRAFT", "No pay period created yet"
+
+    badge_style = _BADGE + _BADGE_COLORS[b_col]
+
+    # ── Mini bar data (row 2) ─────────────────────────
+    bar_vals = [int(r["gross_pay"] * 100) for r in history[-6:]] if history else []
+    max_val  = max(bar_vals) if bar_vals else 1
+
+    # ── Row 1 ─────────────────────────────────────────
+    col_next, col_emp = st.columns([2, 1], gap="medium")
+
+    with col_next:
+        st.markdown(
+            f'<div style="{_CARD}min-height:200px;">'
+            f'  <div style="{_LABEL}">Upcoming Milestone</div>'
+            f'  <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px">'
+            f'    <span style="font-size:64px;font-weight:800;color:#005bc1;line-height:1;letter-spacing:-2px;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">{date_disp}</span>'
+            f'    <span style="{badge_style}">{b_txt}</span>'
+            f'  </div>'
+            f'  <div style="font-size:12px;color:#6b7280;">{period_sub}</div>'
+            f'  <div style="font-size:11px;color:#9ca3af;font-weight:600;margin-top:12px">Status: {status_txt}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Review Cycle \u2192", key="bento_review", use_container_width=True):
+            st.session_state["_nav_redirect"] = "Payroll Run"
+            st.rerun()
+
+    with col_emp:
+        inactive = total_count - active_count
+        sub_txt  = f"{inactive} inactive" if inactive else "All active"
+        st.markdown(
+            f'<div style="background:#febf0d;border-radius:16px;padding:28px;min-height:200px;display:flex;flex-direction:column;justify-content:space-between;">'
+            f'  <div style="font-size:40px;font-weight:900;color:#000;line-height:1;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">{active_count}</div>'
+            f'  <div>'
+            f'    <div style="font-size:1.1rem;font-weight:700;color:#000;">Active Employees</div>'
+            f'    <div style="font-size:13px;font-weight:500;color:rgba(0,0,0,.55);margin-top:4px">{sub_txt}</div>'
+            f'  </div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("View Employees \u2192", key="bento_emp", use_container_width=True):
+            st.session_state["_nav_redirect"] = "Employees"
+            st.rerun()
+
+    # ── Row 2 ─────────────────────────────────────────
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    col_exp, col_act = st.columns([7, 5], gap="medium")
+
+    with col_exp:
+        if latest_period and bar_vals:
+            latest_gross = bar_vals[-1]
+            prev_gross   = bar_vals[-2] if len(bar_vals) >= 2 else 0
+            gross_fmt    = _fmt(latest_gross)
+            if prev_gross:
+                pct = (latest_gross - prev_gross) / prev_gross * 100
+                if pct > 0.5:
+                    trend_s = f'<span style="color:#005320;font-weight:700;font-size:13px">\u25b2 {pct:.1f}% vs last cycle</span>'
+                elif pct < -0.5:
+                    trend_s = f'<span style="color:#93000a;font-weight:700;font-size:13px">\u25bc {abs(pct):.1f}% vs last cycle</span>'
+                else:
+                    trend_s = '<span style="color:#6b7280;font-size:13px">\u2014 flat vs last cycle</span>'
+            else:
+                trend_s = '<span style="color:#6b7280;font-size:13px">First pay run</span>'
+
+            bars_html = ""
+            for i, v in enumerate(bar_vals):
+                h   = max(int((v / max_val) * 100), 4)
+                bg  = "#005bc1" if i == len(bar_vals) - 1 else "#e5e7eb"
+                bars_html += f'<div style="flex:1;border-radius:4px 4px 0 0;background:{bg};height:{h}%;min-height:4px"></div>'
+
+            period_lbl = f"{latest_period['period_start']} \u2192 {latest_period['period_end']}"
+            st.markdown(
+                f'<div style="{_CARD}">'
+                f'  <div style="{_MLBL}">Payroll Expenditure</div>'
+                f'  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+                f'    <span style="font-size:1.9rem;font-weight:800;color:#191c1d;letter-spacing:-1px">{gross_fmt}</span>'
+                f'    {trend_s}'
+                f'  </div>'
+                f'  <div style="font-size:11px;color:#9ca3af;margin-top:4px">{period_lbl}</div>'
+                f'  <div style="display:flex;align-items:flex-end;gap:6px;height:72px;margin-top:20px">{bars_html}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f'<div style="{_CARD}">'
+                f'  <div style="{_MLBL}">Payroll Expenditure</div>'
+                f'  <div style="color:#9ca3af;font-size:13px;margin-top:8px">No finalized pay periods yet.<br>Run your first payroll to see trends.</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    with col_act:
+        activities = _load_recent_activity(4)
+        _ACT_COLORS = [
+            ("#d1fae5", "#059669"), ("#dbeafe", "#2563eb"),
+            ("#fef3c7", "#d97706"), ("#fce7f3", "#db2777"),
+        ]
+        items_html = ""
+        if activities:
+            for idx, act in enumerate(activities):
+                bg, fg = _ACT_COLORS[idx % len(_ACT_COLORS)]
+                dot = f'<div style="width:8px;height:8px;border-radius:50%;background:{fg};flex-shrink:0"></div>'
+                items_html += (
+                    f'<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 4px;border-radius:10px;">'
+                    f'  <div style="width:32px;height:32px;border-radius:50%;background:{bg};display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+                    f'    {dot}'
+                    f'  </div>'
+                    f'  <div style="flex:1;min-width:0">'
+                    f'    <div style="font-size:12px;font-weight:700;color:#191c1d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{act["title"]}</div>'
+                    f'    <div style="font-size:10px;color:#9ca3af;margin-top:1px">{act["sub"]} · {act["date"]}</div>'
+                    f'  </div>'
+                    f'</div>'
+                )
+        else:
+            items_html = '<div style="color:#9ca3af;font-size:12px;padding:12px">No recent activity.</div>'
+
+        st.markdown(
+            f'<div style="{_CARD}">'
+            f'  <div style="{_MLBL}margin-bottom:10px;">Recent Activity</div>'
+            f'  <div>{items_html}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _render_quick_actions_m3():
+    """6-icon quick action cards — M3 style with emoji fallback icons."""
+    _QA_ICONS = {
+        "Add Employee":  "👤",
+        "Run Payroll":   "▶",
+        "Attendance":    "🕐",
+        "Gov. Reports":  "🏛",
+        "Calendar":      "📅",
+        "Settings":      "⚙",
+    }
+    actions = [
+        {"label": "Add Employee",  "nav": "Employees"},
+        {"label": "Run Payroll",   "nav": "Payroll Run"},
+        {"label": "Attendance",    "nav": "Attendance"},
+        {"label": "Gov. Reports",  "nav": "Government Reports"},
+        {"label": "Calendar",      "nav": "Calendar"},
+        {"label": "Settings",      "nav": "Company Setup"},
+    ]
+    cols = st.columns(6, gap="small")
+    for col, act in zip(cols, actions):
+        with col:
+            icon = _QA_ICONS[act["label"]]
+            st.markdown(
+                f'<div style="background:#fff;border-radius:14px;padding:18px 8px 12px;'
+                f'text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.04);margin-bottom:4px">'
+                f'  <div style="width:44px;height:44px;border-radius:12px;background:#edeeef;'
+                f'display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-size:20px">'
+                f'    {icon}'
+                f'  </div>'
+                f'  <div style="font-size:10px;font-weight:700;color:#191c1d">{act["label"]}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button(act["label"], key=f"qa_m3_{act['nav']}", use_container_width=True):
+                st.session_state["_nav_redirect"] = act["nav"]
+                st.rerun()
+
+
+# ============================================================
 # Section 1: Action Bar (ADP Hero)
 # ============================================================
 
@@ -1244,14 +1506,24 @@ def render():
             scrolling=False,
         )
 
-    # ── 1. Quick Stat Cards ───────────────────────────
+    # ── 1. Bento Hero (Next Pay Date + Active Employees + Expenditure + Activity) ─
+    _render_bento_hero(next_period, active_count, total_count, latest_period, history)
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    # ── 2. Quick Actions (M3 icon cards) ─────────────
+    _render_quick_actions_m3()
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # ── 3. KPI Stat Cards ────────────────────────────
     _render_stat_cards(active_count, total_count, total_gross, total_net, total_cost,
                        latest_period, history,
                        latest_entries=latest_entries, headcount=headcount)
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    # ── 2. Alerts  |  Cost Trend + Donut  |  Remittance  (1/3 each) ──────────
+    # ── 4. Alerts  |  Cost Trend + Donut  |  Remittance  (1/3 each) ──────────
     col_alerts, col_charts, col_remit = st.columns([1, 1, 1])
     with col_alerts:
         _render_reminders(pending_leave, pending_ot)

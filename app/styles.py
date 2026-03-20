@@ -1297,6 +1297,133 @@ def inject_css():
     /* ── Quick Action Buttons Row ────────────────────── */
     .gxp-quick-actions { margin-top: -12px; margin-bottom: 24px; }
 
+    /* ── Phase D: Bento Grid Cards ───────────────────── */
+    .gxp-bento-card {{
+        background: #ffffff;
+        border-radius: 1rem;
+        padding: 2rem;
+        box-shadow: 0px 20px 40px rgba(45,51,53,0.06);
+        min-height: 220px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }}
+    .gxp-bento-label {{
+        font-size: 0.62rem;
+        font-weight: 700;
+        color: #004494;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        margin-bottom: 1rem;
+        font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }}
+    .gxp-bento-muted-label {{
+        font-size: 0.62rem;
+        font-weight: 700;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        margin-bottom: 1rem;
+        font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }}
+    .gxp-bento-hero-date {{
+        font-size: 4.5rem;
+        font-weight: 800;
+        color: #005bc1;
+        line-height: 1;
+        letter-spacing: -2px;
+        font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }}
+    .gxp-bento-badge {{
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 14px;
+        border-radius: 9999px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }}
+    .gxp-bento-badge-green  {{ background: #89fa9b; color: #005320; }}
+    .gxp-bento-badge-yellow {{ background: #ffdea0; color: #5c4300; }}
+    .gxp-bento-badge-red    {{ background: #ffdad6; color: #93000a; }}
+    .gxp-bento-badge-blue   {{ background: #d8e2ff; color: #001a41; }}
+    .gxp-bento-accent-card {{
+        background: #febf0d;
+        border-radius: 1rem;
+        padding: 2rem;
+        min-height: 220px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }}
+    .gxp-bento-big-number {{
+        font-size: 4rem;
+        font-weight: 900;
+        color: #000000;
+        line-height: 1;
+        font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }}
+    .gxp-bento-number-label {{ font-size: 1.15rem; font-weight: 700; color: #000000; }}
+    .gxp-bento-number-sub   {{ font-size: 0.82rem; font-weight: 500; color: rgba(0,0,0,0.55); margin-top: 4px; }}
+    .gxp-mini-bars {{
+        display: flex;
+        align-items: flex-end;
+        gap: 6px;
+        height: 72px;
+        margin-top: 1.5rem;
+    }}
+    .gxp-mini-bar {{
+        flex: 1;
+        border-radius: 4px 4px 0 0;
+        background: #e5e7eb;
+        min-height: 4px;
+    }}
+    .gxp-mini-bar.gxp-bar-active {{ background: #005bc1; }}
+    .gxp-activity-list {{ display: flex; flex-direction: column; gap: 2px; }}
+    .gxp-activity-item {{
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px;
+        border-radius: 12px;
+        transition: background 0.15s;
+    }}
+    .gxp-activity-item:hover {{ background: #f3f4f5; }}
+    .gxp-activity-icon {{
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+        font-size: 15px;
+    }}
+    .gxp-activity-body {{ flex: 1; min-width: 0; }}
+    .gxp-activity-title {{ font-size: 12px; font-weight: 700; color: #191c1d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+    .gxp-activity-sub   {{ font-size: 10px; color: #9ca3af; margin-top: 1px; }}
+    .gxp-activity-time  {{ font-size: 10px; color: #9ca3af; font-weight: 500; flex-shrink: 0; }}
+    .gxp-qa-m3-card {{
+        background: #ffffff;
+        border-radius: 1rem;
+        padding: 1.25rem 0.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0px 4px 20px rgba(0,0,0,0.03);
+        text-align: center;
+    }}
+    .gxp-qa-m3-icon {{
+        width: 44px; height: 44px;
+        border-radius: 12px;
+        background: #edeeef;
+        display: flex; align-items: center; justify-content: center;
+        color: #004494;
+        font-size: 22px;
+        transition: background 0.15s;
+    }}
+    .gxp-qa-m3-label {{ font-size: 10px; font-weight: 700; color: #191c1d; }}
+
     </style>
     """, unsafe_allow_html=True)
 
@@ -1633,14 +1760,29 @@ def inject_css():
             box-shadow: {t_vars.get("--gxp-m3-ambient-shadow", "0px 20px 40px rgba(45,51,53,0.06)")} !important;
         }}
 
-        /* ── Expander styling ── */
+        /* ── Expander / accordion cards (M3 style) ── */
         .stExpander {{
             border-radius: 1rem !important;
-            border: 1px solid {border} !important;
+            border: none !important;
             overflow: hidden !important;
+            background: {surface} !important;
+            box-shadow: {t_vars.get("--gxp-m3-ambient-shadow", "0px 20px 40px rgba(45,51,53,0.06)")} !important;
+            margin-bottom: 0.75rem !important;
         }}
         .stExpander summary {{
+            padding: 1rem 1.5rem !important;
+            background: {surface} !important;
             border-radius: 1rem !important;
+            font-size: 0.9375rem !important;
+            font-weight: 600 !important;
+        }}
+        .stExpander details[open] > summary {{
+            border-radius: 1rem 1rem 0 0 !important;
+            border-bottom: 1px solid {border} !important;
+        }}
+        .stExpander details > div[data-testid="stExpanderDetails"] {{
+            background: {surface} !important;
+            padding: 1.25rem 1.5rem 1.5rem !important;
         }}
 
         /* ── Metric cards ── */

@@ -425,12 +425,55 @@ def _render_employee_payroll(
     """Render earnings input and computation for one employee."""
     saved = entries.get(emp["id"], {})
 
-    name = f"{emp['first_name']} {emp['last_name']}"
-    salary_display = _fmt(emp["basic_salary"])
+    name       = f"{emp['first_name']} {emp['last_name']}"
     is_computed = emp["id"] in entries
-    check = "[Done]" if is_computed else "[Pending]"
+    dept        = emp.get("department") or emp.get("position") or ""
+    gross_str   = f"₱{entries[emp['id']]['gross_pay']/100:,.0f} gross" if is_computed else "Not yet computed"
+    status_dot  = "✓" if is_computed else "○"
+    exp_label   = f"{status_dot}  {name}  ·  {dept}  ·  {gross_str}"
 
-    with st.expander(f"{check}  {emp['employee_no']} — {name}  |  Basic: {salary_display}", expanded=False):
+    with st.expander(exp_label, expanded=False):
+        # M3 mini-header inside expander
+        _initials  = (emp['first_name'][:1] + emp['last_name'][:1]).upper()
+        _colors    = ["#005bc1","#006e2d","#795900","#ba1a1a","#4b0082","#006064","#37474f","#880e4f"]
+        _color     = _colors[hash(emp["id"]) % len(_colors)]
+        _pos       = emp.get("position") or "—"
+        _salary_lbl = _fmt(emp["basic_salary"])
+        _badge_html = (
+            f'<span style="display:inline-flex;align-items:center;gap:0.25rem;'
+            f'background:var(--gxp-success-bg);color:var(--gxp-success-fg);'
+            f'padding:0.15rem 0.6rem;border-radius:9999px;font-size:0.6875rem;font-weight:700;">'
+            f'✓ COMPUTED</span>'
+            if is_computed else
+            f'<span style="display:inline-flex;align-items:center;gap:0.25rem;'
+            f'background:var(--gxp-warning-bg);color:var(--gxp-warning-fg);'
+            f'padding:0.15rem 0.6rem;border-radius:9999px;font-size:0.6875rem;font-weight:700;">'
+            f'○ PENDING</span>'
+        )
+        _net_html = ""
+        if is_computed:
+            _net_val = entries[emp["id"]].get("net_pay", 0)
+            _net_html = (
+                f'<div style="font-size:0.75rem;color:var(--gxp-text3);margin-top:0.125rem;">'
+                f'Net Pay <span style="font-size:1rem;font-weight:800;color:var(--gxp-accent);">'
+                f'{_fmt(_net_val)}</span></div>'
+            )
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:1rem;padding:0.5rem 0 1.25rem;'
+            f'border-bottom:1px solid var(--gxp-border);margin-bottom:1.25rem;">'
+            f'<div style="width:48px;height:48px;border-radius:50%;background:{_color};'
+            f'display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+            f'<span style="color:#fff;font-weight:700;font-size:1.125rem;">{_initials}</span></div>'
+            f'<div style="flex:1;min-width:0;">'
+            f'<div style="font-size:1rem;font-weight:700;color:var(--gxp-text);">{name}</div>'
+            f'<div style="font-size:0.8125rem;color:var(--gxp-text2);">'
+            f'{_pos} · {emp["employee_no"]} · Basic {_salary_lbl}</div>'
+            f'</div>'
+            f'<div style="text-align:right;flex-shrink:0;">'
+            f'{_badge_html}{_net_html}'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
 
         if is_finalized:
             _render_payroll_summary(saved)
@@ -691,60 +734,108 @@ def _render_employee_payroll(
 
 
 def _render_payroll_summary(entry: dict):
-    """Show the computation breakdown for an employee."""
+    """Show the computation breakdown for an employee — M3 3-column grid."""
     if not entry:
         st.caption("Not yet computed. Fill in earnings and click 'Compute & Save'.")
         return
 
-    st.markdown("---")
-    col_earn, col_ded, col_net = st.columns(3)
+    gross   = entry.get("gross_pay", 0)
+    net     = entry.get("net_pay", 0)
+    tot_ded = entry.get("total_deductions", 0)
+    er_tot  = (entry.get("sss_employer", 0)
+               + entry.get("philhealth_employer", 0)
+               + entry.get("pagibig_employer", 0))
 
-    with col_earn:
-        st.markdown(fin_table(
-            [
-                ("Basic Pay",       _fmt(entry.get("basic_pay", 0))),
-                ("Overtime",        _fmt(entry.get("overtime_pay", 0))),
-                ("Holiday Pay",     _fmt(entry.get("holiday_pay", 0))),
-                ("Night Diff",      _fmt(entry.get("night_differential", 0))),
-                ("Allow (NT)",      _fmt(entry.get("allowances_nontaxable", 0))),
-                ("Allow (Tax)",     _fmt(entry.get("allowances_taxable", 0))),
-                ("Commission",      _fmt(entry.get("commission", 0))),
-                ("13th Month",      _fmt(entry.get("thirteenth_month_accrual", 0))),
-            ],
-            total=("Gross Pay", _fmt(entry.get("gross_pay", 0))),
-        ), unsafe_allow_html=True)
-
-    with col_ded:
-        st.markdown(fin_table(
-            [
-                ("SSS (EE)",        _fmt(entry.get("sss_employee", 0))),
-                ("PhilHealth (EE)", _fmt(entry.get("philhealth_employee", 0))),
-                ("Pag-IBIG (EE)",   _fmt(entry.get("pagibig_employee", 0))),
-                ("Withholding Tax", _fmt(entry.get("withholding_tax", 0))),
-                ("SSS Loan",        _fmt(entry.get("sss_loan", 0))),
-                ("Pag-IBIG Loan",   _fmt(entry.get("pagibig_loan", 0))),
-                ("Cash Advance",    _fmt(entry.get("cash_advance", 0))),
-                ("Other",           _fmt(entry.get("other_deductions", 0))),
-            ],
-            total=("Total Deductions", _fmt(entry.get("total_deductions", 0))),
-        ), unsafe_allow_html=True)
-
-    with col_net:
-        er_total = entry.get("sss_employer", 0) + entry.get("philhealth_employer", 0) + entry.get("pagibig_employer", 0)
-        st.markdown(fin_table(
-            [
-                ("SSS (ER)",        _fmt(entry.get("sss_employer", 0))),
-                ("PhilHealth (ER)", _fmt(entry.get("philhealth_employer", 0))),
-                ("Pag-IBIG (ER)",   _fmt(entry.get("pagibig_employer", 0))),
-                ("Employer Total",  _fmt(er_total)),
-            ],
-        ), unsafe_allow_html=True)
-        net = entry.get("net_pay", 0)
-        st.markdown(
-            f'<div style="margin-top:16px;font-size:20px;font-weight:700;color:#065f46">'
-            f'Net Pay: {_fmt(net)}</div>',
-            unsafe_allow_html=True,
+    def _row(label, val, color="var(--gxp-text)", label_color="var(--gxp-text2)"):
+        return (
+            f'<div style="display:flex;justify-content:space-between;align-items:center;'
+            f'padding:0.35rem 0;border-bottom:1px solid var(--gxp-border);">'
+            f'<span style="font-size:0.8125rem;color:{label_color};">{label}</span>'
+            f'<span style="font-size:0.8125rem;font-weight:600;color:{color};">{val}</span>'
+            f'</div>'
         )
+
+    earnings_rows = "".join([
+        _row("Basic Pay",          _fmt(entry.get("basic_pay", 0))),
+        _row("Overtime",           _fmt(entry.get("overtime_pay", 0))),
+        _row("Holiday Pay",        _fmt(entry.get("holiday_pay", 0))),
+        _row("Night Differential", _fmt(entry.get("night_differential", 0))),
+        _row("Allowances (NT)",    _fmt(entry.get("allowances_nontaxable", 0))),
+        _row("Allowances (Tax)",   _fmt(entry.get("allowances_taxable", 0))),
+        _row("Commission",         _fmt(entry.get("commission", 0))),
+        _row("13th Month",         _fmt(entry.get("thirteenth_month_accrual", 0))),
+        _row("Absent Deduction",   f'-{_fmt(entry.get("absent_deduction", 0))}',
+             color="var(--gxp-danger)"),
+    ])
+
+    deductions_rows = "".join([
+        _row("SSS (Employee)",        _fmt(entry.get("sss_employee", 0))),
+        _row("PhilHealth (Employee)", _fmt(entry.get("philhealth_employee", 0))),
+        _row("Pag-IBIG (Employee)",   _fmt(entry.get("pagibig_employee", 0))),
+        _row("Withholding Tax",       _fmt(entry.get("withholding_tax", 0)),
+             color="var(--gxp-danger)", label_color="var(--gxp-danger)"),
+        _row("SSS Loan",              _fmt(entry.get("sss_loan", 0))),
+        _row("Pag-IBIG Loan",         _fmt(entry.get("pagibig_loan", 0))),
+        _row("Cash Advance",          _fmt(entry.get("cash_advance", 0))),
+        _row("Other Deductions",      _fmt(entry.get("other_deductions", 0))),
+    ])
+
+    employer_rows = "".join([
+        _row("SSS (Employer)",        _fmt(entry.get("sss_employer", 0))),
+        _row("PhilHealth (Employer)", _fmt(entry.get("philhealth_employer", 0))),
+        _row("Pag-IBIG (Employer)",   _fmt(entry.get("pagibig_employer", 0))),
+        _row("Employer Total",        _fmt(er_tot),
+             color="var(--gxp-text)", label_color="var(--gxp-text3)"),
+    ])
+
+    col_h = (
+        'style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+        'letter-spacing:0.1em;color:var(--gxp-text3);margin-bottom:0.75rem;"'
+    )
+
+    st.markdown(
+        f'<div style="background:var(--gxp-surface);border-radius:1rem;padding:1.5rem;'
+        f'margin-top:1rem;display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.5rem;">'
+
+        # ── Earnings column
+        f'<div>'
+        f'<div {col_h}>Earnings</div>'
+        f'{earnings_rows}'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;'
+        f'padding:0.5rem 0;margin-top:0.25rem;">'
+        f'<span style="font-size:0.8125rem;font-weight:700;color:var(--gxp-text);">Gross Pay</span>'
+        f'<span style="font-size:0.9375rem;font-weight:800;color:var(--gxp-text);">{_fmt(gross)}</span>'
+        f'</div>'
+        f'</div>'
+
+        # ── Deductions column
+        f'<div>'
+        f'<div {col_h}>Deductions</div>'
+        f'{deductions_rows}'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;'
+        f'padding:0.5rem 0;margin-top:0.25rem;">'
+        f'<span style="font-size:0.8125rem;font-weight:700;color:var(--gxp-danger);">Total Deductions</span>'
+        f'<span style="font-size:0.9375rem;font-weight:800;color:var(--gxp-danger);">{_fmt(tot_ded)}</span>'
+        f'</div>'
+        f'</div>'
+
+        # ── Summary column
+        f'<div style="display:flex;flex-direction:column;justify-content:space-between;">'
+        f'<div>'
+        f'<div {col_h}>Employer Contributions</div>'
+        f'{employer_rows}'
+        f'</div>'
+        f'<div style="margin-top:1.5rem;">'
+        f'<div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:0.1em;color:var(--gxp-text3);">NET PAY</div>'
+        f'<div style="font-size:2.25rem;font-weight:800;color:var(--gxp-accent);'
+        f'line-height:1.1;margin-top:0.25rem;">{_fmt(net)}</div>'
+        f'</div>'
+        f'</div>'
+
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ============================================================
@@ -758,8 +849,7 @@ def _render_period_totals(entries: dict, employees: list[dict]):
     if not computed:
         return
 
-    st.divider()
-    st.subheader("Pay Period Totals")
+    st.markdown('<p class="gxp-page-label" style="margin-top:1.5rem;">PAY PERIOD TOTALS</p>', unsafe_allow_html=True)
 
     total_gross = sum(e["gross_pay"] for e in computed)
     total_sss_ee = sum(e["sss_employee"] for e in computed)
@@ -773,15 +863,28 @@ def _render_period_totals(entries: dict, employees: list[dict]):
     total_net = sum(e["net_pay"] for e in computed)
     total_er = total_sss_er + total_ph_er + total_pi_er
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Gross Pay", _fmt(total_gross))
-    with col2:
-        st.metric("Total Deductions", _fmt(total_deductions))
-    with col3:
-        st.metric("Total Net Pay", _fmt(total_net))
-    with col4:
-        st.metric("Total Employer Cost", _fmt(total_er))
+    st.markdown(
+        f'<div style="background:var(--gxp-surface);border-radius:1rem;padding:1.25rem 2rem;'
+        f'box-shadow:var(--gxp-m3-ambient-shadow);display:flex;align-items:center;gap:2.5rem;'
+        f'margin:1.25rem 0;">'
+        f'<div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:.1em;color:var(--gxp-text3);">Total Gross</div>'
+        f'<div style="font-size:1.375rem;font-weight:800;color:var(--gxp-text);">{_fmt(total_gross)}</div></div>'
+        f'<div style="width:1px;height:2.5rem;background:var(--gxp-border);"></div>'
+        f'<div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:.1em;color:var(--gxp-text3);">Total Deductions</div>'
+        f'<div style="font-size:1.375rem;font-weight:800;color:var(--gxp-danger);">{_fmt(total_deductions)}</div></div>'
+        f'<div style="width:1px;height:2.5rem;background:var(--gxp-border);"></div>'
+        f'<div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:.1em;color:var(--gxp-accent);">Net Payroll</div>'
+        f'<div style="font-size:1.75rem;font-weight:800;color:var(--gxp-accent);">{_fmt(total_net)}</div></div>'
+        f'<div style="width:1px;height:2.5rem;background:var(--gxp-border);"></div>'
+        f'<div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:.1em;color:var(--gxp-text3);">Employer Cost</div>'
+        f'<div style="font-size:1.375rem;font-weight:800;color:var(--gxp-text);">{_fmt(total_er)}</div></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown("**Government Remittances Due:**")
     rem_cols = st.columns(4)
@@ -821,8 +924,7 @@ def _render_period_totals(entries: dict, employees: list[dict]):
 # ============================================================
 
 def _render_payroll_processing():
-    # ---- Payroll History Combination Chart (moved to top) ----
-    st.divider()
+    # ---- Payroll History Combination Chart ----
     st.subheader("Payroll History")
 
     history = _load_all_period_history()
@@ -879,8 +981,6 @@ def _render_payroll_processing():
 
         st.plotly_chart(fig, width="stretch")
 
-    st.divider()
-
     employees = _load_employees()
     dept_map  = _load_departments_map()
     for emp in employees:
@@ -889,6 +989,68 @@ def _render_payroll_processing():
     if not employees:
         st.warning("No active employees. Add employees first in the Employee Master File.")
         return
+
+    # --- Pay Period Selection ---
+    period = _render_pay_period_selector()
+
+    if period is None:
+        return
+
+    is_locked = period["status"] in ("reviewed", "finalized", "paid")
+
+    # ── M3 Status bar ─────────────────────────────────────────────────────
+    _status = period["status"]
+    _status_colors = {
+        "draft":     ("var(--gxp-text2)",  "var(--gxp-m3-surface-container)"),
+        "reviewed":  ("var(--gxp-warning-fg)", "var(--gxp-warning-bg)"),
+        "finalized": ("var(--gxp-accent-fg)", "var(--gxp-accent-bg)"),
+        "paid":      ("var(--gxp-success-fg)", "var(--gxp-success-bg)"),
+    }
+    _sc, _sbg = _status_colors.get(_status, ("var(--gxp-text2)", "var(--gxp-m3-surface-container)"))
+    _reviewer_str = ""
+    if period.get("reviewed_by"):
+        _rat = period["reviewed_at"][:16].replace("T", " ") if period.get("reviewed_at") else ""
+        _reviewer_str = f'<span style="color:var(--gxp-text3);font-size:0.75rem;"> · Reviewed by {period["reviewed_by"]} ({_rat})</span>'
+
+    st.markdown(
+        f'<div style="background:var(--gxp-surface);border-radius:1rem;padding:1rem 1.5rem;'
+        f'display:flex;align-items:center;justify-content:space-between;'
+        f'box-shadow:var(--gxp-m3-ambient-shadow);margin-bottom:1rem;">'
+        f'<div style="display:flex;align-items:center;gap:2rem;">'
+        f'<div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:.1em;color:var(--gxp-text3);">Period</div>'
+        f'<div style="font-size:0.875rem;font-weight:600;">{period["period_start"]} – {period["period_end"]}</div></div>'
+        f'<div style="width:1px;height:2rem;background:var(--gxp-border);"></div>'
+        f'<div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:.1em;color:var(--gxp-text3);">Status</div>'
+        f'<div style="display:inline-block;background:{_sbg};color:{_sc};'
+        f'padding:0.15rem 0.75rem;border-radius:9999px;font-size:0.75rem;font-weight:700;">'
+        f'{_status.upper()}</div>{_reviewer_str}</div>'
+        f'<div style="width:1px;height:2rem;background:var(--gxp-border);"></div>'
+        f'<div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:.1em;color:var(--gxp-text3);">Headcount</div>'
+        f'<div style="font-size:0.875rem;font-weight:600;">{len(employees)} employees</div></div>'
+        f'<div style="width:1px;height:2rem;background:var(--gxp-border);"></div>'
+        f'<div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;'
+        f'letter-spacing:.1em;color:var(--gxp-text3);">Payment Date</div>'
+        f'<div style="font-size:0.875rem;font-weight:600;">{period["payment_date"]}</div></div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    if is_locked:
+        col_msg, col_btn = st.columns([4, 1])
+        with col_msg:
+            if period["status"] == "reviewed":
+                st.info("This pay period is under review. Earnings are read-only.")
+            else:
+                st.info("This pay period is finalized. Earnings are read-only.")
+        with col_btn:
+            st.write("")  # spacer
+            if st.button("Reopen for Editing", width="stretch"):
+                _update_pay_period(period["id"], {"status": "draft", "reviewed_by": None, "reviewed_at": None})
+                log_action("updated", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}", {"status": "draft (reopened)"})
+                st.rerun()
 
     # ── Filter bar ────────────────────────────────────────────
     all_positions = sorted({(e.get("position") or "").strip() for e in employees} - {""})
@@ -919,52 +1081,24 @@ def _render_payroll_processing():
 
     employees = [e for e in employees if _pp_match(e)]
 
-    # --- Pay Period Selection ---
-    period = _render_pay_period_selector()
-
-    if period is None:
-        return
-
-    is_locked = period["status"] in ("reviewed", "finalized", "paid")
-
-    st.divider()
-
-    # Status info bar
-    badge = status_badge(period["status"])
-    reviewer_html = ""
-    if period.get("reviewed_by"):
-        reviewed_at = period["reviewed_at"][:16].replace("T", " ") if period.get("reviewed_at") else ""
-        reviewer_html = f' &nbsp;·&nbsp; <b>Reviewed by:</b> {period["reviewed_by"]} ({reviewed_at})'
-
-    st.markdown(info_bar(
-        period["status"],
-        f'<b>Period:</b> {period["period_start"]} to {period["period_end"]}'
-        f' &nbsp;·&nbsp; <b>Payment:</b> {period["payment_date"]}'
-        f' &nbsp;·&nbsp; {badge}{reviewer_html}'
-    ), unsafe_allow_html=True)
-
-    if is_locked:
-        col_msg, col_btn = st.columns([4, 1])
-        with col_msg:
-            if period["status"] == "reviewed":
-                st.info("This pay period is under review. Earnings are read-only.")
-            else:
-                st.info("This pay period is finalized. Earnings are read-only.")
-        with col_btn:
-            st.write("")  # spacer
-            if st.button("Reopen for Editing", width="stretch"):
-                _update_pay_period(period["id"], {"status": "draft", "reviewed_by": None, "reviewed_at": None})
-                log_action("updated", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}", {"status": "draft (reopened)"})
-                st.rerun()
-
     # --- Load payroll entries for this period ---
     entries = _load_payroll_entries(period["id"])
 
-    # --- Employee payroll entries with progress ---
+    # --- Employee payroll entries with M3 progress header ---
     computed_count = sum(1 for e in employees if e["id"] in entries)
-    st.subheader(f"Employees ({len(employees)})")
+    _pct = int(computed_count / len(employees) * 100) if employees else 0
     st.markdown(
-        progress_bar(computed_count, len(employees), f"{computed_count} of {len(employees)} computed"),
+        f'<div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.75rem;">'
+        f'<div>'
+        f'<span class="gxp-page-label" style="margin:0;">EMPLOYEES</span>'
+        f'<span style="font-size:0.8125rem;color:var(--gxp-text3);margin-left:0.5rem;">'
+        f'{computed_count} of {len(employees)} computed</span>'
+        f'</div>'
+        f'<span style="font-size:0.8125rem;font-weight:700;color:var(--gxp-accent);">{_pct}%</span>'
+        f'</div>'
+        f'<div style="height:4px;background:var(--gxp-border);border-radius:9999px;margin-bottom:1rem;">'
+        f'<div style="height:4px;width:{_pct}%;background:var(--gxp-accent);border-radius:9999px;'
+        f'transition:width 0.3s ease;"></div></div>',
         unsafe_allow_html=True,
     )
 
@@ -1269,9 +1403,14 @@ def _render_payslips_tab():
 
 def render():
     inject_css()
-    st.title("Payroll Run")
+    st.markdown(
+        '<p class="gxp-page-label">PAYROLL RUN</p>'
+        '<h1 style="font-size:2.75rem;font-weight:300;letter-spacing:-0.02em;'
+        'margin:0 0 1.5rem;line-height:1.1;">Payroll Run</h1>',
+        unsafe_allow_html=True,
+    )
 
-    tab_run, tab_payslips = st.tabs(["Payroll Processing", "Payslips"])
+    tab_run, tab_payslips = st.tabs(["📋 Payroll Processing", "🧾 Payslips"])
 
     with tab_run:
         _render_payroll_processing()

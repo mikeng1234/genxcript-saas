@@ -397,7 +397,18 @@ def render():
     col_brand, col_form = st.columns([2, 3], gap="small")
 
     with col_brand:
-        st.markdown(_BRAND_PANEL_HTML, unsafe_allow_html=True)
+        import base64, os as _os
+        _logo_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "static", "genxcript_logo_dark.png")
+        try:
+            with open(_logo_path, "rb") as _f:
+                _logo_b64 = base64.b64encode(_f.read()).decode()
+            _logo_src = f"data:image/png;base64,{_logo_b64}"
+        except Exception:
+            _logo_src = "app/static/genxcript_logo_dark.png"
+        st.markdown(
+            _BRAND_PANEL_HTML.replace('src="app/static/genxcript_logo_dark.png"', f'src="{_logo_src}"'),
+            unsafe_allow_html=True,
+        )
 
     with col_form:
         view = st.session_state.get("login_view", "signin")
