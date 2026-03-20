@@ -1,6 +1,6 @@
 # GenXcript Payroll — Product Roadmap
 
-> Last updated: 2026-03-20
+> Last updated: 2026-03-21
 > Strategy: Payroll-first → HR Compliance → Attendance → Advanced Payroll → Portal → BI → Scale
 > Each phase unlocks the next. Features within a phase are ordered by dependency.
 
@@ -15,8 +15,8 @@
 - [x] **Phase C — Login Page** — `GenXcript_Dark.png` logo in `app/static/` replacing plain text; static file serving via Streamlit; ambient shadow on logo
 - [x] **Topbar** — Fixed top bar injected via JS: company name (left) + user chip + Preferences + My Account + Sign Out (right); `My Account` and `Sign Out` removed from sidebar footer (still hidden in DOM for `clickNav()` routing); 48px content push-down
 - [x] **Bug fixes** — Checkbox highlight (Emotion class whitelist); Edit employee 2-click (render-level redirect); Activate/Deactivate on_click pattern (data refresh without dialog close); Print 201 blob URL + immediate state clear; salary hidden by default with toggle; search bar repositioned
-- [ ] **Phase D — Dashboard** — Stitch ref: `fromstitch/04_dashboard.html`
-- [ ] **Phase E — Employees** — Stitch ref: `fromstitch/05_employees.html`
+- [x] **Phase D — Dashboard** — M3 bento hero grid: Next Pay Date hero, Active Employees accent card, Payroll Expenditure mini-bar chart, Recent Activity feed, Quick Actions row; existing KPI/alerts/remittance panels retained below
+- [x] **Phase E — Employees** — Table replaced with 3-column M3 card grid: initials avatar (8-color palette), department pill, name/position/emp no, salary toggle, employment type badge, SSS/PH/PI/TIN gov ID dots; editorial heading; all action buttons retained
 - [ ] **Phase F — Payroll Run** — Stitch ref: `fromstitch/06_payroll_run.html`
 - [ ] **Phase G — Attendance** — Stitch ref: `fromstitch/07_attendance.html`
 - [ ] **Phase H — Workforce Analytics** — Stitch ref: `fromstitch/08_ot_analytics.html`

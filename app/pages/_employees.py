@@ -2077,9 +2077,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
     if show_incomplete_only:
         filtered = [e for e in filtered if _onboarding_status(e)[0] < len(ONBOARDING_FIELDS)]
 
-    # --- Employee Table ---
-    st.divider()
-
+    # --- Employee Card Grid ---
     if not filtered:
         if show_incomplete_only:
             st.success("All employees have complete government ID profiles.")
@@ -2087,9 +2085,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
             st.info("No employees found. Click '+ Add Employee' to get started.")
         return
 
-    total = len(ONBOARDING_FIELDS)
-
-    # ── Salary visibility toggle (full page only) ──────────────────────────
+    # ── Salary toggle ───────────────────────────────────────────────────────
     if show_salary_toggle:
         salary_visible = st.session_state.get("emp_salary_visible", False)
         cap_col, tog_col = st.columns([8, 2])
@@ -2105,217 +2101,234 @@ def _render_employees_tab(show_salary_toggle: bool = True):
         salary_visible = False
         st.caption(f"Showing {len(filtered)} employee{'s' if len(filtered) != 1 else ''}")
 
-    # Table header — salary column included only when visible
-    if salary_visible:
-        cols_w  = [1.2, 2.5, 2, 2, 2,   1.5, 1, 1, 4]
-        headers = ["No.", "Name", "Position", "Department", "Salary", "Type", "IDs", "Status", "Actions"]
-    else:
-        cols_w  = [1.2, 2.5, 2, 2, 1.5, 1, 1, 4]
-        headers = ["No.", "Name", "Position", "Department", "Type", "IDs", "Status", "Actions"]
-    cols = st.columns(cols_w)
-    for col, header in zip(cols, headers):
-        col.markdown(f"**{header}**")
+    # Avatar palette (cycles through 8 colors)
+    _AV_PAL = [
+        ("#d8e2ff", "#001a41"), ("#ffdea0", "#261a00"),
+        ("#ffdad6", "#93000a"), ("#c8fcd3", "#002108"),
+        ("#e1e3e4", "#424753"), ("#adc6ff", "#004493"),
+        ("#cefbea", "#004d30"), ("#fce4ec", "#880e4f"),
+    ]
+    _TYPE_STYLE = {
+        "regular":      ("#c8fcd3", "#005320"),
+        "probationary": ("#ffdea0", "#5c4300"),
+        "contractual":  ("#e1e3e4", "#424753"),
+        "part-time":    ("#d8e2ff", "#004494"),
+    }
+    _GOV_FIELDS = [
+        ("SSS", "sss_no"), ("PH", "philhealth_no"),
+        ("PI",  "pagibig_no"), ("TIN", "tin_no"),
+    ]
 
-    # Table rows
-    for emp in filtered:
-        completed, missing = _onboarding_status(emp)
-        cols = st.columns(cols_w)
+    # 3-column card grid
+    for row_start in range(0, len(filtered), 3):
+        row_emps = filtered[row_start:row_start + 3]
+        gcols = st.columns(3)
+        for col_idx, emp in enumerate(row_emps):
+            with gcols[col_idx]:
+                idx     = row_start + col_idx
+                av_bg, av_fg = _AV_PAL[idx % len(_AV_PAL)]
+                initials = (
+                    (emp.get("first_name") or "")[:1]
+                    + (emp.get("last_name") or "")[:1]
+                ).upper() or "?"
+                dept     = emp.get("department") or "—"
+                name     = f"{emp.get('first_name', '')} {emp.get('last_name', '')}".strip()
+                position = emp.get("position") or "—"
+                emp_type = (emp.get("employment_type") or "regular").lower()
+                tb_bg, tb_fg = _TYPE_STYLE.get(emp_type, ("#e1e3e4", "#424753"))
+                opacity  = "1" if emp.get("is_active", True) else "0.55"
 
-        # s = salary column offset (1 when visible, 0 when hidden)
-        s = 1 if salary_visible else 0
-        with cols[0]:
-            st.text(emp["employee_no"])
-        with cols[1]:
-            name_display = f"{emp['last_name']}, {emp['first_name']}"
-            portal_status = " 🔗" if emp.get("user_id") else ""
-            st.text(name_display + portal_status)
-        with cols[2]:
-            st.text(emp.get("position") or "—")
-        with cols[3]:
-            st.text(emp.get("department") or "—")
-        if salary_visible:
-            with cols[4]:
-                salary_display = f"₱{_centavos_to_pesos(emp['basic_salary']):,.2f}/{emp['salary_type'][:2]}"
-                st.text(salary_display)
-        with cols[4 + s]:
-            st.text(emp["employment_type"].title())
-        with cols[5 + s]:
-            badge = _onboarding_badge(completed, total)
-            if missing:
-                st.markdown(badge, help=f"Missing: {', '.join(missing)}")
-            else:
-                st.markdown(badge)
-        with cols[6 + s]:
-            if emp.get("is_active", True):
-                st.markdown(
-                    '<span style="display:inline-flex;align-items:center;gap:5px;">'
-                    '<span style="width:9px;height:9px;border-radius:50%;'
-                    'background:#22c55e;flex-shrink:0;"></span>'
-                    '<span style="font-size:12px;color:var(--gxp-text2);">Active</span>'
-                    '</span>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    '<span style="display:inline-flex;align-items:center;gap:5px;">'
-                    '<span style="width:9px;height:9px;border-radius:50%;'
-                    'background:#ef4444;flex-shrink:0;"></span>'
-                    '<span style="font-size:12px;color:var(--gxp-text2);">Inactive</span>'
-                    '</span>',
-                    unsafe_allow_html=True,
-                )
-        with cols[7 + s]:
-            btn_col1, btn_col2, btn_col3, btn_col4, btn_col5 = st.columns([1, 1, 1, 1, 1])
-            with btn_col1:
-                if st.button(
-                    "", key=f"edit_{emp['id']}", width="stretch",
-                    type="primary",
-                    icon=":material/edit:",
-                    help="Edit employee",
-                ):
-                    st.session_state.editing_id = emp["id"]
-                    st.rerun()
-            with btn_col2:
-                if not emp.get("email"):
-                    st.markdown(
-                        "<div style='text-align:center;color:#aaa;margin-top:6px' "
-                        "title='Add employee email to enable portal invite'>—</div>",
-                        unsafe_allow_html=True,
+                if salary_visible:
+                    sal_v = _centavos_to_pesos(emp["basic_salary"])
+                    sal_t = (emp.get("salary_type") or "monthly")[:2].lower()
+                    salary_html = (
+                        f"<span style='font-weight:700;color:#191c1d;font-size:13px;'>"
+                        f"&#8369;{sal_v:,.0f}/{sal_t}</span>"
                     )
-                elif not emp.get("user_id"):
-                    if st.button(
-                        "", key=f"invite_{emp['id']}", width="stretch",
-                        icon=":material/contact_mail:",
-                        help=f"Send portal invite to {emp['email']}",
-                    ):
-                        st.session_state[f"invite_confirm_{emp['id']}"] = True
                 else:
-                    if st.button(
-                        "", key=f"invite_{emp['id']}", width="stretch",
-                        icon=":material/sync:",
-                        help=f"Resend portal access to {emp['email']}",
-                    ):
-                        st.session_state[f"invite_confirm_{emp['id']}"] = True
-            with btn_col3:
-                if emp.get("email") and emp.get("user_id"):
-                    if st.button(
-                        "", key=f"resetpwd_{emp['id']}", width="stretch",
-                        icon=":material/lock_reset:",
-                        help=f"Send password reset to {emp['email']}",
-                    ):
-                        from app.auth import send_password_reset
-                        ok, err = send_password_reset(emp["email"])
-                        if ok:
-                            st.session_state["_invite_toast"] = (
-                                "success",
-                                f"Password reset email sent to **{emp['email']}**.",
-                            )
-                        else:
-                            st.session_state["_invite_toast"] = ("error", err)
+                    salary_html = (
+                        "<span style='color:#b0b8c1;font-size:13px;letter-spacing:2px;'>"
+                        "&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;</span>"
+                    )
+
+                portal_badge = (
+                    "<span style='font-size:9px;font-weight:700;color:#005bc1;"
+                    "background:#d8e2ff;padding:2px 6px;border-radius:9999px;"
+                    "margin-left:5px;vertical-align:middle;'>PORTAL</span>"
+                    if emp.get("user_id") else ""
+                )
+                inactive_tag = (
+                    "<div style='font-size:10px;font-weight:700;color:#ba1a1a;"
+                    "text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;'>Inactive</div>"
+                    if not emp.get("is_active", True) else ""
+                )
+                gov_pills = "".join(
+                    f"<div style='display:flex;align-items:center;gap:4px;"
+                    f"font-size:10px;font-weight:700;color:#727784;"
+                    f"background:#f3f4f5;padding:3px 7px;border-radius:5px;'>"
+                    f"{lbl}&nbsp;"
+                    f"<span style='width:7px;height:7px;border-radius:50%;"
+                    f"background:{'#6ddd82' if emp.get(fld) else '#ba1a1a'};"
+                    f"display:inline-block;flex-shrink:0;'></span></div>"
+                    for lbl, fld in _GOV_FIELDS
+                )
+
+                st.markdown(
+                    f"<div style='opacity:{opacity};background:#ffffff;border-radius:16px;"
+                    f"padding:22px 22px 14px;margin-bottom:4px;"
+                    f"box-shadow:0px 20px 40px rgba(45,51,53,0.06);"
+                    f"display:flex;flex-direction:column;gap:13px;'>"
+                    f"<div style='display:flex;justify-content:space-between;align-items:flex-start;'>"
+                    f"<div style='width:52px;height:52px;border-radius:12px;background:{av_bg};"
+                    f"display:flex;align-items:center;justify-content:center;"
+                    f"font-size:17px;font-weight:800;color:{av_fg};"
+                    f"font-family:\"Plus Jakarta Sans\",system-ui,sans-serif;'>{initials}</div>"
+                    f"<div style='background:#ebeef0;padding:3px 10px;border-radius:9999px;"
+                    f"font-size:10px;font-weight:700;text-transform:uppercase;"
+                    f"letter-spacing:0.07em;color:#424753;max-width:120px;"
+                    f"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>{dept}</div>"
+                    f"</div>"
+                    f"<div>"
+                    f"<div style='font-size:15px;font-weight:700;color:#191c1d;line-height:1.3;'>"
+                    f"{name}{portal_badge}</div>"
+                    f"{inactive_tag}"
+                    f"<div style='font-size:12px;color:#424753;margin-top:2px;'>"
+                    f"{emp['employee_no']} &middot; {position}</div>"
+                    f"</div>"
+                    f"<div style='display:flex;justify-content:space-between;align-items:center;"
+                    f"padding-top:10px;border-top:1px solid #f3f4f5;'>"
+                    f"{salary_html}"
+                    f"<span style='font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;"
+                    f"background:{tb_bg};color:{tb_fg};'>{emp_type.title()}</span>"
+                    f"</div>"
+                    f"<div style='display:flex;gap:5px;flex-wrap:wrap;'>{gov_pills}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+                # ── Action buttons ─────────────────────────────────────────
+                b1, b2, b3, b4, b5 = st.columns(5)
+                with b1:
+                    if st.button("", key=f"edit_{emp['id']}", width="stretch",
+                                 type="primary", icon=":material/edit:", help="Edit employee"):
+                        st.session_state.editing_id = emp["id"]
                         st.rerun()
-                else:
-                    st.markdown(
-                        "<div style='text-align:center;color:#aaa;margin-top:6px' "
-                        "title='Link portal account first to enable password reset'>—</div>",
-                        unsafe_allow_html=True,
-                    )
-            with btn_col4:
-                if emp.get("is_active", True):
-                    st.button(
-                        "", key=f"deact_{emp['id']}", width="stretch",
-                        icon=":material/radio_button_checked:",
-                        help="Deactivate this employee",
-                        on_click=_update_employee,
-                        args=(emp["id"], {"is_active": False}),
-                    )
-                else:
-                    st.button(
-                        "", key=f"react_{emp['id']}", width="stretch",
-                        icon=":material/radio_button_unchecked:",
-                        help="Reactivate this employee",
-                        on_click=_update_employee,
-                        args=(emp["id"], {"is_active": True}),
-                    )
-            with btn_col5:
-                if st.button(
-                    "", key=f"print201_{emp['id']}", width="stretch",
-                    icon=":material/print:",
-                    help="Print Employee 201 File",
-                ):
-                    st.session_state["print201_id"] = emp["id"]
-
-        # Invite / Re-send confirmation
-        if st.session_state.get(f"invite_confirm_{emp['id']}"):
-            already_linked = bool(emp.get("user_id"))
-            action_label   = "Re-send / Re-link portal access" if already_linked else "Send portal invite"
-            st.info(f"{action_label} for **{emp['email']}**?")
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("Yes, Confirm", key=f"inv_yes_{emp['id']}", type="primary"):
-                    from app.auth import invite_employee
-                    from app.db_helper import get_db, get_company_id
-                    ok, result = invite_employee(emp["email"])
-                    if ok:
-                        # result may be "user_id|SMTP_FAILED|temp_pass|err_msg"
-                        # when SMTP is not configured — parse it out
-                        smtp_failed   = False
-                        temp_password = None
-                        smtp_err      = ""
-                        if "|SMTP_FAILED|" in result:
-                            parts         = result.split("|SMTP_FAILED|", 1)
-                            auth_user_id  = parts[0]
-                            rest          = parts[1].split("|", 1)
-                            temp_password = rest[0]
-                            smtp_err      = rest[1] if len(rest) > 1 else ""
-                            smtp_failed   = True
-                        else:
-                            auth_user_id = result
-
-                        db = get_db()
-                        # Update employee record with auth user ID
-                        db.table("employees").update({"user_id": auth_user_id}).eq("id", emp["id"]).execute()
-                        # Upsert user_company_access — handles both new and existing rows
-                        try:
-                            db.table("user_company_access").upsert({
-                                "user_id":    auth_user_id,
-                                "company_id": get_company_id(),
-                                "role":       "employee",
-                            }, on_conflict="user_id,company_id").execute()
-                        except Exception:
-                            try:
-                                db.table("user_company_access").insert({
-                                    "user_id":    auth_user_id,
-                                    "company_id": get_company_id(),
-                                    "role":       "employee",
-                                }).execute()
-                            except Exception:
-                                pass
-
-                        if smtp_failed:
-                            # SMTP not configured — show the temp password to admin
-                            toast_msg = (
-                                f"Account created for **{emp['email']}**.\n\n"
-                                f"Email could not be sent ({smtp_err}).\n\n"
-                                f"**Share this temporary password manually:**\n\n"
-                                f"```\n{temp_password}\n```\n\n"
-                                "Tell the employee to log in and use **Forgot Password** to change it."
-                            )
-                            st.session_state["_invite_toast"] = ("warning", toast_msg)
-                        else:
-                            action = "re-linked" if already_linked else "created"
-                            toast_msg = (
-                                f"Portal access {action} for **{emp['email']}**. "
-                                "A temporary password was emailed — they should check their inbox and log in."
-                            )
-                            st.session_state["_invite_toast"] = ("success", toast_msg)
+                with b2:
+                    if not emp.get("email"):
+                        st.markdown(
+                            "<div style='text-align:center;color:#aaa;padding-top:8px;font-size:12px;'"
+                            " title='Add email to enable portal invite'>—</div>",
+                            unsafe_allow_html=True,
+                        )
+                    elif not emp.get("user_id"):
+                        if st.button("", key=f"invite_{emp['id']}", width="stretch",
+                                     icon=":material/contact_mail:",
+                                     help=f"Send portal invite to {emp['email']}"):
+                            st.session_state[f"invite_confirm_{emp['id']}"] = True
                     else:
-                        st.session_state["_invite_toast"] = ("error", result)
-                    st.session_state[f"invite_confirm_{emp['id']}"] = False
-                    st.rerun()
-            with c2:
-                if st.button("Cancel", key=f"inv_no_{emp['id']}"):
-                    st.session_state[f"invite_confirm_{emp['id']}"] = False
-                    st.rerun()
+                        if st.button("", key=f"invite_{emp['id']}", width="stretch",
+                                     icon=":material/sync:",
+                                     help=f"Resend portal access to {emp['email']}"):
+                            st.session_state[f"invite_confirm_{emp['id']}"] = True
+                with b3:
+                    if emp.get("email") and emp.get("user_id"):
+                        if st.button("", key=f"resetpwd_{emp['id']}", width="stretch",
+                                     icon=":material/lock_reset:",
+                                     help=f"Send password reset to {emp['email']}"):
+                            from app.auth import send_password_reset
+                            ok, err = send_password_reset(emp["email"])
+                            st.session_state["_invite_toast"] = (
+                                ("success", f"Password reset email sent to **{emp['email']}**.")
+                                if ok else ("error", err)
+                            )
+                            st.rerun()
+                    else:
+                        st.markdown(
+                            "<div style='text-align:center;color:#aaa;padding-top:8px;font-size:12px;'"
+                            " title='Link portal first to enable password reset'>—</div>",
+                            unsafe_allow_html=True,
+                        )
+                with b4:
+                    if emp.get("is_active", True):
+                        st.button("", key=f"deact_{emp['id']}", width="stretch",
+                                  icon=":material/radio_button_checked:",
+                                  help="Deactivate this employee",
+                                  on_click=_update_employee, args=(emp["id"], {"is_active": False}))
+                    else:
+                        st.button("", key=f"react_{emp['id']}", width="stretch",
+                                  icon=":material/radio_button_unchecked:",
+                                  help="Reactivate this employee",
+                                  on_click=_update_employee, args=(emp["id"], {"is_active": True}))
+                with b5:
+                    if st.button("", key=f"print201_{emp['id']}", width="stretch",
+                                 icon=":material/print:", help="Print Employee 201 File"):
+                        st.session_state["print201_id"] = emp["id"]
+
+                # ── Invite confirmation ────────────────────────────────────
+                if st.session_state.get(f"invite_confirm_{emp['id']}"):
+                    already_linked = bool(emp.get("user_id"))
+                    action_label   = "Re-send / Re-link portal access" if already_linked else "Send portal invite"
+                    st.info(f"{action_label} for **{emp['email']}**?")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("Yes, Confirm", key=f"inv_yes_{emp['id']}", type="primary"):
+                            from app.auth import invite_employee
+                            from app.db_helper import get_db, get_company_id
+                            ok, result = invite_employee(emp["email"])
+                            if ok:
+                                smtp_failed   = False
+                                temp_password = None
+                                smtp_err      = ""
+                                if "|SMTP_FAILED|" in result:
+                                    parts         = result.split("|SMTP_FAILED|", 1)
+                                    auth_user_id  = parts[0]
+                                    rest          = parts[1].split("|", 1)
+                                    temp_password = rest[0]
+                                    smtp_err      = rest[1] if len(rest) > 1 else ""
+                                    smtp_failed   = True
+                                else:
+                                    auth_user_id = result
+                                db = get_db()
+                                db.table("employees").update({"user_id": auth_user_id}).eq("id", emp["id"]).execute()
+                                try:
+                                    db.table("user_company_access").upsert({
+                                        "user_id":    auth_user_id,
+                                        "company_id": get_company_id(),
+                                        "role":       "employee",
+                                    }, on_conflict="user_id,company_id").execute()
+                                except Exception:
+                                    try:
+                                        db.table("user_company_access").insert({
+                                            "user_id":    auth_user_id,
+                                            "company_id": get_company_id(),
+                                            "role":       "employee",
+                                        }).execute()
+                                    except Exception:
+                                        pass
+                                if smtp_failed:
+                                    toast_msg = (
+                                        f"Account created for **{emp['email']}**.\n\n"
+                                        f"Email could not be sent ({smtp_err}).\n\n"
+                                        f"**Share this temporary password manually:**\n\n"
+                                        f"```\n{temp_password}\n```\n\n"
+                                        "Tell the employee to log in and use **Forgot Password** to change it."
+                                    )
+                                    st.session_state["_invite_toast"] = ("warning", toast_msg)
+                                else:
+                                    action = "re-linked" if already_linked else "created"
+                                    st.session_state["_invite_toast"] = (
+                                        "success",
+                                        f"Portal access {action} for **{emp['email']}**. "
+                                        "A temporary password was emailed.",
+                                    )
+                            else:
+                                st.session_state["_invite_toast"] = ("error", result)
+                            st.session_state[f"invite_confirm_{emp['id']}"] = False
+                            st.rerun()
+                    with c2:
+                        if st.button("Cancel", key=f"inv_no_{emp['id']}"):
+                            st.session_state[f"invite_confirm_{emp['id']}"] = False
+                            st.rerun()
 
     # ── Employee 201 Print ────────────────────────────────────────────────────
     if st.session_state.get("print201_id"):
@@ -2375,7 +2388,11 @@ def _render_employees_tab(show_salary_toggle: bool = True):
 
 def render():
     inject_css()
-    st.title("Employee Master File")
+    st.markdown(
+        '<p class="gxp-page-label">TEAM</p>'
+        '<h2 class="gxp-editorial-heading">Employees</h2>',
+        unsafe_allow_html=True,
+    )
 
     # ── Page-level toasts (shown above tabs so they're always visible) ─────────
     if "_edit_toast" in st.session_state:
