@@ -1,8 +1,28 @@
 # GenXcript Payroll — Product Roadmap
 
-> Last updated: 2026-03-19
+> Last updated: 2026-03-20
 > Strategy: Payroll-first → HR Compliance → Attendance → Advanced Payroll → Portal → BI → Scale
 > Each phase unlocks the next. Features within a phase are ordered by dependency.
+
+---
+
+## Phase UI: Material 3 Design System ("Tactile Sanctuary") 🎨 In Progress
+> Upgrading the entire UI to Google Material 3 design language. Reference designs generated via Google Stitch AI and stored in `fromstitch/` (11 HTML files). Prompts stored in `webprompts/` (11 files with shared design system header).
+> **Beelink note:** Pull latest, check `fromstitch/` (01_login.html – 11_preferences.html) and `app/static/` (logos). Run `streamlit run app/main.py` to see current state.
+
+- [x] **Phase A — Global CSS Foundation** — `app/styles.py`: "tactile" theme with full Material 3 token set (`--gxp-*` CSS variables); Plus Jakarta Sans + Material Symbols Outlined fonts; pill buttons, pill inputs, pill tabs, ambient card shadows, rounded modals; `DEFAULT_THEME = "tactile"`
+- [x] **Phase B — Sidebar Redesign** — Material Symbols Outlined icons replacing MDI; `injectFonts()` loads fonts directly into `window.parent.document.head`; light-theme fallback colors; pill-shaped active/hover nav items; brand section with "Payroll Solutions" subtitle; `[server] enableStaticServing = true` in config.toml
+- [x] **Phase C — Login Page** — `GenXcript_Dark.png` logo in `app/static/` replacing plain text; static file serving via Streamlit; ambient shadow on logo
+- [x] **Topbar** — Fixed top bar injected via JS: company name (left) + user chip + Preferences + My Account + Sign Out (right); `My Account` and `Sign Out` removed from sidebar footer (still hidden in DOM for `clickNav()` routing); 48px content push-down
+- [x] **Bug fixes** — Checkbox highlight (Emotion class whitelist); Edit employee 2-click (render-level redirect); Activate/Deactivate on_click pattern (data refresh without dialog close); Print 201 blob URL + immediate state clear; salary hidden by default with toggle; search bar repositioned
+- [ ] **Phase D — Dashboard** — Stitch ref: `fromstitch/04_dashboard.html`
+- [ ] **Phase E — Employees** — Stitch ref: `fromstitch/05_employees.html`
+- [ ] **Phase F — Payroll Run** — Stitch ref: `fromstitch/06_payroll_run.html`
+- [ ] **Phase G — Attendance** — Stitch ref: `fromstitch/07_attendance.html`
+- [ ] **Phase H — Workforce Analytics** — Stitch ref: `fromstitch/08_ot_analytics.html`
+- [ ] **Phase I — Government Reports** — Stitch ref: `fromstitch/09_government_reports.html`; fix duplicate heading
+- [ ] **Phase J — Calendar** — Stitch ref: `fromstitch/10_calendar.html`
+- [ ] **Phase K — Company Setup** — Stitch ref: `fromstitch/11_company_setup.html`
 
 ---
 
@@ -242,6 +262,7 @@
 - [ ] **HTTPS enforcement** — document that production deployment must run behind TLS (Nginx + Certbot, Railway, or Cloudflare Tunnel); never run production on plain HTTP
 - [ ] **Rate limiting on login** — add server-side attempt counter (e.g., 5 failed logins → 15-min lockout) stored in Supabase or `st.cache_resource` dict to prevent brute-force attacks
 - [ ] **Penetration test** — run OWASP ZAP scan on the ngrok/production URL; fix any HIGH/CRITICAL findings before go-live
+- [ ] **Shannon Lite** — autonomous white box AI pentester (GitHub: search "shannon lite autonomous pentester"); run against production URL with source code access for deeper OWASP coverage beyond ZAP; white box mode allows it to trace auth flows, RLS logic, and injection paths through actual code paths
 
 ---
 

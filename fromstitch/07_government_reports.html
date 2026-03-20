@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Government Reports - GenXcript Payroll</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-primary-fixed-variant": "#004493",
+                        "background": "#f8f9fa",
+                        "on-secondary-container": "#6d5000",
+                        "secondary-fixed-dim": "#fbbc06",
+                        "tertiary-fixed-dim": "#6ddd82",
+                        "surface-container": "#edeeef",
+                        "error": "#ba1a1a",
+                        "on-tertiary-container": "#80f193",
+                        "tertiary": "#005320",
+                        "surface-dim": "#d9dadb",
+                        "primary": "#004494",
+                        "on-primary-fixed": "#001a41",
+                        "inverse-primary": "#adc6ff",
+                        "surface-tint": "#005bc0",
+                        "on-background": "#191c1d",
+                        "surface-container-low": "#f3f4f5",
+                        "primary-container": "#005bc1",
+                        "surface-container-high": "#e7e8e9",
+                        "outline-variant": "#c2c6d5",
+                        "primary-fixed-dim": "#adc6ff",
+                        "on-secondary-fixed-variant": "#5c4300",
+                        "on-primary": "#ffffff",
+                        "inverse-surface": "#2e3132",
+                        "on-tertiary": "#ffffff",
+                        "primary-fixed": "#d8e2ff",
+                        "outline": "#727784",
+                        "on-secondary-fixed": "#261a00",
+                        "surface-bright": "#f8f9fa",
+                        "on-primary-container": "#c9d9ff",
+                        "on-error": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "surface-variant": "#e1e3e4",
+                        "inverse-on-surface": "#f0f1f2",
+                        "surface": "#f8f9fa",
+                        "secondary-fixed": "#ffdea0",
+                        "secondary": "#795900",
+                        "on-surface": "#191c1d",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-container": "#febf0d",
+                        "on-surface-variant": "#424753",
+                        "on-secondary": "#ffffff",
+                        "tertiary-container": "#006e2d",
+                        "error-container": "#ffdad6",
+                        "on-tertiary-fixed": "#002108",
+                        "on-tertiary-fixed-variant": "#005320",
+                        "tertiary-fixed": "#89fa9b",
+                        "surface-container-highest": "#e1e3e4"
+                    },
+                    fontFamily: {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Plus Jakarta Sans"],
+                        "label": ["Plus Jakarta Sans"]
+                    },
+                    borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8f9fa; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .jewel-gradient { background: linear-gradient(135deg, #005bc1 0%, #3d89ff 100%); }
+    </style>
+</head>
+<body class="text-on-background">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-[240px] z-40 bg-slate-50 dark:bg-slate-950 flex flex-col pt-20 pb-8 px-4 border-r-0" style="box-shadow: 0px 20px 40px rgba(45, 51, 53, 0.06);">
+<div class="mb-10 px-4">
+<h1 class="text-lg font-bold text-slate-900 dark:text-slate-100">GenXcript</h1>
+<p class="text-[0.6875rem] uppercase font-bold tracking-wider text-slate-500">Payroll Management</p>
+</div>
+<nav class="flex flex-col gap-1 flex-1">
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 px-4 py-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 px-4 py-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="text-sm font-medium">Employees</span>
+</a>
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 px-4 py-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="text-sm font-medium">Payroll Run</span>
+</a>
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 px-4 py-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="event_available">event_available</span>
+<span class="text-sm font-medium">Attendance</span>
+</a>
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 px-4 py-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="text-sm font-medium">Workforce Analytics</span>
+</a>
+<a class="flex items-center gap-3 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full px-4 py-2 font-medium" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="text-sm font-medium">Government Reports</span>
+</a>
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 px-4 py-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+<span class="text-sm font-medium">Calendar</span>
+</a>
+<div class="mt-auto pt-4 flex flex-col gap-1 border-t border-slate-200 dark:border-slate-800">
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 px-4 py-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="domain">domain</span>
+<span class="text-sm font-medium">Company Setup</span>
+</a>
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 px-4 py-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="text-sm font-medium">Preferences</span>
+</a>
+</div>
+</nav>
+<button class="jewel-gradient text-white font-bold py-3 px-6 rounded-full mt-6 flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+            Run Payroll
+        </button>
+</aside>
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md flex justify-between items-center px-8 h-16 w-full pl-[272px]">
+<div class="flex items-center gap-2">
+<span class="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">GenXcript Payroll</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative group">
+<span class="material-symbols-outlined text-slate-500 hover:text-blue-600 cursor-pointer transition-colors" data-icon="notifications">notifications</span>
+<div class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
+</div>
+<span class="material-symbols-outlined text-slate-500 hover:text-blue-600 cursor-pointer transition-colors" data-icon="help_outline">help_outline</span>
+<div class="w-8 h-8 rounded-full bg-slate-200 overflow-hidden">
+<img alt="User profile avatar" class="w-full h-full object-cover" data-alt="User avatar with professional illustration style" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAdwm5h06ptuYroT21d-owgUrNzSIveNxuQaOLaOHgO1VCkZSKqK--elvpqYyshKb4gWKGAtOM8UfoBOap3JGY4eq1kQ6eqoLvJjjLIBqMX8O8e291UVulsw7euE69CVZBP22llK9VQ22PfWpSJB1Ms99cLH0YduCWs6-0HnJRXVuKYhvq-GzjegO3xdvGqz-FT9aZ_6Al3c9M0Ge4mEQPCARAOma0hePQC_EOvULfZmMxL_2Wmf8-IzHajYC8Wr4x-K-75M2DIK7s"/>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="pl-[240px] pt-16 min-h-screen">
+<div class="max-w-7xl mx-auto px-12 py-12">
+<!-- Page Header -->
+<section class="mb-12">
+<h2 class="text-[3.5rem] font-light leading-tight tracking-tight text-on-surface">Government Reports</h2>
+<p class="text-on-surface-variant mt-2 text-lg">Philippine Statutory Compliance &amp; Filings</p>
+</section>
+<!-- Tab Switcher -->
+<div class="flex gap-2 p-1 bg-surface-container-low w-fit rounded-full mb-10">
+<button class="px-6 py-2.5 rounded-full text-sm font-semibold jewel-gradient text-white transition-all">Monthly Reports</button>
+<button class="px-6 py-2.5 rounded-full text-sm font-medium text-on-surface-variant hover:bg-surface-container transition-all">Annual Reports</button>
+<button class="px-6 py-2.5 rounded-full text-sm font-medium text-on-surface-variant hover:bg-surface-container transition-all">DOLE 13th Month</button>
+<button class="px-6 py-2.5 rounded-full text-sm font-medium text-on-surface-variant hover:bg-surface-container transition-all">Remittance Log</button>
+</div>
+<div class="grid grid-cols-12 gap-8 items-start">
+<!-- Filters & Controls -->
+<div class="col-span-12 lg:col-span-4 flex flex-col gap-6">
+<div class="bg-surface-container-lowest rounded-lg p-8 shadow-sm">
+<h3 class="text-sm font-bold uppercase tracking-wider text-on-surface-variant mb-6">Report Selection</h3>
+<div class="space-y-4">
+<div>
+<label class="text-[0.6875rem] font-bold uppercase text-slate-400 mb-2 block">Pay Period</label>
+<select class="w-full bg-[#ebeef0] border-none rounded-full px-6 py-3 text-sm font-medium focus:ring-2 focus:ring-primary-fixed appearance-none cursor-pointer">
+<option>March 1 – 31, 2026</option>
+<option>February 1 – 28, 2026</option>
+<option>January 1 – 31, 2026</option>
+</select>
+</div>
+<div>
+<label class="text-[0.6875rem] font-bold uppercase text-slate-400 mb-2 block">Statutory Agency</label>
+<select class="w-full bg-[#ebeef0] border-none rounded-full px-6 py-3 text-sm font-medium focus:ring-2 focus:ring-primary-fixed appearance-none cursor-pointer">
+<option>SSS R3/R5 (Monthly Contribution)</option>
+<option>PhilHealth RF-1</option>
+<option>Pag-IBIG MCRF</option>
+<option>BIR 1601-C (Withholding Tax)</option>
+</select>
+</div>
+</div>
+<div class="mt-8 p-6 bg-surface-container-low rounded-lg">
+<div class="flex items-center gap-3 text-primary mb-2">
+<span class="material-symbols-outlined" data-icon="info">info</span>
+<span class="text-xs font-bold uppercase tracking-wider">Filing Status</span>
+</div>
+<p class="text-xs text-on-surface-variant leading-relaxed">
+                                The deadline for March SSS contributions is **April 20, 2026**. This report includes all active employees with processed payroll.
+                            </p>
+</div>
+</div>
+</div>
+<!-- Main Report Content -->
+<div class="col-span-12 lg:col-span-8">
+<!-- Report Preview Card -->
+<div class="bg-surface-container-lowest rounded-lg overflow-hidden shadow-sm" style="border-radius: 2rem;">
+<div class="p-8 border-b border-surface-container-low flex justify-between items-start">
+<div class="flex items-center gap-5">
+<div class="w-14 h-14 bg-primary-fixed flex items-center justify-center rounded-2xl text-primary">
+<span class="material-symbols-outlined text-3xl" data-icon="shield">shield</span>
+</div>
+<div>
+<h3 class="text-xl font-semibold text-on-surface">SSS R3 / R5</h3>
+<p class="text-sm text-on-surface-variant">Social Security System Monthly Contribution Collection List</p>
+</div>
+</div>
+<div class="text-right">
+<span class="text-[0.6875rem] font-bold uppercase text-slate-400 block mb-1">Status</span>
+<span class="bg-tertiary-fixed text-on-tertiary-fixed px-3 py-1 rounded-full text-[0.6875rem] font-bold">READY TO DOWNLOAD</span>
+</div>
+</div>
+<div class="px-8 py-4 bg-surface-container-low flex gap-8">
+<div class="flex flex-col">
+<span class="text-[0.625rem] font-bold uppercase text-slate-500">Period</span>
+<span class="text-sm font-medium">Mar 1–31, 2026</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[0.625rem] font-bold uppercase text-slate-500">Employees</span>
+<span class="text-sm font-medium">11 Active</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[0.625rem] font-bold uppercase text-slate-500">Account No.</span>
+<span class="text-sm font-medium">03-9912345-6</span>
+</div>
+</div>
+<!-- Table -->
+<div class="px-8 py-4">
+<table class="w-full text-left">
+<thead>
+<tr class="text-[0.6875rem] font-bold uppercase text-slate-400">
+<th class="py-4 font-bold">Employee</th>
+<th class="py-4 font-bold">SSS No.</th>
+<th class="py-4 font-bold text-right">EE Share</th>
+<th class="py-4 font-bold text-right">ER Share</th>
+<th class="py-4 font-bold text-right">Total</th>
+</tr>
+</thead>
+<tbody class="text-sm">
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-4 font-medium">Santos, Maria Clara</td>
+<td class="py-4 text-on-surface-variant">34-2210987-1</td>
+<td class="py-4 text-right">900.00</td>
+<td class="py-4 text-right">1,800.00</td>
+<td class="py-4 text-right font-medium">2,700.00</td>
+</tr>
+<tr class="bg-surface-container-low/50 hover:bg-surface-container-low transition-colors">
+<td class="py-4 font-medium">Dela Cruz, Juan</td>
+<td class="py-4 text-on-surface-variant">03-4455667-2</td>
+<td class="py-4 text-right">900.00</td>
+<td class="py-4 text-right">1,800.00</td>
+<td class="py-4 text-right font-medium">2,700.00</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-4 font-medium">Rizal, Jose P.</td>
+<td class="py-4 text-on-surface-variant">01-8877665-0</td>
+<td class="py-4 text-right">900.00</td>
+<td class="py-4 text-right">1,800.00</td>
+<td class="py-4 text-right font-medium">2,700.00</td>
+</tr>
+<tr class="bg-surface-container-low/50 hover:bg-surface-container-low transition-colors">
+<td class="py-4 font-medium">Luna, Antonio K.</td>
+<td class="py-4 text-on-surface-variant">33-1122334-9</td>
+<td class="py-4 text-right">750.00</td>
+<td class="py-4 text-right">1,500.00</td>
+<td class="py-4 text-right font-medium">2,250.00</td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-4 font-medium">Mabini, Apolinario</td>
+<td class="py-4 text-on-surface-variant">09-5566778-8</td>
+<td class="py-4 text-right">900.00</td>
+<td class="py-4 text-right">1,800.00</td>
+<td class="py-4 text-right font-medium">2,700.00</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer -->
+<div class="px-8 py-8 border-t border-surface-container-low grid grid-cols-3 gap-8">
+<div>
+<span class="text-[0.6875rem] font-bold uppercase text-slate-400 block mb-1">Employee Total</span>
+<span class="text-lg font-semibold text-on-surface">₱ 9,450.00</span>
+</div>
+<div>
+<span class="text-[0.6875rem] font-bold uppercase text-slate-400 block mb-1">Employer Total</span>
+<span class="text-lg font-semibold text-on-surface">₱ 18,900.00</span>
+</div>
+<div class="text-right">
+<span class="text-[0.6875rem] font-bold uppercase text-slate-400 block mb-1">Grand Total Remittance</span>
+<span class="text-2xl font-extrabold text-primary">₱ 28,350.00</span>
+</div>
+</div>
+<!-- Primary CTA -->
+<div class="p-8 bg-surface-container-low">
+<button class="w-full jewel-gradient text-white font-bold py-5 rounded-full flex items-center justify-center gap-3 shadow-lg shadow-blue-500/10 hover:opacity-95 transition-all">
+<span class="material-symbols-outlined" data-icon="download">download</span>
+                                Download SSS R3/R5 (PDF)
+                            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Visual Hints / Additional Sections (Simulated States) -->
+<div class="mt-20">
+<h3 class="text-xl font-bold text-on-surface mb-8">Quarterly &amp; Special Compliance Overview</h3>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<!-- 13th Month Hint -->
+<div class="bg-surface-container-lowest rounded-lg p-8 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<span class="material-symbols-outlined text-secondary" data-icon="featured_seasonal_and_gifts">featured_seasonal_and_gifts</span>
+<span class="text-[0.625rem] font-bold px-2 py-1 bg-secondary-fixed text-on-secondary-fixed rounded">ANNUAL</span>
+</div>
+<h4 class="text-lg font-bold mb-2">DOLE 13th Month</h4>
+<p class="text-sm text-on-surface-variant mb-6">Automatic calculation based on year-to-date earnings for all eligible staff.</p>
+<div class="p-4 bg-secondary-container/20 rounded-xl mb-6">
+<span class="text-[0.625rem] font-bold text-secondary uppercase block mb-1">Total Liability</span>
+<span class="text-xl font-bold text-secondary">₱ 1,420,500.00</span>
+</div>
+<button class="text-sm font-bold text-primary flex items-center gap-2 hover:underline">
+                            View Worksheets <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<!-- Annual Reports Hint -->
+<div class="bg-surface-container-lowest rounded-lg p-8 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<span class="material-symbols-outlined text-primary" data-icon="assignment_ind">assignment_ind</span>
+<span class="text-[0.625rem] font-bold px-2 py-1 bg-primary-fixed text-on-primary-fixed rounded">BIR</span>
+</div>
+<h4 class="text-lg font-bold mb-2">Tax Form 2316</h4>
+<p class="text-sm text-on-surface-variant mb-6">Annual Certificate of Compensation Payment and Tax Withheld.</p>
+<div class="flex -space-x-2 mb-6">
+<div class="w-8 h-8 rounded-full border-2 border-white bg-slate-200 overflow-hidden"><img alt="Avatar" data-alt="Small employee avatar circle" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBeTPQhdd4rDR6FfVK0QQk98XgRL4eHY54sdOauq4gwRpILP56bQj4k72mZGWN-DGQZ2KQ0CpeTu40ZFVrTcU5KV4SvSkZjJj7lZDiyN8lLrk2grn2HO4eELj8LoxL7aUjvCsPq7CihDi_aEiMnAA-xJmvW45RCVUAiVyyWGMC-6MgUXu6uiCeCwzu0Y9aCFP7N4p7L0QB6tmnXniu784ihIwBj3EJ8gtMka6Yiu-3H6Is71JuhOlBzGOzZ3zpzPh0KYL_MgmjH08A"/></div>
+<div class="w-8 h-8 rounded-full border-2 border-white bg-slate-300 overflow-hidden"><img alt="Avatar" data-alt="Small employee avatar circle" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJyH6szYUcwoLatLSlPMXN56QH7B9STRjZHeSkLLruKRw_yYYJcA_3APrVi3bbwB4oBvm7ZlTGFcp42zjZJlZpyxhau2bLE2-7k_-HoMwsFCEwvfKvCYlbU0mMen3b1lII2b2DT0eNplOudkyVpoCarD8hjuD5ldPy86xO8eb96vn-StGFH1oMNhYrxDLsNw-o5FVRweLFHjMkrvZanMlfsbUu8yVwda1OB-0OGNtVq6TscF9O7gLz-YymT_Nz3rkHkQO9goGDqnc"/></div>
+<div class="w-8 h-8 rounded-full border-2 border-white bg-slate-400 overflow-hidden"><img alt="Avatar" data-alt="Small employee avatar circle" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBXeIL2EB5ID5NTaGq1mYsB_Nmy59tE7Feu-P20JWE0zDQxFKYBXXVqRsPvPr4qvoJh5z6m-j3CrVRYTpo43qyW_UjSe-tTcoBWrrc_kj0hqKYiNWfdqSZ8FFUsmOKLars3GaVXnSzQNCmHE0Kb4gnly0uhF3WYawGdLlwEUEsVZOkGyqtSYQ0MzCgJobJTLoxhM3FTmYKbB73kZebjl5oc_og3l1R56sHyrdhAKbzblRBdphkAWsyGJ36LL5fdNhIPwnNfK2ZknHY"/></div>
+<div class="w-8 h-8 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">+8</div>
+</div>
+<button class="text-sm font-bold text-primary flex items-center gap-2 hover:underline">
+                            Generate Batches <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<!-- Remittance Log Hint -->
+<div class="bg-surface-container-lowest rounded-lg p-8 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<span class="material-symbols-outlined text-tertiary" data-icon="calendar_today">calendar_today</span>
+<span class="text-[0.625rem] font-bold px-2 py-1 bg-tertiary-fixed text-on-tertiary-fixed rounded">HISTORY</span>
+</div>
+<h4 class="text-lg font-bold mb-2">Remittance Log</h4>
+<p class="text-sm text-on-surface-variant mb-6">Tracking status for all filed reports across multiple government agencies.</p>
+<div class="space-y-3 mb-6">
+<div class="flex items-center justify-between text-xs">
+<span class="text-on-surface-variant">SSS Feb 2026</span>
+<span class="text-tertiary font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[12px]" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span> Filed</span>
+</div>
+<div class="flex items-center justify-between text-xs">
+<span class="text-on-surface-variant">BIR 1601-C Feb</span>
+<span class="text-tertiary font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[12px]" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span> Filed</span>
+</div>
+<div class="flex items-center justify-between text-xs">
+<span class="text-on-surface-variant">PhilHealth Jan 2026</span>
+<span class="text-error font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[12px]" data-icon="warning" style="font-variation-settings: 'FILL' 1;">warning</span> Overdue</span>
+</div>
+</div>
+<button class="text-sm font-bold text-primary flex items-center gap-2 hover:underline">
+                            Full Calendar <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

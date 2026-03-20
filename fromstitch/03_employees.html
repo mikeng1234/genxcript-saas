@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GenXcript Payroll | Employees</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "secondary": "#795900",
+                        "on-secondary-container": "#6d5000",
+                        "surface": "#f8f9fa",
+                        "surface-bright": "#f8f9fa",
+                        "tertiary-fixed-dim": "#6ddd82",
+                        "on-primary-fixed": "#001a41",
+                        "on-tertiary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "tertiary-fixed": "#89fa9b",
+                        "surface-container-highest": "#e1e3e4",
+                        "surface-variant": "#e1e3e4",
+                        "on-secondary-fixed": "#261a00",
+                        "on-background": "#191c1d",
+                        "surface-dim": "#d9dadb",
+                        "on-tertiary-container": "#80f193",
+                        "inverse-on-surface": "#f0f1f2",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-fixed": "#002108",
+                        "on-error-container": "#93000a",
+                        "on-secondary-fixed-variant": "#5c4300",
+                        "on-primary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "inverse-surface": "#2e3132",
+                        "surface-container": "#edeeef",
+                        "on-error": "#ffffff",
+                        "primary-fixed-dim": "#adc6ff",
+                        "tertiary-container": "#006e2d",
+                        "outline-variant": "#c2c6d5",
+                        "primary-fixed": "#d8e2ff",
+                        "on-surface-variant": "#424753",
+                        "on-primary-fixed-variant": "#004493",
+                        "on-surface": "#191c1d",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed": "#ffdea0",
+                        "primary": "#004494",
+                        "surface-container-low": "#f3f4f5",
+                        "on-tertiary-fixed-variant": "#005320",
+                        "background": "#f8f9fa",
+                        "secondary-fixed-dim": "#fbbc06",
+                        "primary-container": "#005bc1",
+                        "inverse-primary": "#adc6ff",
+                        "tertiary": "#005320",
+                        "surface-container-high": "#e7e8e9",
+                        "on-primary-container": "#c9d9ff",
+                        "outline": "#727784",
+                        "secondary-container": "#febf0d",
+                        "surface-tint": "#005bc0"
+                    },
+                    fontFamily: {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Plus Jakarta Sans"],
+                        "label": ["Plus Jakarta Sans"]
+                    },
+                    borderRadius: { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .bg-primary-gradient { background: linear-gradient(135deg, #005bc1 0%, #3d89ff 100%); }
+        .bg-success-gradient { background: linear-gradient(135deg, #008a3e 0%, #89fa9b 100%); }
+        .ambient-shadow { box-shadow: 0px 20px 40px rgba(45, 51, 53, 0.06); }
+    </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen flex">
+<!-- SideNavBar -->
+<aside class="w-[240px] h-screen sticky left-0 top-0 flex flex-col py-8 px-4 gap-2 bg-slate-50 dark:bg-slate-900/50 font-['Plus_Jakarta_Sans'] antialiased text-sm font-medium no-border bg-slate-100 dark:bg-slate-800/50">
+<div class="mb-10 px-4">
+<h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">GenXcript</h1>
+<p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Payroll Solutions</p>
+</div>
+<nav class="flex-1 flex flex-col gap-1">
+<a class="text-slate-500 dark:text-slate-400 px-4 py-2 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors flex items-center gap-3 active:scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="text-slate-500 dark:text-slate-400 px-4 py-2 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors flex items-center gap-3 active:scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+                Payroll
+            </a>
+<a class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full px-4 py-2 transition-all flex items-center gap-3 active:scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="group" style="font-variation-settings: 'FILL' 1;">group</span>
+                Employees
+            </a>
+<a class="text-slate-500 dark:text-slate-400 px-4 py-2 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors flex items-center gap-3 active:scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+                Reports
+            </a>
+<a class="text-slate-500 dark:text-slate-400 px-4 py-2 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors flex items-center gap-3 active:scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="verified_user">verified_user</span>
+                Compliance
+            </a>
+<a class="text-slate-500 dark:text-slate-400 px-4 py-2 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors flex items-center gap-3 active:scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                Settings
+            </a>
+</nav>
+<div class="mt-auto flex flex-col gap-1 border-t border-slate-200 dark:border-slate-800 pt-6">
+<button class="bg-primary-gradient text-white rounded-full py-3 px-4 font-bold text-xs uppercase tracking-widest mb-4 hover:opacity-90 transition-opacity">
+                Run Payroll
+            </button>
+<a class="text-slate-500 dark:text-slate-400 px-4 py-2 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-3" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+                Help Center
+            </a>
+<a class="text-slate-500 dark:text-slate-400 px-4 py-2 hover:text-slate-900 dark:hover:text-slate-100 flex items-center gap-3 text-error" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                Logout
+            </a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 min-h-screen relative">
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 w-[calc(100%-240px)] z-40 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl h-20 px-12 flex justify-between items-center shadow-[0_20px_40px_rgba(45,51,53,0.06)] dark:shadow-none">
+<div class="flex items-center gap-8">
+<nav class="flex gap-8">
+<a class="text-blue-700 dark:text-blue-400 border-b-2 border-blue-600 pb-1 font-['Plus_Jakarta_Sans'] text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-80" href="#">Overview</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-['Plus_Jakarta_Sans'] text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-80" href="#">History</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-['Plus_Jakarta_Sans'] text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-80" href="#">Documents</a>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex gap-4 items-center">
+<span class="material-symbols-outlined text-slate-400 cursor-pointer hover:text-slate-900" data-icon="search">search</span>
+<span class="material-symbols-outlined text-slate-400 cursor-pointer hover:text-slate-900 relative" data-icon="notifications">notifications<span class="absolute top-0 right-0 w-2 h-2 bg-error rounded-full"></span></span>
+</div>
+<div class="h-10 w-10 rounded-full bg-slate-200 overflow-hidden ring-2 ring-white ring-offset-2 ring-offset-slate-100">
+<img class="w-full h-full object-cover" data-alt="User Avatar displaying female professional" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCYtJbGWkN1J_qrHjJToLfDAJW9EEKl_0LYgiLUyxye16xFwR3KF5iC5kD7_tDWcEiVPXoGoyouz1mjDGxcgXLNRKYVuguEujM0nfVJJG4BM2v70p7sAABlvTbjvBvVW6guX0uxMc_CG1C53HN-dm_TEn2jpW_HKn98nj6GryQ9ldfevRBpHntenM43ZG2IqGkB_GoHiw5nblPmwtlX5QbILqQlD5F87ASf-2rgUzcbsTpIFmtIscMfUnkeqrF6qNQHfdgGTG2V9Y8"/>
+</div>
+<button class="bg-primary-gradient text-white px-6 py-2.5 rounded-full font-bold text-xs uppercase tracking-widest hover:opacity-90">New Run</button>
+</div>
+</header>
+<div class="pt-32 px-12 pb-20">
+<!-- Header Section -->
+<div class="mb-12 flex flex-col gap-8">
+<h2 class="text-[3.5rem] font-extrabold text-[#2d3335] leading-tight tracking-tighter">Employees</h2>
+<div class="flex items-center justify-between">
+<div class="flex p-1.5 bg-surface-container-low rounded-full gap-1">
+<button class="px-8 py-3 bg-surface-container-lowest text-primary font-bold rounded-full ambient-shadow transition-all">Employee List</button>
+<button class="px-8 py-3 text-on-surface-variant font-semibold hover:text-on-surface flex items-center gap-2">
+                            Leave &amp; OT Approvals
+                            <span class="bg-error text-white text-[10px] px-2 py-0.5 rounded-full">3 pending</span>
+</button>
+<button class="px-8 py-3 text-on-surface-variant font-semibold hover:text-on-surface">Leave Balances</button>
+</div>
+</div>
+<div class="flex items-center justify-between gap-4">
+<div class="relative flex-1 max-w-md">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" data-icon="search">search</span>
+<input class="w-full pl-12 pr-6 py-4 bg-[#ebeef0] border-none rounded-full focus:ring-2 focus:ring-primary/20 transition-all text-sm font-medium" placeholder="Search employees, department, or ID..." type="text"/>
+</div>
+<button class="bg-primary-gradient text-white flex items-center gap-2 px-8 py-4 rounded-full font-bold shadow-lg hover:scale-[1.02] transition-transform">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+                        Add Employee
+                    </button>
+</div>
+</div>
+<!-- Employee List Tab (Active) -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" id="employee-list">
+<!-- Employee Card 1 -->
+<div class="bg-surface-container-lowest p-8 rounded-lg ambient-shadow flex flex-col gap-6 hover:translate-y-[-4px] transition-all cursor-pointer">
+<div class="flex items-start justify-between">
+<div class="w-16 h-16 rounded-2xl bg-primary-fixed flex items-center justify-center text-primary-fixed-variant text-xl font-bold">JD</div>
+<div class="bg-[#ebeef0] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-500">Engineering</div>
+</div>
+<div>
+<h4 class="text-xl font-bold text-on-surface">Julianne De Leon</h4>
+<p class="text-sm text-on-surface-variant mt-1">Senior Fullstack Developer</p>
+</div>
+<div class="flex flex-col gap-3 pt-4 border-t border-slate-50">
+<div class="flex justify-between items-center text-sm">
+<span class="font-bold text-slate-900">₱85,000/mo</span>
+<span class="text-xs px-2 py-0.5 bg-tertiary-fixed text-on-tertiary-fixed rounded-md font-bold">Regular</span>
+</div>
+<div class="flex gap-2 mt-2">
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">SSS <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PH <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PI <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">TIN <span class="w-2 h-2 rounded-full bg-error"></span></div>
+</div>
+</div>
+</div>
+<!-- Employee Card 2 -->
+<div class="bg-surface-container-lowest p-8 rounded-lg ambient-shadow flex flex-col gap-6 hover:translate-y-[-4px] transition-all cursor-pointer">
+<div class="flex items-start justify-between">
+<div class="w-16 h-16 rounded-2xl bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed text-xl font-bold">MT</div>
+<div class="bg-[#ebeef0] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-500">Operations</div>
+</div>
+<div>
+<h4 class="text-xl font-bold text-on-surface">Marco Teodoro</h4>
+<p class="text-sm text-on-surface-variant mt-1">Lead Operations Manager</p>
+</div>
+<div class="flex flex-col gap-3 pt-4 border-t border-slate-50">
+<div class="flex justify-between items-center text-sm">
+<span class="font-bold text-slate-900">₱65,000/mo</span>
+<span class="text-xs px-2 py-0.5 bg-tertiary-fixed text-on-tertiary-fixed rounded-md font-bold">Regular</span>
+</div>
+<div class="flex gap-2 mt-2">
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">SSS <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PH <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PI <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">TIN <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+</div>
+</div>
+</div>
+<!-- Employee Card 3 -->
+<div class="bg-surface-container-lowest p-8 rounded-lg ambient-shadow flex flex-col gap-6 hover:translate-y-[-4px] transition-all cursor-pointer">
+<div class="flex items-start justify-between">
+<div class="w-16 h-16 rounded-2xl bg-error-container flex items-center justify-center text-on-error-container text-xl font-bold">RC</div>
+<div class="bg-[#ebeef0] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-500">Design</div>
+</div>
+<div>
+<h4 class="text-xl font-bold text-on-surface">Rica Concepcion</h4>
+<p class="text-sm text-on-surface-variant mt-1">UX Designer</p>
+</div>
+<div class="flex flex-col gap-3 pt-4 border-t border-slate-50">
+<div class="flex justify-between items-center text-sm">
+<span class="font-bold text-slate-900">₱55,000/mo</span>
+<span class="text-xs px-2 py-0.5 bg-secondary-container text-on-secondary-container rounded-md font-bold">Probationary</span>
+</div>
+<div class="flex gap-2 mt-2">
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">SSS <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PH <span class="w-2 h-2 rounded-full bg-error"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PI <span class="w-2 h-2 rounded-full bg-error"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">TIN <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+</div>
+</div>
+</div>
+<!-- Employee Card 4 -->
+<div class="bg-surface-container-lowest p-8 rounded-lg ambient-shadow flex flex-col gap-6 hover:translate-y-[-4px] transition-all cursor-pointer">
+<div class="flex items-start justify-between">
+<div class="w-16 h-16 rounded-2xl bg-tertiary-container flex items-center justify-center text-on-tertiary-container text-xl font-bold">AS</div>
+<div class="bg-[#ebeef0] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-500">Sales</div>
+</div>
+<div>
+<h4 class="text-xl font-bold text-on-surface">Anton Santos</h4>
+<p class="text-sm text-on-surface-variant mt-1">Account Executive</p>
+</div>
+<div class="flex flex-col gap-3 pt-4 border-t border-slate-50">
+<div class="flex justify-between items-center text-sm">
+<span class="font-bold text-slate-900">₱40,000/mo</span>
+<span class="text-xs px-2 py-0.5 bg-tertiary-fixed text-on-tertiary-fixed rounded-md font-bold">Regular</span>
+</div>
+<div class="flex gap-2 mt-2">
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">SSS <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PH <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PI <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">TIN <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+</div>
+</div>
+</div>
+<!-- Employee Card 5 -->
+<div class="bg-surface-container-lowest p-8 rounded-lg ambient-shadow flex flex-col gap-6 hover:translate-y-[-4px] transition-all cursor-pointer">
+<div class="flex items-start justify-between">
+<div class="w-16 h-16 rounded-2xl bg-outline flex items-center justify-center text-white text-xl font-bold">LB</div>
+<div class="bg-[#ebeef0] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-500">HR</div>
+</div>
+<div>
+<h4 class="text-xl font-bold text-on-surface">Lana Beltran</h4>
+<p class="text-sm text-on-surface-variant mt-1">HR Generalist</p>
+</div>
+<div class="flex flex-col gap-3 pt-4 border-t border-slate-50">
+<div class="flex justify-between items-center text-sm">
+<span class="font-bold text-slate-900">₱45,000/mo</span>
+<span class="text-xs px-2 py-0.5 bg-tertiary-fixed text-on-tertiary-fixed rounded-md font-bold">Regular</span>
+</div>
+<div class="flex gap-2 mt-2">
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">SSS <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PH <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PI <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">TIN <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+</div>
+</div>
+</div>
+<!-- Employee Card 6 -->
+<div class="bg-surface-container-lowest p-8 rounded-lg ambient-shadow flex flex-col gap-6 hover:translate-y-[-4px] transition-all cursor-pointer">
+<div class="flex items-start justify-between">
+<div class="w-16 h-16 rounded-2xl bg-inverse-primary flex items-center justify-center text-on-primary-fixed-variant text-xl font-bold">KG</div>
+<div class="bg-[#ebeef0] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-500">Marketing</div>
+</div>
+<div>
+<h4 class="text-xl font-bold text-on-surface">Kenji Gomez</h4>
+<p class="text-sm text-on-surface-variant mt-1">Content Strategist</p>
+</div>
+<div class="flex flex-col gap-3 pt-4 border-t border-slate-50">
+<div class="flex justify-between items-center text-sm">
+<span class="font-bold text-slate-900">₱38,000/mo</span>
+<span class="text-xs px-2 py-0.5 bg-secondary-container text-on-secondary-container rounded-md font-bold">Probationary</span>
+</div>
+<div class="flex gap-2 mt-2">
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">SSS <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PH <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">PI <span class="w-2 h-2 rounded-full bg-error"></span></div>
+<div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">TIN <span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Leave & OT Approvals Section (Hidden by default structure) -->
+<div class="hidden grid grid-cols-1 lg:grid-cols-2 gap-12 mt-8" id="approvals-section">
+<div>
+<h3 class="text-xl font-bold mb-6 px-2">Leave Requests</h3>
+<div class="flex flex-col gap-4">
+<div class="bg-surface-container-lowest p-6 rounded-lg ambient-shadow flex justify-between items-center">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center font-bold">JD</div>
+<div>
+<p class="font-bold">Julianne De Leon</p>
+<p class="text-xs text-on-surface-variant">Sick Leave • Oct 24 - 25</p>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="p-2 text-error hover:bg-error/10 rounded-full transition-colors">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+<button class="px-6 py-2 bg-success-gradient text-white rounded-full font-bold text-xs">Approve</button>
+</div>
+</div>
+</div>
+</div>
+<div>
+<h3 class="text-xl font-bold mb-6 px-2">OT Requests</h3>
+<div class="flex flex-col gap-4">
+<div class="bg-surface-container-lowest p-6 rounded-lg ambient-shadow flex justify-between items-center">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center font-bold">AS</div>
+<div>
+<p class="font-bold">Anton Santos</p>
+<p class="text-xs text-on-surface-variant">4 Hours • Oct 22</p>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="p-2 text-error hover:bg-error/10 rounded-full transition-colors">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+<button class="px-6 py-2 bg-success-gradient text-white rounded-full font-bold text-xs">Approve</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Leave Balances Tab (Hidden by default structure) -->
+<div class="hidden mt-8" id="balances-section">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+<div class="bg-secondary-fixed p-8 rounded-lg ambient-shadow text-on-secondary-fixed">
+<p class="text-xs font-bold uppercase tracking-widest mb-2 opacity-70">Total Pending Approvals</p>
+<h4 class="text-4xl font-extrabold">12</h4>
+</div>
+<div class="bg-surface-container-lowest p-8 rounded-lg ambient-shadow">
+<p class="text-xs font-bold uppercase tracking-widest mb-2 text-slate-500">Company Avg SL Used</p>
+<h4 class="text-4xl font-extrabold text-on-surface">3.4 Days</h4>
+</div>
+<div class="bg-surface-container-lowest p-8 rounded-lg ambient-shadow">
+<p class="text-xs font-bold uppercase tracking-widest mb-2 text-slate-500">Remaining Annual VL</p>
+<h4 class="text-4xl font-extrabold text-on-surface">142 Days</h4>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-lg ambient-shadow overflow-hidden">
+<table class="w-full text-left">
+<thead class="bg-surface-container-low">
+<tr>
+<th class="px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Employee</th>
+<th class="px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">Vacation Leave (VL)</th>
+<th class="px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">Sick Leave (SL)</th>
+<th class="px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">Commuted Leave (CL)</th>
+</tr>
+</thead>
+<tbody class="divide-y-0">
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-8 py-6">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center font-bold text-xs">JD</div>
+<span class="font-bold">Julianne De Leon</span>
+</div>
+</td>
+<td class="px-8 py-6 text-center">
+<span class="text-primary font-bold">8</span><span class="text-slate-300 mx-1">/</span><span class="text-slate-400">15</span>
+</td>
+<td class="px-8 py-6 text-center">
+<span class="text-primary font-bold">3</span><span class="text-slate-300 mx-1">/</span><span class="text-slate-400">10</span>
+</td>
+<td class="px-8 py-6 text-center">
+<span class="text-primary font-bold">5</span><span class="text-slate-300 mx-1">/</span><span class="text-slate-400">5</span>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors group">
+<td class="px-8 py-6">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center font-bold text-xs">MT</div>
+<span class="font-bold">Marco Teodoro</span>
+</div>
+</td>
+<td class="px-8 py-6 text-center">
+<span class="text-primary font-bold">12</span><span class="text-slate-300 mx-1">/</span><span class="text-slate-400">15</span>
+</td>
+<td class="px-8 py-6 text-center">
+<span class="text-primary font-bold">9</span><span class="text-slate-300 mx-1">/</span><span class="text-slate-400">10</span>
+</td>
+<td class="px-8 py-6 text-center">
+<span class="text-primary font-bold">2</span><span class="text-slate-300 mx-1">/</span><span class="text-slate-400">5</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</main>
+</body></html>

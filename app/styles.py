@@ -441,9 +441,47 @@ THEMES: dict[str, dict] = {
             "--gxp-danger-fg":  "#991b1b",
         },
     },
+
+    # ── Tactile Sanctuary — Material 3 Editorial Minimalism ────
+    "tactile": {
+        "label": "Tactile",
+        "emoji": '<i class="mdi mdi-diamond-stone"></i>',
+        "light": True,
+        "swatches": ["#f8f9fa", "#ffffff", "#005bc1", "#fbbc05"],
+        "vars": {
+            "--gxp-bg":         "#f8f9fa",
+            "--gxp-surface":    "#ffffff",
+            "--gxp-surface2":   "#f3f4f5",
+            "--gxp-border":     "#edeeef",
+            "--gxp-text":       "#191c1d",
+            "--gxp-text2":      "#424753",
+            "--gxp-text3":      "#727784",
+            "--gxp-accent":     "#005bc1",
+            "--gxp-accent-bg":  "#d8e2ff",
+            "--gxp-accent-fg":  "#004494",
+            "--gxp-success":    "#006e2d",
+            "--gxp-success-bg": "#c4f5d0",
+            "--gxp-success-fg": "#005320",
+            "--gxp-warning":    "#795900",
+            "--gxp-warning-bg": "#ffdea0",
+            "--gxp-warning-fg": "#5c4300",
+            "--gxp-danger":     "#ba1a1a",
+            "--gxp-danger-bg":  "#ffdad6",
+            "--gxp-danger-fg":  "#93000a",
+            # ── Extended M3 tokens (used by Tactile-specific CSS) ──
+            "--gxp-m3-primary-container":     "#005bc1",
+            "--gxp-m3-on-primary-container":  "#c9d9ff",
+            "--gxp-m3-secondary-container":   "#febf0d",
+            "--gxp-m3-tertiary-fixed":        "#89fa9b",
+            "--gxp-m3-surface-container":     "#edeeef",
+            "--gxp-m3-surface-container-low": "#f3f4f5",
+            "--gxp-m3-outline-variant":       "#c2c6d5",
+            "--gxp-m3-ambient-shadow":        "0px 20px 40px rgba(45,51,53,0.06)",
+        },
+    },
 }
 
-DEFAULT_THEME = "cloud"
+DEFAULT_THEME = "tactile"
 
 # Themes that need Streamlit in light mode (native widgets)
 _LIGHT_THEMES = {k for k, v in THEMES.items() if v.get("light")}
@@ -465,10 +503,10 @@ def _vars_css(vars: dict) -> str:
 # ============================================================
 
 STATUS_COLORS = {
-    "draft":     {"bg": "#dbeafe", "fg": "#1e40af", "label": "DRAFT"},
-    "reviewed":  {"bg": "#ede9fe", "fg": "#5b21b6", "label": "REVIEWED"},
-    "finalized": {"bg": "#fef3c7", "fg": "#92400e", "label": "FINALIZED"},
-    "paid":      {"bg": "#d1fae5", "fg": "#065f46", "label": "PAID"},
+    "draft":     {"bg": "#d8e2ff", "fg": "#004494", "label": "DRAFT"},
+    "reviewed":  {"bg": "#e8def8", "fg": "#4a2590", "label": "REVIEWED"},
+    "finalized": {"bg": "#ffdea0", "fg": "#5c4300", "label": "FINALIZED"},
+    "paid":      {"bg": "#c4f5d0", "fg": "#005320", "label": "PAID"},
 }
 
 URGENCY_COLORS = {
@@ -491,9 +529,13 @@ GOV_COLORS = {
 
 def inject_css():
     """Inject shared CSS with active theme variables. Call once per page render()."""
-    # Load MDI font — @import inside <style> is reliably processed by all browsers
+    # Load MDI font + Plus Jakarta Sans + Material Symbols — @import inside <style>
     st.markdown(
-        "<style>@import url('https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css');</style>",
+        "<style>"
+        "@import url('https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css');"
+        "@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');"
+        "@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');"
+        "</style>",
         unsafe_allow_html=True,
     )
 
@@ -575,8 +617,24 @@ def inject_css():
 
         /* ── Reduce default top padding (Streamlit adds 4-6rem by default) ── */
         .block-container, .stMainBlockContainer {{
-            padding-top: 1.5rem !important;
+            padding-top: 0.75rem !important;
             padding-bottom: 2rem !important;
+        }}
+
+        /* ── Collapse zero-height component iframes (sidebar hide, JS overlay) ── */
+        [data-testid="stElementContainer"][height="0px"] {{
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }}
+        /* ── Collapse empty element containers (no visible content) ── */
+        [data-testid="stElementContainer"]:empty {{
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }}
 
         /* ── Body / general text ── */
@@ -824,14 +882,16 @@ def inject_css():
 
     /* ── ADP-Style Action Bar ────────────────────────── */
     .gxp-action-bar {
-        background: linear-gradient(135deg, var(--gxp-bg) 0%, var(--gxp-accent-bg) 100%);
-        border-radius: 12px;
+        background: var(--gxp-surface);
+        border: none;
+        border-radius: 1rem;
         padding: 24px 28px;
         margin-bottom: 24px;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 24px;
+        box-shadow: var(--gxp-m3-ambient-shadow, 0px 20px 40px rgba(45,51,53,0.06));
     }
     .gxp-action-bar-left { flex: 1; }
     .gxp-action-bar-greeting { font-size: 26px; font-weight: 700; color: var(--gxp-text); margin-bottom: 4px; }
@@ -848,12 +908,13 @@ def inject_css():
     /* ── ADP-Style Stat Cards ────────────────────────── */
     .gxp-stat-card {
         background: var(--gxp-surface);
-        border: 1px solid var(--gxp-border);
-        border-radius: 10px;
-        padding: 18px 16px;
+        border: none;
+        border-radius: 1rem;
+        padding: 20px 18px;
         position: relative;
         overflow: hidden;
         height: 100%;
+        box-shadow: var(--gxp-m3-ambient-shadow, 0px 20px 40px rgba(45,51,53,0.06));
         transition: box-shadow 0.15s ease, transform 0.15s ease;
     }
 
@@ -1073,10 +1134,11 @@ def inject_css():
     /* ── ADP-Style Last Payroll Summary ──────────────── */
     .gxp-summary-card {
         background: var(--gxp-surface);
-        border: 1px solid var(--gxp-border);
-        border-radius: 10px;
+        border: none;
+        border-radius: 1rem;
         padding: 20px 24px;
         margin-bottom: 24px;
+        box-shadow: var(--gxp-m3-ambient-shadow, 0px 20px 40px rgba(45,51,53,0.06));
     }
     .gxp-summary-header {
         display: flex; align-items: center; justify-content: space-between;
@@ -1417,6 +1479,228 @@ def inject_css():
         [data-testid="stTable"] tbody td,
         [data-testid="stTable"] tbody th {{
             padding: {_pad} !important;
+        }}
+        </style>""",
+        unsafe_allow_html=True,
+    )
+
+    # ── 6. Material 3 / Tactile Sanctuary component overrides ─────────
+    # These apply to ALL themes but use var(--gxp-*) so they adapt.
+    # The Tactile theme benefits most, but pill buttons & rounded inputs
+    # look good on every theme.
+    _is_tactile = st.session_state.get("gxp_theme", DEFAULT_THEME) == "tactile"
+
+    st.markdown(
+        f"""<style>
+        /* ── Global Font: Plus Jakarta Sans ── */
+        /* Use inheritance (no .stApp *) to avoid overriding Streamlit's
+           button icon spans which need Material Symbols Outlined font. */
+        html, body, .stApp,
+        p, span:not([class*="material"]), div, label, input, textarea, select,
+        .stMarkdown, .stTextInput, .stSelectbox, .stNumberInput,
+        [data-testid="stSidebar"], [data-testid="stHeader"],
+        [data-testid="stButton"] button {{
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont,
+                         'Segoe UI', sans-serif !important;
+        }}
+        /* Restore Material Symbols for icon spans inside buttons */
+        [data-testid="stButton"] button span[class*="material"],
+        [data-testid="stButton"] button span[data-testid*="Icon"],
+        .material-symbols-outlined {{
+            font-family: 'Material Symbols Outlined' !important;
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }}
+
+        /* ── Pill-shaped Primary Buttons ── */
+        [data-testid="stBaseButton-primary"] button {{
+            border-radius: 9999px !important;
+            background: linear-gradient(135deg, {accent} 0%, #3d89ff 100%) !important;
+            border: none !important;
+            color: #ffffff !important;
+            font-weight: 600 !important;
+            padding: 0.6rem 1.5rem !important;
+            letter-spacing: 0.01em !important;
+            box-shadow: 0 4px 14px rgba(0,91,193,0.25) !important;
+            transition: all 0.2s cubic-bezier(0.4,0,0.2,1) !important;
+        }}
+        [data-testid="stBaseButton-primary"] button:hover {{
+            box-shadow: 0 6px 20px rgba(0,91,193,0.35) !important;
+            transform: translateY(-1px) !important;
+            filter: brightness(1.05) !important;
+        }}
+        [data-testid="stBaseButton-primary"] button:active {{
+            transform: scale(0.98) !important;
+            box-shadow: 0 2px 8px rgba(0,91,193,0.2) !important;
+        }}
+
+        /* ── Secondary / Default Buttons ── */
+        [data-testid="stBaseButton-secondary"] button,
+        .stButton > button:not([kind="primary"]) {{
+            border-radius: 9999px !important;
+            border: 1.5px solid {border} !important;
+            background: transparent !important;
+            color: {t_vars.get("--gxp-accent", accent)} !important;
+            font-weight: 500 !important;
+            padding: 0.5rem 1.25rem !important;
+            transition: all 0.15s ease !important;
+        }}
+        [data-testid="stBaseButton-secondary"] button:hover,
+        .stButton > button:not([kind="primary"]):hover {{
+            background: {t_vars.get("--gxp-surface2", "#f3f4f5")} !important;
+            border-color: {t_vars.get("--gxp-accent", accent)} !important;
+        }}
+
+        /* ── Rounded Input Fields ── */
+        .stTextInput input,
+        .stNumberInput input {{
+            border-radius: 9999px !important;
+            background: {t_vars.get("--gxp-surface2", "#f3f4f5")} !important;
+            border: 1.5px solid transparent !important;
+            padding: 0.65rem 1.25rem !important;
+            font-size: 0.875rem !important;
+            color: {text} !important;
+            transition: all 0.15s ease !important;
+        }}
+        .stTextInput input:focus,
+        .stNumberInput input:focus {{
+            border-color: {accent} !important;
+            box-shadow: 0 0 0 3px {accent}1a !important;
+            background: {surface} !important;
+        }}
+
+        /* ── Select / Dropdown ── */
+        [data-baseweb="select"] > div {{
+            border-radius: 1rem !important;
+            background: {t_vars.get("--gxp-surface2", "#f3f4f5")} !important;
+            border: 1.5px solid transparent !important;
+            transition: all 0.15s ease !important;
+        }}
+        [data-baseweb="select"] > div:hover {{
+            border-color: {t_vars.get("--gxp-m3-outline-variant", border)} !important;
+        }}
+
+        /* ── Date Input ── */
+        .stDateInput input {{
+            border-radius: 1rem !important;
+            background: {t_vars.get("--gxp-surface2", "#f3f4f5")} !important;
+            border: 1.5px solid transparent !important;
+            padding: 0.65rem 1rem !important;
+        }}
+
+        /* ── Pill-Shaped Tab Switcher ── */
+        .stTabs [data-baseweb="tab-list"] {{
+            background: {t_vars.get("--gxp-surface2", "#f3f4f5")} !important;
+            border-radius: 9999px !important;
+            padding: 4px !important;
+            gap: 2px !important;
+            border-bottom: none !important;
+            width: fit-content !important;
+        }}
+        .stTabs [data-baseweb="tab"] {{
+            border-radius: 9999px !important;
+            padding: 0.4rem 1rem !important;
+            font-size: 0.8125rem !important;
+            font-weight: 500 !important;
+            border-bottom: none !important;
+            color: {text2} !important;
+            background: transparent !important;
+            transition: all 0.15s ease !important;
+            white-space: nowrap !important;
+        }}
+        .stTabs [data-baseweb="tab"]:hover {{
+            background: rgba(255,255,255,0.5) !important;
+        }}
+        .stTabs [aria-selected="true"] {{
+            background: {surface} !important;
+            color: {t_vars.get("--gxp-accent", accent)} !important;
+            font-weight: 600 !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+            border-bottom: none !important;
+        }}
+        /* Hide the default Streamlit tab highlight bar */
+        .stTabs [data-baseweb="tab-highlight"] {{
+            display: none !important;
+        }}
+        .stTabs [data-baseweb="tab-border"] {{
+            display: none !important;
+        }}
+
+        /* ── Card Containers (ambient shadow, no borders) ── */
+        .gxp-card, .gxp-stat-card, .gxp-summary-card,
+        .gxp-panel, .gxp-payslip-card, .gxp-remit-card,
+        .gxp-period-card {{
+            border-radius: 1rem !important;
+            box-shadow: {t_vars.get("--gxp-m3-ambient-shadow", "0px 20px 40px rgba(45,51,53,0.06)")} !important;
+        }}
+
+        /* ── Expander styling ── */
+        .stExpander {{
+            border-radius: 1rem !important;
+            border: 1px solid {border} !important;
+            overflow: hidden !important;
+        }}
+        .stExpander summary {{
+            border-radius: 1rem !important;
+        }}
+
+        /* ── Metric cards ── */
+        [data-testid="metric-container"] {{
+            border-radius: 1rem !important;
+            border: none !important;
+            box-shadow: {t_vars.get("--gxp-m3-ambient-shadow", "0px 20px 40px rgba(45,51,53,0.06)")} !important;
+            padding: 1.25rem !important;
+        }}
+
+        /* ── Dialog / Modal styling ── */
+        [data-testid="stModal"] > div {{
+            border-radius: 1.5rem !important;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.12) !important;
+        }}
+        /* Widen large dialogs beyond Streamlit's 740px cap */
+        [data-testid="stModal"] [data-testid="stDialog"] {{
+            max-width: 960px !important;
+            width: 92vw !important;
+        }}
+
+        /* ── Form submit button inherits pill style ── */
+        .stFormSubmitButton button {{
+            border-radius: 9999px !important;
+        }}
+
+        /* ── Checkbox & Radio — accent color ── */
+        .stCheckbox input:checked + div,
+        .stRadio input:checked + div {{
+            background-color: {accent} !important;
+            border-color: {accent} !important;
+        }}
+
+        /* ── Download button ── */
+        [data-testid="stBaseButton-secondary"]:has(svg) button {{
+            border-radius: 9999px !important;
+        }}
+
+        /* ── Page-level editorial label ── */
+        .gxp-page-label {{
+            font-size: 0.6875rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: {accent};
+            margin-bottom: 0.25rem;
+        }}
+        .gxp-editorial-heading {{
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--gxp-text);
+            line-height: 1.15;
+            letter-spacing: -0.02em;
+            margin: 0 0 0.5rem;
+        }}
+        .gxp-editorial-sub {{
+            font-size: 1.1rem;
+            font-weight: 400;
+            color: var(--gxp-text2);
+            margin: 0;
         }}
         </style>""",
         unsafe_allow_html=True,

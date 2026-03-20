@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Attendance | GenXcript Payroll</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary": "#005320",
+              "surface-container-lowest": "#ffffff",
+              "surface-container-high": "#e7e8e9",
+              "primary-fixed-dim": "#adc6ff",
+              "on-tertiary": "#ffffff",
+              "on-secondary-container": "#6d5000",
+              "on-primary-fixed": "#001a41",
+              "on-error-container": "#93000a",
+              "surface-variant": "#e1e3e4",
+              "on-primary-container": "#c9d9ff",
+              "inverse-primary": "#adc6ff",
+              "on-secondary": "#ffffff",
+              "on-surface-variant": "#424753",
+              "primary": "#004494",
+              "surface-container-highest": "#e1e3e4",
+              "primary-fixed": "#d8e2ff",
+              "on-background": "#191c1d",
+              "error": "#ba1a1a",
+              "on-tertiary-fixed": "#002108",
+              "surface-dim": "#d9dadb",
+              "on-secondary-fixed-variant": "#5c4300",
+              "primary-container": "#005bc1",
+              "error-container": "#ffdad6",
+              "inverse-surface": "#2e3132",
+              "outline": "#727784",
+              "on-secondary-fixed": "#261a00",
+              "secondary-container": "#febf0d",
+              "inverse-on-surface": "#f0f1f2",
+              "secondary-fixed": "#ffdea0",
+              "secondary": "#795900",
+              "tertiary-fixed": "#89fa9b",
+              "surface-container-low": "#f3f4f5",
+              "surface": "#f8f9fa",
+              "on-primary": "#ffffff",
+              "secondary-fixed-dim": "#fbbc06",
+              "on-primary-fixed-variant": "#004493",
+              "surface-bright": "#f8f9fa",
+              "outline-variant": "#c2c6d5",
+              "surface-container": "#edeeef",
+              "tertiary-container": "#006e2d",
+              "surface-tint": "#005bc0",
+              "on-tertiary-container": "#80f193",
+              "on-surface": "#191c1d",
+              "on-error": "#ffffff",
+              "background": "#f8f9fa",
+              "tertiary-fixed-dim": "#6ddd82",
+              "on-tertiary-fixed-variant": "#005320"
+            },
+            fontFamily: {
+              "headline": ["Plus Jakarta Sans"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .tonal-boundary {
+            background-color: rgba(248, 249, 250, 0.7);
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f8f9fa;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #e1e3e4;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="text-on-surface">
+<!-- Top Navigation Shell -->
+<header class="fixed top-0 w-full z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md shadow-[0px_20px_40px_rgba(45,51,53,0.06)] flex justify-between items-center px-8 h-16 w-full font-['Plus_Jakarta_Sans'] text-sm tracking-tight">
+<div class="flex items-center gap-6">
+<span class="text-xl font-bold text-slate-900 dark:text-slate-100">GenXcript</span>
+<div class="hidden md:flex items-center gap-1 bg-surface-container-high px-4 py-2 rounded-full">
+<span class="material-symbols-outlined text-slate-500 text-lg">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-64" placeholder="Search employees or reports..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 rounded-full hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors">
+<span class="material-symbols-outlined text-slate-500" data-icon="notifications">notifications</span>
+</button>
+<div class="h-8 w-8 rounded-full overflow-hidden bg-slate-200">
+<img alt="User avatar" class="w-full h-full object-cover" data-alt="Close up portrait of professional female user" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqOxWmzrVg0sTf1XkADdHsNLp0kSuhq8NSQRYmiu1FODkp1eFQrzEkrv98LjNUwKyknYkwd0mU5q-6UaHZLoUxquEYN_kQpPl1DIQu_7qtuGDeb1gMb7U597ifIcEsKwTfDRfjctwS2QXctYy5hEhKKqF02Ho1fkxQBNactmp9NHVRgVovGirIWIGTu6olnLxj2_dWU-tAxco_LhqcFE4uArHcrvI_pRW4pa9vx7BbKOHjBiqSWKUFCm5W1blowDKfkIaFmY-wuGw"/>
+</div>
+</div>
+</header>
+<!-- Side Navigation Shell -->
+<nav class="fixed left-0 top-0 h-screen w-64 z-40 bg-slate-50 dark:bg-slate-950 flex flex-col py-8 px-4 gap-2 font-['Plus_Jakarta_Sans'] text-[0.875rem] leading-relaxed pt-20">
+<div class="mb-6 px-4">
+<h2 class="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">GenXcript</h2>
+<p class="text-xs text-slate-500">Payroll &amp; HR</p>
+</div>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="groups">groups</span>
+<span>Employees</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span>Payroll Run</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full font-medium" href="#">
+<span class="material-symbols-outlined" data-icon="event_available">event_available</span>
+<span>Attendance</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span>Workforce Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span>Government Reports</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_today">calendar_today</span>
+<span>Calendar</span>
+</a>
+<div class="mt-auto pt-6 flex flex-col gap-2">
+<button class="w-full py-3 px-4 bg-gradient-to-br from-[#005bc1] to-[#3d89ff] text-white rounded-full font-medium shadow-lg active:scale-95 transition-all text-sm">
+                Run Payroll
+            </button>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Preferences</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 px-12 pb-20 min-h-screen bg-surface">
+<!-- Editorial Header -->
+<header class="mb-12">
+<h1 class="text-[3.5rem] font-extrabold text-[#2d3335] leading-tight tracking-tight">Attendance</h1>
+<p class="text-xl text-[#5a6062] font-light">Daily Time Record Summary</p>
+</header>
+<!-- Tab Switcher -->
+<div class="flex gap-2 mb-10 bg-surface-container-low p-1.5 w-max rounded-full">
+<button class="px-8 py-3 rounded-full bg-white text-primary-container font-semibold shadow-sm transition-all">Daily Entry</button>
+<button class="px-8 py-3 rounded-full text-slate-500 hover:bg-white/50 transition-all">Attendance Summary</button>
+<button class="px-8 py-3 rounded-full text-slate-500 hover:bg-white/50 transition-all">Corrections</button>
+</div>
+<!-- Section: Daily Entry (Default) -->
+<section class="space-y-6">
+<!-- Action Bar -->
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-4 bg-[#ebeef0] px-6 py-2.5 rounded-full">
+<span class="material-symbols-outlined text-slate-500">calendar_month</span>
+<span class="font-medium">October 24, 2023</span>
+<span class="material-symbols-outlined text-slate-500 cursor-pointer">expand_more</span>
+</div>
+<button class="px-10 py-3 bg-gradient-to-br from-[#005bc1] to-[#3d89ff] text-white rounded-full font-bold shadow-lg hover:opacity-90 transition-all">
+                    Save All
+                </button>
+</div>
+<!-- Attendance Table Card -->
+<div class="bg-surface-container-lowest rounded-lg shadow-[0px_20px_40px_rgba(45,51,53,0.06)] overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low text-[#5a6062] text-[0.6875rem] font-bold uppercase tracking-widest">
+<th class="px-8 py-5">Employee</th>
+<th class="px-4 py-5">Shift</th>
+<th class="px-4 py-5">Time In</th>
+<th class="px-4 py-5">Time Out</th>
+<th class="px-4 py-5">Late (m)</th>
+<th class="px-4 py-5">Under (m)</th>
+<th class="px-4 py-5 text-center">NSD Hrs</th>
+<th class="px-4 py-5 text-center">OT Hrs</th>
+<th class="px-8 py-5">Status</th>
+</tr>
+</thead>
+<tbody class="text-sm font-medium">
+<!-- Row 1: Present -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-8 py-4 flex items-center gap-3">
+<img alt="Employee" class="w-10 h-10 rounded-full object-cover" data-alt="Headshot of male employee in professional attire" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPGzJOgAWNwIw45-djndFm1xnX8P-1D5Jztbwhonev6rQCMWvfp9AMpgFcyYt9k1JEcH2LzuI5yKCAFcxsP7CiPQiN6cBRvDryvB9lQdrShyl9FaA5qNb_YFnifEGiSWEMENgr-H6gIGEzzkE9LQ2byT_HddjQdFvZlkJJwpMdY7tF_CmtERENCL49rJ6jpy5grSkpBF4cQNVOu-t2TxtcQHp2DxSHH4OtJ4kay5tuH1njxsTIqD8gr8fodEvYVcLms65Zcjl9fMs"/>
+<span class="text-[#2d3335] font-bold">Liam Henderson</span>
+</td>
+<td class="px-4 py-4">
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-xs">8AM–5PM</span>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center focus:ring-2 focus:ring-primary/20 transition-all" type="text" value="07:54 AM"/>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center focus:ring-2 focus:ring-primary/20 transition-all" type="text" value="05:08 PM"/>
+</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-8 py-4">
+<span class="px-4 py-1.5 bg-tertiary-fixed text-tertiary font-bold text-[0.6875rem] uppercase rounded-full">Present</span>
+</td>
+</tr>
+<!-- Row 2: Late -->
+<tr class="bg-surface hover:bg-slate-50 transition-colors">
+<td class="px-8 py-4 flex items-center gap-3">
+<img alt="Employee" class="w-10 h-10 rounded-full object-cover" data-alt="Headshot of smiling female employee" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBtJjfJYMZ1wnjbS3ceBzhx0SXKnoi7Y6IIUloUFDc7KplIqdrJ4b8KDsy6rZXLR-iVCg8P3w0keadVIS3a97fi1XSoT7qaMi3XUM7nKMdjAtCqpJG02sOnn1EaxBEb6ePK6wfdGMX_WHzNDBewFQvYZbMmGSWwrNHI8ZyZVGyeKx6pCMF05ztg1zkHczRf6yLkCGaJhoEHdl5sYfU3LfXt9T9X0YW4YOlsmHThVwEtzX0kTZA4GRMNw8ucjKbhZAEqjxzXWSva-vw"/>
+<span class="text-[#2d3335] font-bold">Sophia Martinez</span>
+</td>
+<td class="px-4 py-4">
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-xs">8AM–5PM</span>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center focus:ring-2 focus:ring-primary/20 transition-all" type="text" value="08:14 AM"/>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center focus:ring-2 focus:ring-primary/20 transition-all" type="text" value="05:02 PM"/>
+</td>
+<td class="px-4 py-4 text-error font-bold">14</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-8 py-4">
+<span class="px-4 py-1.5 bg-secondary-fixed-dim text-secondary font-bold text-[0.6875rem] uppercase rounded-full">Late</span>
+</td>
+</tr>
+<!-- Row 3: Absent -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-8 py-4 flex items-center gap-3">
+<img alt="Employee" class="w-10 h-10 rounded-full object-cover opacity-50" data-alt="Professional portrait of male team member" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyV10bi-ykRGwzV178yl5mcg0KQcMV7y46h8VBZ2BSOfXg3Z-qCz8NRX48kK_Rkhdhn0v5Gt2j1XTDOUF0v7nDGS5Gbnwqgbo27bg3Sa1BO5Hw-9cTYBUb4QW81zrkiRYqS92fyOIwcsJGIXwsQt9mrWSPvoCn4i10Yth4aYZWPQ1KNKyrPIQ7HkFAwQM6em9A4XuJlNJRTWlLJ6ZEx5AhsxABVzDWkF9gTsnkpEcQz6CaZhGaWjPIRN3em17zu4E9WBk_I_j_u1c"/>
+<span class="text-[#2d3335] font-bold opacity-50">Marcus Thorne</span>
+</td>
+<td class="px-4 py-4">
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-xs opacity-50">8AM–5PM</span>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0]/50 border-none rounded-full px-3 py-1.5 text-xs text-center opacity-50" disabled="" type="text" value="--"/>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0]/50 border-none rounded-full px-3 py-1.5 text-xs text-center opacity-50" disabled="" type="text" value="--"/>
+</td>
+<td class="px-4 py-4 text-slate-400">--</td>
+<td class="px-4 py-4 text-slate-400">--</td>
+<td class="px-4 py-4 text-center text-slate-400">--</td>
+<td class="px-4 py-4 text-center text-slate-400">--</td>
+<td class="px-8 py-4">
+<span class="px-4 py-1.5 bg-surface-container-high text-slate-500 font-bold text-[0.6875rem] uppercase rounded-full">Absent</span>
+</td>
+</tr>
+<!-- Row 4: OT -->
+<tr class="bg-surface hover:bg-slate-50 transition-colors">
+<td class="px-8 py-4 flex items-center gap-3">
+<img alt="Employee" class="w-10 h-10 rounded-full object-cover" data-alt="Headshot of creative female professional" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBHV6qxPRjAIIbNnycMUJ0NqXyB8mQruJHl-iqk7ewQooAedr7nJiChq_oVeeD06rWdieMZYwJ_LLZ-kgIGxHj31mdkAUwSyZmJwmeidgzrj1HfK2nbhiqGO0Kfn79JM46rwZZuRnUTLlbFnTZshBy2BVBGS7Nic_2i95mEhYiS1nppogoFZE4tlbA-VXlXxxj6NBi3X3MCth9IY0nGN_de3gilw_btDbitF8Q0_lPG46d7EVFQu9cQNGDdjQj7ljo0YqSEJv90iyM"/>
+<span class="text-[#2d3335] font-bold">Elena Vance</span>
+</td>
+<td class="px-4 py-4">
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-xs">8AM–5PM</span>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center focus:ring-2 focus:ring-primary/20 transition-all" type="text" value="07:45 AM"/>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center focus:ring-2 focus:ring-primary/20 transition-all" type="text" value="07:00 PM"/>
+</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-4 py-4 text-center text-primary font-bold">2.0</td>
+<td class="px-8 py-4">
+<span class="px-4 py-1.5 bg-tertiary-fixed text-tertiary font-bold text-[0.6875rem] uppercase rounded-full">Present</span>
+</td>
+</tr>
+<!-- Sample Row 5 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-8 py-4 flex items-center gap-3">
+<img alt="Employee" class="w-10 h-10 rounded-full object-cover" data-alt="Headshot of male tech employee" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKqtvCwYJhWmxuj1U9QE70yToij5xXMBG2W0MblnSQ3-gNqViYhmyzOd8GDQhsA8JSYOxXo5obbbjbaM02rfwSurKHXqID3l4uqXUWgYe-88zwaA0FEDAFheIHD2fb6kJBYpbeiV6FEDNyLGKO_OCRjFO5KYgd5SovUUaBZ7kBYMftc_7jSZ290IdGqK_k677f09o7FjDzlJ8-kyyYVe2XZP9m4uTQoyoGaJT3kyTCOlHW2eb1O5McP179E4f2R07h2FEjh39EBvA"/>
+<span class="text-[#2d3335] font-bold">David Chen</span>
+</td>
+<td class="px-4 py-4">
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-xs">8AM–5PM</span>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center" type="text" value="08:02 AM"/>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center" type="text" value="05:00 PM"/>
+</td>
+<td class="px-4 py-4 text-error font-bold">2</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-8 py-4">
+<span class="px-4 py-1.5 bg-secondary-fixed-dim text-secondary font-bold text-[0.6875rem] uppercase rounded-full">Late</span>
+</td>
+</tr>
+<!-- Sample Row 6 -->
+<tr class="bg-surface hover:bg-slate-50 transition-colors">
+<td class="px-8 py-4 flex items-center gap-3">
+<img alt="Employee" class="w-10 h-10 rounded-full object-cover" data-alt="Portrait of female analyst" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAiP7GSDngoTfKkh5Pg1ef3MzlQqG6fSDM4xb4l7MqncBe2AtpiS-rvqy3aYQ-w9uVafpT6qESmjGerRAk0Nkubfn1PlAvhXyytds7k33zrbyTtbWsZJxqDHnz4icd8L6sXaAqoC2c__g4eJzaGQlZ6nNat3U2l2QO-zICwXzNyc3GWJyWNXy6jrfkZpPNA9tvsMkmsS3ZQvtzwvqcrthqETAJb9idEDXwsd27LruD487KiicSBZadnZDK92SBgYeDmnVy-bMKHQhg"/>
+<span class="text-[#2d3335] font-bold">Amara Okafor</span>
+</td>
+<td class="px-4 py-4">
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-xs">8AM–5PM</span>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center" type="text" value="07:55 AM"/>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center" type="text" value="05:10 PM"/>
+</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-8 py-4">
+<span class="px-4 py-1.5 bg-tertiary-fixed text-tertiary font-bold text-[0.6875rem] uppercase rounded-full">Present</span>
+</td>
+</tr>
+<!-- Sample Row 7 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-8 py-4 flex items-center gap-3">
+<img alt="Employee" class="w-10 h-10 rounded-full object-cover" data-alt="Headshot of male designer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAaO2-wmV8MTRED8yl-d287bahT2GJSbNnbccvsAyiJqZKy9lcdSpzrnTSeoZbTRAMCKcrFM4XRIMtBCI-2LBIAg6WDRf0aE7g0jtkQq72rM5lS_rbDxjnzykgD_NAcjK3zBegF3P0uglokLISC9RRIQhxDie-5ukg_hnKXMOI0hk0QBT-hI19OLzjO7mRshfttUYT0T85t6kuOVBI_s7fuCO0Xf3YyfCjzcWPa-JsGis0KOd6Si9vP53Iz2J-6v2wTt0aoXzAKKB4"/>
+<span class="text-[#2d3335] font-bold">Julian Rossi</span>
+</td>
+<td class="px-4 py-4">
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-xs">8AM–5PM</span>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center" type="text" value="08:00 AM"/>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center" type="text" value="04:30 PM"/>
+</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-error font-bold">30</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-8 py-4">
+<span class="px-4 py-1.5 bg-tertiary-fixed text-tertiary font-bold text-[0.6875rem] uppercase rounded-full">Present</span>
+</td>
+</tr>
+<!-- Sample Row 8 -->
+<tr class="bg-surface hover:bg-slate-50 transition-colors">
+<td class="px-8 py-4 flex items-center gap-3">
+<img alt="Employee" class="w-10 h-10 rounded-full object-cover" data-alt="Portrait of senior HR executive" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAOZBacfntmPU2KIFqOGyl__tVTF8SqD-5My74va2rQHi8EIAQDO9rVA_UT8uj2g_vyyZFSxtdxZtiWl_nsnltqrs_1sqwWHUV4wJTcV1SiJhOHr9VWTUSrsLJEQENHiQAOc47O4ush_e_ip1ytlLZtKQlzXQ3nUi0WNL-aFLX5-s2of3l0VvCTgwxCUFVMpX3L0ewVbJYHpekuS_-Ck8Llg8ZdEWJeaspe8XRu2GSjK149df6ppE6ICfLp9QJB2OjO1u-zu5A4B6c"/>
+<span class="text-[#2d3335] font-bold">Sarah Jenkins</span>
+</td>
+<td class="px-4 py-4">
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-xs">8AM–5PM</span>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center" type="text" value="07:58 AM"/>
+</td>
+<td class="px-4 py-4">
+<input class="w-24 bg-[#ebeef0] border-none rounded-full px-3 py-1.5 text-xs text-center" type="text" value="05:05 PM"/>
+</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-slate-400">0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-4 py-4 text-center text-slate-400">0.0</td>
+<td class="px-8 py-4">
+<span class="px-4 py-1.5 bg-tertiary-fixed text-tertiary font-bold text-[0.6875rem] uppercase rounded-full">Present</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<!-- Section: Metric Overview (Mocking part of Summary) -->
+<section class="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-[0px_20px_40px_rgba(45,51,53,0.06)]">
+<p class="text-[0.6875rem] font-bold uppercase tracking-widest text-[#5a6062] mb-2">Avg Attendance Rate</p>
+<div class="flex items-end gap-2">
+<span class="text-4xl font-extrabold text-[#2d3335]">94%</span>
+<span class="text-tertiary text-sm font-bold mb-1">+2.1%</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-[0px_20px_40px_rgba(45,51,53,0.06)]">
+<p class="text-[0.6875rem] font-bold uppercase tracking-widest text-[#5a6062] mb-2">Late Incidents</p>
+<div class="flex items-end gap-2">
+<span class="text-4xl font-extrabold text-[#2d3335]">12</span>
+<span class="text-error text-sm font-bold mb-1">+4</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-8 rounded-lg shadow-[0px_20px_40px_rgba(45,51,53,0.06)]">
+<p class="text-[0.6875rem] font-bold uppercase tracking-widest text-[#5a6062] mb-2">Total NSD Hours</p>
+<div class="flex items-end gap-2">
+<span class="text-4xl font-extrabold text-[#2d3335]">48.0</span>
+<span class="text-slate-400 text-sm font-bold mb-1">MTD</span>
+</div>
+</div>
+</section>
+<!-- Section: Pending Corrections (Preview) -->
+<section class="mt-16">
+<div class="flex justify-between items-center mb-8">
+<h2 class="text-2xl font-bold text-[#2d3335]">Pending Corrections</h2>
+<button class="text-primary text-sm font-bold flex items-center gap-1">
+                    View All Request <span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- Correction Card 1 -->
+<div class="bg-surface-container-lowest p-6 rounded-lg shadow-[0px_20px_40px_rgba(45,51,53,0.06)] flex gap-6">
+<div class="flex-shrink-0">
+<img alt="Employee" class="w-16 h-16 rounded-full object-cover" data-alt="Headshot of female employee requesting correction" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAv5ioWnIYyivfhTBMnyb4Xfwqy0aJtkFA5W4y1bCk6H7MxvzlSXa4UUjXbGgvQA6AwJ5HI_sPAv2z43IWfX4P8O7DZQzcb9vMtdCna-EtPGz44-A-3ZJuo-DCO7mnrDM0qmHD4_PoXj4uRQX79t-n9N-mqd_N0O-RZYn2Qe4gKpk2TarvsoXKyyJYLchG8yzl6CNP8zTgwR7SxLcoRRcwdI74pRXgyw7DLnN6k0Ro41g5p6abD7-F1cqdQ3P-U_1Aktjdo2P8Vais"/>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-start mb-2">
+<div>
+<h3 class="font-bold text-[#2d3335]">Isabella Grant</h3>
+<p class="text-xs text-slate-500">Requested Oct 23</p>
+</div>
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-[0.6875rem] font-bold">MISSING IN</span>
+</div>
+<div class="bg-surface-container-low p-4 rounded-xl mb-4 flex justify-between">
+<div>
+<p class="text-[0.625rem] font-bold text-slate-400 uppercase">Original</p>
+<p class="text-sm font-bold">-- : --</p>
+</div>
+<div class="flex items-center text-slate-300">
+<span class="material-symbols-outlined">east</span>
+</div>
+<div>
+<p class="text-[0.625rem] font-bold text-primary uppercase">Requested</p>
+<p class="text-sm font-bold text-primary">08:05 AM</p>
+</div>
+</div>
+<p class="text-xs text-slate-600 mb-6 italic">"Fingerprint scanner failed at the main lobby gate. Security noted my entry manually."</p>
+<div class="flex gap-3">
+<button class="flex-grow py-3 bg-gradient-to-br from-tertiary to-emerald-700 text-white rounded-full text-xs font-bold shadow-md">Approve &amp; Apply</button>
+<button class="px-6 py-3 text-error rounded-full text-xs font-bold hover:bg-error/10 transition-all">Reject</button>
+</div>
+</div>
+</div>
+<!-- Correction Card 2 -->
+<div class="bg-surface-container-lowest p-6 rounded-lg shadow-[0px_20px_40px_rgba(45,51,53,0.06)] flex gap-6">
+<div class="flex-shrink-0">
+<img alt="Employee" class="w-16 h-16 rounded-full object-cover" data-alt="Portrait of male employee requesting correction" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDY5XD4a5n9itq5ZzC9sfB_A87M3YucnvXzf4BTMh01h_W_mPFJnNEsDMYtgNDF4zdtVhqpVdc3EgQDdNxwGWhVngC2hbJFWbOSh3p-Fe5ckz9RO2BmD6OSVS2MPnFtLkDluM3-GwOL1PC_9A4CL4QkiF96buoRcXJjuePGCRI1eyyvF408dBIKmLeJNa3-eub8h0oGUB3xBYVJjlb_fkRxeg0m438t8OpM0uzQ3LugnVs5ovbjOP_-R7RVRSCbvRM3RCiVCLdJhp4"/>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-start mb-2">
+<div>
+<h3 class="font-bold text-[#2d3335]">Nathaniel Drake</h3>
+<p class="text-xs text-slate-500">Requested Oct 22</p>
+</div>
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-[0.6875rem] font-bold">OUT ADJUST</span>
+</div>
+<div class="bg-surface-container-low p-4 rounded-xl mb-4 flex justify-between">
+<div>
+<p class="text-[0.625rem] font-bold text-slate-400 uppercase">Original</p>
+<p class="text-sm font-bold">04:15 PM</p>
+</div>
+<div class="flex items-center text-slate-300">
+<span class="material-symbols-outlined">east</span>
+</div>
+<div>
+<p class="text-[0.625rem] font-bold text-primary uppercase">Requested</p>
+<p class="text-sm font-bold text-primary">05:00 PM</p>
+</div>
+</div>
+<p class="text-xs text-slate-600 mb-6 italic">"Forgot to clock out before the team meeting. Meeting ended exactly at 5PM."</p>
+<div class="flex gap-3">
+<button class="flex-grow py-3 bg-gradient-to-br from-tertiary to-emerald-700 text-white rounded-full text-xs font-bold shadow-md">Approve &amp; Apply</button>
+<button class="px-6 py-3 text-error rounded-full text-xs font-bold hover:bg-error/10 transition-all">Reject</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- FAB (Suppressed on Details/Transactional, but kept for main dashboard-like screens) -->
+<button class="fixed bottom-10 right-10 w-16 h-16 bg-gradient-to-br from-[#005bc1] to-[#3d89ff] text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50">
+<span class="material-symbols-outlined text-3xl">add</span>
+</button>
+</body></html>

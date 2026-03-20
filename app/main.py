@@ -34,6 +34,11 @@ from app.auth import (
 # components.html() injects a <style> tag directly into window.parent.document
 # via JavaScript, which fires synchronously before React finishes painting,
 # eliminating the flash entirely.  The id prevents duplicate injections on reruns.
+#
+# NOTE: The actual components.html() call is at the BOTTOM of this file
+# (after page rendering) so the iframe wrapper doesn't add vertical space
+# at the top of the page.  The JS still works identically because it injects
+# into window.parent.document.head which is position-independent.
 components.html(
     """
     <script>
@@ -46,7 +51,9 @@ components.html(
         '[data-testid="stSidebar"],'
         '[data-testid="stSidebarCollapsedControl"],'
         '[data-testid="stSidebarNav"]'
-        '{display:none!important;}';
+        '{display:none!important;}'
+        + '[data-testid="stElementContainer"][height="0px"]'
+        + '{height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;}';
       d.head.appendChild(s);
     })();
     </script>
@@ -149,20 +156,13 @@ if not is_logged_in():
     st.stop()
 
 # ── Authenticated path — remove the early-hide style, re-show sidebar ─────────
-# The components.html() above injected 'gxp-hide-sidebar-early' into <head>
-# which hides the sidebar for ALL renders (login + authenticated).
-# Here we remove that tag so the native sidebar is visible again for logged-in
-# users (our JS overlay then moves it off-screen and builds its own nav).
-# stSidebarNav stays hidden via a separate rule (we use our own radio nav).
 components.html(
     """
     <script>
     (function(){
       var d = window.parent.document;
-      // Remove the early-hide rule so sidebar is visible for authenticated renders
       var early = d.getElementById('gxp-hide-sidebar-early');
       if (early) early.remove();
-      // Keep pages/ auto-nav hidden (we use our own nav)
       if (!d.getElementById('gxp-hide-sidebar-nav')) {
         var s = d.createElement('style');
         s.id = 'gxp-hide-sidebar-nav';
@@ -356,16 +356,16 @@ if _dirty_nav:
 
 # ── Grouped sidebar navigation ────────────────────────────────────────────
 _NAV_ICONS = {
-    "Dashboard":          "view-dashboard",
-    "Employees":          "account-group",
-    "Payroll Run":        "cash-multiple",
-    "Payroll Comparison": "chart-line",
-    "OT Analytics":       "fire",
-    "Attendance":         "clock-outline",
-    "Government Reports": "bank-outline",
-    "Calendar":           "calendar-month-outline",
-    "Company Setup":      "office-building-outline",
-    "Preferences":        "cog-outline",
+    "Dashboard":          "dashboard",
+    "Employees":          "group",
+    "Payroll Run":        "payments",
+    "Payroll Comparison": "monitoring",
+    "OT Analytics":       "local_fire_department",
+    "Attendance":         "schedule",
+    "Government Reports": "account_balance",
+    "Calendar":           "calendar_month",
+    "Company Setup":      "domain",
+    "Preferences":        "settings",
 }
 _NAV_GROUPS = [
     ("Overview",    ["Dashboard"]),
@@ -425,6 +425,11 @@ import json as _json
 _accessible_now = st.session_state.get("accessible_companies") or []
 _cos_json       = _json.dumps([{"id": c["id"], "name": c["name"]} for c in _accessible_now])
 _cur_co_id      = st.session_state.get("company_id", "")
+_company_name   = st.session_state.get("company_name", "")
+_user_email     = st.session_state.get("user_email", "")
+# Derive a short display name: "firstname" from email or role
+_user_display   = _user_email.split("@")[0].replace(".", " ").title() if _user_email else "User"
+_nav_pref_label = "Preferences"
 
 components.html(f"""
 <script>
@@ -442,9 +447,14 @@ components.html(f"""
   var ACCT_LABEL="{_acct_label}", SIGNOUT_LABEL="{_signout_label}";
   var CO_LIST={_cos_json};
   var CUR_CO_ID="{_cur_co_id}";
+  var COMPANY_NAME="{_company_name}";
+  var USER_DISPLAY="{_user_display}";
+  var USER_EMAIL="{_user_email}";
   var COSW_PFX="__cosw__";
   var ID='gxp-lnav', CSS_ID='gxp-lnav-css', LS='gxp-lnav-c';
+  var TB_ID='gxp-topbar';
   var EW=214, CW=54, PW=188;
+  var TH=48;
 
   // ── Read CSS custom properties from parent page ──────────────────────
   function gc(n,fb){{
@@ -462,14 +472,21 @@ components.html(f"""
     }}
   }}
 
-  // ── Inject MDI font ───────────────────────────────────────────────────
-  function injectMDI(){{
-    if(d.getElementById('gxp-mdi-css')) return;
-    var link=d.createElement('link');
-    link.id='gxp-mdi-css';
-    link.rel='stylesheet';
-    link.href='https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css';
-    d.head.appendChild(link);
+  // ── Inject Material Symbols + Plus Jakarta Sans fonts ─────────────────
+  function injectFonts(){{
+    if(d.getElementById('gxp-mat-symbols-css')) return;
+    // Material Symbols Outlined
+    var link1=d.createElement('link');
+    link1.id='gxp-mat-symbols-css';
+    link1.rel='stylesheet';
+    link1.href='https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap';
+    d.head.appendChild(link1);
+    // Plus Jakarta Sans
+    var link2=d.createElement('link');
+    link2.id='gxp-jakarta-css';
+    link2.rel='stylesheet';
+    link2.href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap';
+    d.head.appendChild(link2);
   }}
 
   // ── Inject CSS: hide Streamlit sidebar + top toolbar, remove layout gaps ─
@@ -542,13 +559,13 @@ components.html(f"""
   function build(){{
     var old=d.getElementById(ID); if(old) old.remove();
 
-    var sf=gc('--gxp-surface','#1e2530'),
-        sf2=gc('--gxp-surface2','#161d28'),
-        br=gc('--gxp-border','#2d3748'),
-        tx=gc('--gxp-text','#e2e8f0'),
-        t2=gc('--gxp-text2','#94a3b8'),
-        ac=gc('--gxp-accent','#3b82f6'),
-        ab=gc('--gxp-accent-bg','#1e3a5f');
+    var sf=gc('--gxp-surface','#ffffff'),
+        sf2=gc('--gxp-surface2','#f3f4f5'),
+        br=gc('--gxp-border','#edeeef'),
+        tx=gc('--gxp-text','#191c1d'),
+        t2=gc('--gxp-text2','#424753'),
+        ac=gc('--gxp-accent','#005bc1'),
+        ab=gc('--gxp-accent-bg','#d8e2ff');
 
     var nav=d.createElement('div'); nav.id=ID;
     nav.style.cssText=
@@ -558,7 +575,7 @@ components.html(f"""
       'z-index:99990;overflow:visible;'+
       'display:flex;flex-direction:column;'+
       'transition:width 0.22s cubic-bezier(0.4,0,0.2,1);'+
-      'box-shadow:2px 0 18px rgba(0,0,0,0.26);';
+      'box-shadow:0 0 40px rgba(45,51,53,0.06);';
 
     // ── Inner wrapper (clips content, lets floating tab protrude) ─────────
     var inner=d.createElement('div');
@@ -586,22 +603,23 @@ components.html(f"""
     }};
     nav.appendChild(tab);
 
-    // ── Header: logo only (toggle moved to floating tab) ──────────────────
+    // ── Header: brand + subtitle ───────────────────────────────────────────
     var hdr=d.createElement('div');
     hdr.style.cssText=
       'display:flex;align-items:center;'+
-      'padding:14px 10px 12px;flex-shrink:0;'+
+      'padding:20px 16px 16px;flex-shrink:0;'+
       'border-bottom:1px solid '+br+';';
 
     var brand=d.createElement('div');
-    brand.style.cssText='display:flex;align-items:center;gap:7px;overflow:hidden;min-width:0;';
+    brand.style.cssText='display:flex;align-items:center;gap:8px;overflow:hidden;min-width:0;';
     brand.innerHTML=
-      '<span style="font-size:20px;flex-shrink:0;line-height:1;"><i class="mdi mdi-cash" style="color:'+ac+';"></i></span>'+
-      '<span class="ln-brand" style="font-size:13px;font-weight:700;color:'+tx+';'+
-      'white-space:nowrap;letter-spacing:-0.3px;overflow:hidden;'+
+      '<span style="font-size:22px;flex-shrink:0;line-height:1;"><span class="material-symbols-outlined" style="color:'+ac+';font-size:22px;">payments</span></span>'+
+      '<div class="ln-brand" style="'+
+      'white-space:nowrap;overflow:hidden;'+
       'transition:opacity 0.18s,max-width 0.18s;'+
-      (isC?'opacity:0;max-width:0;':'opacity:1;max-width:140px;')+
-      '">GenXcript</span>';
+      (isC?'opacity:0;max-width:0;':'opacity:1;max-width:160px;')+
+      '"><div style="font-size:15px;font-weight:800;color:'+tx+';letter-spacing:-0.3px;line-height:1.2;">GenXcript</div>'+
+      '<div style="font-size:10px;color:'+t2+';font-weight:400;">Payroll Solutions</div></div>';
 
     hdr.appendChild(brand);
     inner.appendChild(hdr);
@@ -630,17 +648,17 @@ components.html(f"""
         var btn=d.createElement('button');
         btn.style.cssText=
           'display:flex;align-items:center;gap:10px;width:100%;'+
-          'padding:8px 12px;background:'+(isA?ab:'transparent')+';'+
-          'border:none;border-left:3px solid '+(isA?ac:'transparent')+';'+
+          'padding:8px 14px;background:'+(isA?ab:'transparent')+';'+
+          'border:none;border-radius:'+(isA?'9999px':'8px')+';'+
           'color:'+(isA?ac:t2)+';cursor:pointer;text-align:left;'+
           'font-size:13px;font-weight:'+(isA?'600':'400')+';'+
           'font-family:inherit;white-space:nowrap;overflow:hidden;'+
-          'transition:background 0.12s,color 0.12s;outline:none;';
+          'transition:all 0.15s ease;outline:none;';
 
         var ico=d.createElement('span');
         ico.style.cssText=
-          'font-size:18px;flex-shrink:0;width:24px;text-align:center;line-height:1;display:flex;align-items:center;justify-content:center;';
-        ico.innerHTML='<i class="mdi mdi-'+(pi.i||'circle-small')+'" style="font-size:18px;"></i>';
+          'font-size:20px;flex-shrink:0;width:24px;text-align:center;line-height:1;display:flex;align-items:center;justify-content:center;';
+        ico.innerHTML='<span class="material-symbols-outlined" style="font-size:20px;">'+(pi.i||'circle')+'</span>';
 
         var lbl=d.createElement('span');
         lbl.className='ln-lbl';
@@ -652,8 +670,8 @@ components.html(f"""
 
         btn.appendChild(ico); btn.appendChild(lbl);
         if(!isA){{
-          btn.onmouseenter=function(){{this.style.background=sf2;this.style.color=tx;}};
-          btn.onmouseleave=function(){{this.style.background='transparent';this.style.color=t2;}};
+          btn.onmouseenter=function(){{this.style.background=sf2;this.style.color=tx;this.style.borderRadius='9999px';}};
+          btn.onmouseleave=function(){{this.style.background='transparent';this.style.color=t2;this.style.borderRadius='8px';}};
         }}
         btn.onclick=function(){{ clickNav(pname); }};
         body.appendChild(btn);
@@ -698,7 +716,7 @@ components.html(f"""
         (isC?'justify-content:center;':'');
 
       var coIcon=d.createElement('span');
-      coIcon.innerHTML='<i class="mdi mdi-office-building-outline" style="font-size:15px;flex-shrink:0;"></i>';
+      coIcon.innerHTML='<span class="material-symbols-outlined" style="font-size:18px;flex-shrink:0;">domain</span>';
 
       var coName=d.createElement('span');
       coName.className='ln-lbl';
@@ -727,8 +745,8 @@ components.html(f"""
       coPanel.style.cssText=
         'display:none;position:absolute;left:10px;right:10px;'+
         'bottom:calc(100% + 2px);'+
-        'background:'+sf+';border:1px solid '+br+';border-radius:8px;'+
-        'box-shadow:0 -4px 24px rgba(0,0,0,0.4);'+
+        'background:'+sf+';border:1px solid '+br+';border-radius:12px;'+
+        'box-shadow:0 -4px 24px rgba(45,51,53,0.12);'+
         'overflow:hidden;z-index:999999;';
 
       CO_LIST.forEach(function(co){{
@@ -743,8 +761,8 @@ components.html(f"""
 
         var rIcon=d.createElement('span');
         rIcon.innerHTML=isActive
-          ?'<i class="mdi mdi-check-circle" style="font-size:14px;color:'+ac+';flex-shrink:0;"></i>'
-          :'<i class="mdi mdi-office-building-outline" style="font-size:14px;flex-shrink:0;opacity:0.5;"></i>';
+          ?'<span class="material-symbols-outlined" style="font-size:18px;color:'+ac+';flex-shrink:0;">check_circle</span>'
+          :'<span class="material-symbols-outlined" style="font-size:18px;flex-shrink:0;opacity:0.5;">domain</span>';
 
         var rName=d.createElement('span');
         rName.style.cssText='flex:1;overflow:hidden;text-overflow:ellipsis;';
@@ -786,35 +804,7 @@ components.html(f"""
       foot.appendChild(coWrap);
     }}
 
-    // [clickTarget, displayText, mdiIcon]
-    [
-      [ACCT_LABEL, 'My Account', 'account-circle-outline'],
-      [SIGNOUT_LABEL, 'Sign Out', 'logout']
-    ].forEach(function(item){{
-      var clickTarget=item[0], displayText=item[1], mdiIcon=item[2];
-      var fbtn=d.createElement('button');
-      fbtn.style.cssText=
-        'display:flex;align-items:center;gap:10px;width:100%;'+
-        'padding:8px 12px;background:transparent;border:none;border-left:3px solid transparent;'+
-        'color:'+t2+';cursor:pointer;text-align:left;'+
-        'font-size:13px;font-family:inherit;white-space:nowrap;overflow:hidden;'+
-        'transition:background 0.12s,color 0.12s;outline:none;';
-      var fi=d.createElement('span');
-      fi.style.cssText='font-size:18px;flex-shrink:0;width:24px;text-align:center;display:flex;align-items:center;justify-content:center;';
-      fi.innerHTML='<i class="mdi mdi-'+mdiIcon+'" style="font-size:18px;"></i>';
-      var fl=d.createElement('span');
-      fl.className='ln-lbl';
-      fl.style.cssText=
-        'overflow:hidden;white-space:nowrap;'+
-        'transition:opacity 0.18s,max-width 0.18s;'+
-        (isC?'opacity:0;max-width:0;':'opacity:1;max-width:160px;');
-      fl.textContent=displayText;
-      fbtn.appendChild(fi); fbtn.appendChild(fl);
-      fbtn.onmouseenter=function(){{this.style.background=sf2;this.style.color=tx;}};
-      fbtn.onmouseleave=function(){{this.style.background='transparent';this.style.color=t2;}};
-      fbtn.onclick=(function(t){{return function(){{clickNav(t);}};}})(clickTarget);
-      foot.appendChild(fbtn);
-    }});
+    // My Account + Sign Out moved to topbar — no footer buttons here
 
     inner.appendChild(foot);
     nav.appendChild(inner);
@@ -831,15 +821,129 @@ components.html(f"""
     setOffset(isC?CW:EW);
   }}
 
+  // ── Fix checkbox highlight ─────────────────────────────────────────────
+  // "row-widget stCheckbox" classes on the wrapper div cause a blue highlight
+  // when checked. The element is identified by data-testid, not its class,
+  // so removing the class attribute entirely is safe and kills the highlight.
+  function fixCheckboxes(){{
+    var boxes=d.querySelectorAll('[data-testid="stCheckbox"]');
+    for(var i=0;i<boxes.length;i++){{
+      boxes[i].removeAttribute('class');
+    }}
+  }}
+  function attachCheckboxFix(){{
+    fixCheckboxes();
+    // Re-run whenever Streamlit rerenders (new nodes added to body)
+    new MutationObserver(function(ml){{
+      for(var i=0;i<ml.length;i++){{
+        if(ml[i].addedNodes.length) {{ fixCheckboxes(); break; }}
+      }}
+    }}).observe(d.body,{{childList:true,subtree:true}});
+  }}
+
+  // ── Topbar ────────────────────────────────────────────────────────────────
+  function buildTopbar(){{
+    var old=d.getElementById(TB_ID); if(old) old.remove();
+
+    var sf =gc('--gxp-surface','#ffffff'),
+        sf2=gc('--gxp-surface2','#f3f4f5'),
+        br =gc('--gxp-border','#edeeef'),
+        tx =gc('--gxp-text','#191c1d'),
+        t2 =gc('--gxp-text2','#424753'),
+        ac =gc('--gxp-accent','#005bc1'),
+        ab =gc('--gxp-accent-bg','#d8e2ff');
+
+    var bar=d.createElement('div');
+    bar.id=TB_ID;
+    bar.style.cssText=
+      'position:fixed;top:0;left:'+CW+'px;right:0;height:'+TH+'px;'+
+      'background:'+sf+';border-bottom:1px solid '+br+';'+
+      'display:flex;align-items:center;justify-content:space-between;'+
+      'padding:0 20px 0 16px;z-index:99985;'+
+      'box-shadow:0 1px 0 '+br+';'+
+      'font-family:"Plus Jakarta Sans",sans-serif;';
+
+    // ── Left: company name ─────────────────────────────────────────────────
+    var left=d.createElement('div');
+    left.style.cssText='display:flex;align-items:center;gap:8px;min-width:0;';
+    left.innerHTML=
+      '<span class="material-symbols-outlined" style="font-size:18px;color:'+ac+';flex-shrink:0;">domain</span>'+
+      '<span style="font-size:13px;font-weight:600;color:'+tx+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;">'+COMPANY_NAME+'</span>';
+
+    // ── Right: user + quick actions ────────────────────────────────────────
+    var right=d.createElement('div');
+    right.style.cssText='display:flex;align-items:center;gap:4px;flex-shrink:0;';
+
+    // Helper: create icon-pill button
+    function tbBtn(icon, label, clickTarget, danger){{
+      var b=d.createElement('button');
+      b.title=label;
+      b.style.cssText=
+        'display:flex;align-items:center;gap:6px;padding:6px 12px;'+
+        'background:transparent;border:none;border-radius:9999px;'+
+        'color:'+(danger?gc('--gxp-danger','#ba1a1a'):t2)+';cursor:pointer;'+
+        'font-size:12px;font-weight:500;font-family:inherit;'+
+        'transition:background 0.12s,color 0.12s;white-space:nowrap;';
+      b.innerHTML=
+        '<span class="material-symbols-outlined" style="font-size:17px;">'+icon+'</span>'+
+        '<span class="tb-lbl">'+label+'</span>';
+      b.onmouseenter=function(){{
+        this.style.background=danger?gc('--gxp-danger-bg','#ffdad6'):sf2;
+        this.style.color=danger?gc('--gxp-danger','#ba1a1a'):tx;
+      }};
+      b.onmouseleave=function(){{
+        this.style.background='transparent';
+        this.style.color=danger?gc('--gxp-danger','#ba1a1a'):t2;
+      }};
+      b.onclick=function(){{clickNav(clickTarget);}};
+      return b;
+    }}
+
+    // User chip (non-clickable display)
+    var chip=d.createElement('div');
+    chip.style.cssText=
+      'display:flex;align-items:center;gap:6px;padding:5px 12px;'+
+      'background:'+ab+';border-radius:9999px;margin-right:4px;';
+    chip.innerHTML=
+      '<span class="material-symbols-outlined" style="font-size:16px;color:'+ac+';">account_circle</span>'+
+      '<span style="font-size:12px;font-weight:600;color:'+ac+';max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+USER_EMAIL+'">'+USER_DISPLAY+'</span>';
+
+    // Divider
+    var div=d.createElement('div');
+    div.style.cssText='width:1px;height:22px;background:'+br+';margin:0 4px;';
+
+    right.appendChild(chip);
+    right.appendChild(tbBtn('settings','Preferences','{_nav_pref_label}',false));
+    right.appendChild(tbBtn('manage_accounts','My Account',ACCT_LABEL,false));
+    right.appendChild(div);
+    right.appendChild(tbBtn('logout','Sign Out',SIGNOUT_LABEL,true));
+
+    bar.appendChild(left);
+    bar.appendChild(right);
+    d.body.appendChild(bar);
+
+    // Push main content down so it clears the topbar
+    var mainStyle=d.getElementById('gxp-topbar-push');
+    if(!mainStyle){{
+      mainStyle=d.createElement('style');
+      mainStyle.id='gxp-topbar-push';
+      d.head.appendChild(mainStyle);
+    }}
+    mainStyle.textContent=
+      '[data-testid="stAppViewContainer"]>[data-testid="stMain"]{{'+
+      'padding-top:'+TH+'px!important;}}'+
+      /* Hide Streamlit header entirely since topbar replaces it */
+      '[data-testid="stHeader"]{{display:none!important;}}';
+  }}
+
   function start(){{
-    injectMDI(); injectCSS(); build();
-    // Re-run on Streamlit hot-reload (sidebar element replaced)
+    injectFonts(); injectCSS(); build(); buildTopbar(); attachCheckboxFix();
     new MutationObserver(function(ml){{
       for(var i=0;i<ml.length;i++){{
         for(var j=0;j<ml[i].addedNodes.length;j++){{
           var n=ml[i].addedNodes[j];
           if(n.getAttribute&&n.getAttribute('data-testid')==='stSidebar'){{
-            build(); return;
+            build(); buildTopbar(); return;
           }}
         }}
       }}

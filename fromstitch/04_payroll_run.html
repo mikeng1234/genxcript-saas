@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Payroll Run | GenXcript</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-primary-fixed-variant": "#004493",
+                        "surface-container-highest": "#e1e3e4",
+                        "primary-container": "#005bc1",
+                        "on-error-container": "#93000a",
+                        "background": "#f8f9fa",
+                        "surface-container-high": "#e7e8e9",
+                        "primary-fixed": "#d8e2ff",
+                        "tertiary-container": "#006e2d",
+                        "surface-dim": "#d9dadb",
+                        "secondary-fixed": "#ffdea0",
+                        "on-surface-variant": "#424753",
+                        "on-secondary-fixed": "#261a00",
+                        "outline-variant": "#c2c6d5",
+                        "inverse-primary": "#adc6ff",
+                        "error-container": "#ffdad6",
+                        "error": "#ba1a1a",
+                        "surface-bright": "#f8f9fa",
+                        "outline": "#727784",
+                        "on-secondary-fixed-variant": "#5c4300",
+                        "on-primary-fixed": "#001a41",
+                        "surface-variant": "#e1e3e4",
+                        "surface-container-lowest": "#ffffff",
+                        "primary": "#004494",
+                        "on-tertiary-fixed": "#002108",
+                        "on-tertiary": "#ffffff",
+                        "surface": "#f8f9fa",
+                        "secondary": "#795900",
+                        "on-secondary-container": "#6d5000",
+                        "on-background": "#191c1d",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed": "#89fa9b",
+                        "secondary-container": "#febf0d",
+                        "tertiary-fixed-dim": "#6ddd82",
+                        "primary-fixed-dim": "#adc6ff",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-fixed-variant": "#005320",
+                        "secondary-fixed-dim": "#fbbc06",
+                        "surface-tint": "#005bc0",
+                        "inverse-surface": "#2e3132",
+                        "on-tertiary-container": "#80f193",
+                        "surface-container": "#edeeef",
+                        "on-surface": "#191c1d",
+                        "on-secondary": "#ffffff",
+                        "surface-container-low": "#f3f4f5",
+                        "on-primary-container": "#c9d9ff",
+                        "tertiary": "#005320",
+                        "inverse-on-surface": "#f0f1f2"
+                    },
+                    fontFamily: {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Plus Jakarta Sans"],
+                        "label": ["Plus Jakarta Sans"]
+                    },
+                    borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+                    boxShadow: {
+                        'ambient': '0px 20px 40px rgba(45, 51, 53, 0.06)'
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .bg-primary-gradient { background: linear-gradient(135deg, #005bc1 0%, #3d89ff 100%); }
+        .text-primary-gradient {
+            background: linear-gradient(135deg, #005bc1 0%, #3d89ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md flex justify-between items-center px-8 h-16 w-full">
+<div class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">GenXcript</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 text-slate-500 dark:text-slate-400 font-plus-jakarta-sans text-sm font-normal">
+<button class="material-symbols-outlined hover:bg-slate-100/50 p-2 rounded-full transition-all scale-95 active:opacity-80" data-icon="notifications">notifications</button>
+<button class="material-symbols-outlined hover:bg-slate-100/50 p-2 rounded-full transition-all scale-95 active:opacity-80" data-icon="help">help</button>
+<button class="material-symbols-outlined hover:bg-slate-100/50 p-2 rounded-full transition-all scale-95 active:opacity-80" data-icon="settings">settings</button>
+</div>
+<img alt="User profile avatar" class="w-8 h-8 rounded-full object-cover ring-2 ring-surface-container-high" data-alt="Professional female corporate headshot" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzdJ67AH7wLjdyWxY6e-5PPflu04n5R9tiFWLmW1XQUIr5d1e2serr40FEDXDTwo-9ZFQbNe-SjOaH7Ew1xi-3PbMZPZ1V5Q_XyyRKbfhhMo7NZI2JHmJwu3russySMKu5IjEY8BuEDY7MxcOfSr0guCpgBzFHTxjKfmwq2JPuvWXiWwLBLj_RsevL9xAoEPIjdoBUPe5noUhomHbvo97N26kGRqdeYEmpF7AGR6G6BEuT7Q9hTCcge-tFeMRo9L_4zErX2VMKkEs"/>
+</div>
+</nav>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-[240px] z-40 bg-slate-50 dark:bg-slate-950 flex flex-col pt-20 pb-8 px-4 gap-y-1">
+<div class="px-4 mb-8">
+<div class="text-lg font-bold text-slate-900 dark:text-white">GenXcript</div>
+<div class="text-[0.75rem] text-slate-500 uppercase tracking-widest font-bold">Payroll Systems</div>
+</div>
+<nav class="flex flex-col gap-1 flex-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all text-[0.875rem]" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full font-medium text-[0.875rem]" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+                Payroll Run
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all text-[0.875rem]" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+                Employees
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all text-[0.875rem]" href="#">
+<span class="material-symbols-outlined" data-icon="history_toggle_off">history_toggle_off</span>
+                Attendance
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all text-[0.875rem]" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+                Workforce Analytics
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all text-[0.875rem]" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+                Government Reports
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200/50 rounded-full transition-all text-[0.875rem]" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_today">calendar_today</span>
+                Calendar
+            </a>
+</nav>
+<button class="mt-auto bg-primary-gradient text-white py-3 px-6 rounded-full font-semibold shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="bolt">bolt</span>
+            Run Payroll
+        </button>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-[240px] pt-24 pb-32 px-12 min-h-screen">
+<!-- Header Section -->
+<header class="mb-12">
+<h1 class="text-[3.5rem] font-light tracking-tight text-on-surface mb-2">Payroll Run</h1>
+<p class="text-[1.125rem] text-on-surface-variant font-medium">Mar 16–31, 2026 · Semi-monthly</p>
+</header>
+<!-- Status Bar Card -->
+<section class="bg-surface-container-lowest rounded-lg p-6 mb-12 shadow-ambient flex items-center justify-between">
+<div class="flex items-center gap-8">
+<div class="flex flex-col">
+<span class="text-[0.6875rem] font-bold uppercase text-outline tracking-wider mb-1">Period</span>
+<span class="text-[0.875rem] font-semibold">Mar 16, 2026 - Mar 31, 2026</span>
+</div>
+<div class="h-8 w-[1px] bg-surface-container-high"></div>
+<div class="flex flex-col">
+<span class="text-[0.6875rem] font-bold uppercase text-outline tracking-wider mb-1">Status</span>
+<span class="bg-surface-container-high text-on-surface-variant px-3 py-0.5 rounded-full text-[0.75rem] font-bold w-fit">DRAFT</span>
+</div>
+<div class="h-8 w-[1px] bg-surface-container-high"></div>
+<div class="flex flex-col">
+<span class="text-[0.6875rem] font-bold uppercase text-outline tracking-wider mb-1">Headcount</span>
+<span class="text-[0.875rem] font-semibold">11 employees</span>
+</div>
+</div>
+<div class="flex gap-4">
+<button class="px-6 py-2.5 rounded-full border-2 border-primary text-primary font-bold text-sm hover:bg-primary-fixed transition-colors">Submit for Review</button>
+<button class="px-8 py-2.5 rounded-full bg-primary-gradient text-white font-bold text-sm shadow-md hover:opacity-90 transition-opacity">Finalize</button>
+</div>
+</section>
+<!-- Employee List Accordion -->
+<div class="space-y-6">
+<!-- Expanded Card -->
+<div class="bg-surface-container-lowest rounded-lg overflow-hidden shadow-ambient">
+<div class="p-6 flex items-center justify-between bg-surface-container-lowest">
+<div class="flex items-center gap-4">
+<img alt="Benjamin Reyes" class="w-12 h-12 rounded-full object-cover" data-alt="Modern professional male avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCCdcS2LT06ctI8rmjKVpLGrKw6_XZ7q-4qxarCCb122mPD0UOFr3e1vKqbbd5gWlZBmYZTQU5sUbfupnIN12S-L02XPAmWD-YhQr45DhNmrsdNmTiHPH8al-1vpadJmzWwqRwYvGmdXLubh_9s1qi-m9CO3KXKoaDZiJXZqzpHNAEJ24oNpgox2_D_49aXHasx4C5VC4rw4Ctzitf5hjojQQh3D1VI5GqQtDeR0V4M9SJuf0Dhy_mHvEN8tHa1_oWVRH7vjdX5WzM"/>
+<div>
+<h3 class="font-bold text-on-surface">Benjamin Reyes</h3>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span>
+<span class="text-[0.75rem] text-on-surface-variant">Senior Product Designer</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-8">
+<span class="font-bold text-on-surface">₱28,450.00 gross</span>
+<span class="material-symbols-outlined text-outline" data-icon="expand_less">expand_less</span>
+</div>
+</div>
+<div class="px-6 pb-6">
+<div class="bg-surface rounded-lg p-8 grid grid-cols-3 gap-12">
+<!-- Earnings Column -->
+<div class="space-y-4">
+<h4 class="text-[0.6875rem] font-bold uppercase text-outline tracking-[0.1em] mb-6">Earnings</h4>
+<div class="flex justify-between items-center">
+<span class="text-[0.875rem] text-on-surface-variant">Basic Pay</span>
+<span class="text-[0.875rem] font-medium">₱25,000.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[0.875rem] text-on-surface-variant">OT Pay (4.5 hrs)</span>
+<span class="text-[0.875rem] font-medium">₱1,250.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[0.875rem] text-on-surface-variant">Night Differential</span>
+<span class="text-[0.875rem] font-medium">₱450.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[0.875rem] text-on-surface-variant">Allowances</span>
+<span class="text-[0.875rem] font-medium">₱1,750.00</span>
+</div>
+</div>
+<!-- Deductions Column -->
+<div class="space-y-4">
+<h4 class="text-[0.6875rem] font-bold uppercase text-outline tracking-[0.1em] mb-6">Deductions</h4>
+<div class="flex justify-between items-center">
+<span class="text-[0.875rem] text-on-surface-variant">SSS Contribution</span>
+<span class="text-[0.875rem] font-medium">₱900.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[0.875rem] text-on-surface-variant">PhilHealth</span>
+<span class="text-[0.875rem] font-medium">₱450.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[0.875rem] text-on-surface-variant">Pag-IBIG</span>
+<span class="text-[0.875rem] font-medium">₱100.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[0.875rem] text-on-surface-variant text-error">Withholding Tax</span>
+<span class="text-[0.875rem] font-medium text-error">₱2,845.00</span>
+</div>
+</div>
+<!-- Summary Column -->
+<div class="flex flex-col justify-between">
+<div>
+<h4 class="text-[0.6875rem] font-bold uppercase text-outline tracking-[0.1em] mb-6">Summary</h4>
+<div class="flex justify-between items-center mb-2">
+<span class="text-[0.875rem] text-on-surface-variant">Gross Pay</span>
+<span class="text-[0.875rem] font-bold">₱28,450.00</span>
+</div>
+<div class="flex justify-between items-center mb-6">
+<span class="text-[0.875rem] text-on-surface-variant">Total Deductions</span>
+<span class="text-[0.875rem] font-bold text-error">₱4,295.00</span>
+</div>
+</div>
+<div class="mt-auto">
+<span class="text-[0.6875rem] font-bold uppercase text-outline tracking-[0.1em]">NET PAY</span>
+<div class="text-[2.5rem] font-extrabold text-primary-gradient leading-tight">₱24,155.00</div>
+<div class="mt-4 flex items-center gap-2">
+<span class="bg-secondary-fixed text-on-secondary-fixed-variant px-3 py-1 rounded-full text-[0.6875rem] font-bold tracking-tight">DTR INSIGHTS</span>
+<span class="text-[0.75rem] text-on-surface-variant font-medium">100% Attendance</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Collapsed Card 1 -->
+<div class="bg-surface-container-lowest rounded-[1.5rem] p-6 flex items-center justify-between shadow-ambient hover:bg-surface-container-low transition-colors group cursor-pointer">
+<div class="flex items-center gap-4">
+<img alt="Elena Garcia" class="w-12 h-12 rounded-full object-cover" data-alt="Professional female corporate headshot avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBo1br4Ey4FCvf7NmRVKgUcMm-zQCPTESI9vRKci20J74rI9GUtDPtoEfF3HRVX9n3f5mBlwyNy8RJZ6cuEcNx2Fu7fCnNEl4ZYpW7Us3_mK7LPn7uMOX_u1_F7Si2mkequSMxyGMTMlzLQF2N8VLPRd2cvAaEUx_q2gWpLboAU2VpuLdjDIfH5bwKFiZU24dWOcNMqDTBCNy54RUjgklJetDA-aCPF5JkwJw5ly1b9YA7hnhHAC8Du0NLFo-4__Z4szcrGSG5pVlE"/>
+<div>
+<h3 class="font-bold text-on-surface">Elena Garcia</h3>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span>
+<span class="text-[0.75rem] text-on-surface-variant">Marketing Lead</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-8">
+<span class="font-bold text-on-surface">₱32,100.00 gross</span>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+<!-- Collapsed Card 2 -->
+<div class="bg-surface-container-lowest rounded-[1.5rem] p-6 flex items-center justify-between shadow-ambient hover:bg-surface-container-low transition-colors group cursor-pointer">
+<div class="flex items-center gap-4">
+<img alt="Marcus Chen" class="w-12 h-12 rounded-full object-cover" data-alt="Professional male corporate headshot avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAYtCvAZ3MtnQtbKFoRKaRZ-YJviHX7x0_I7oGzMj0oM6spRiETpuEbl6jAttVr6W2_tHqt3iW3dlcBHX1RwWFiFOTT0BL5j5VhU6-5sDZbgClyJd0RyjVaa9Sko_ghJ83il4CLhPZQnw5MndgrQJCxe6RGu1eu2trTUbgPC0d7VH4RKLLcMytpU-dbC2h7CiaLh3MakWxqBInHHKV5090GeqhMxhYyXi7PtATgM6ZGHOXCtuOPNYkLqFKjuiizUZZWoEmo6RIcA-g"/>
+<div>
+<h3 class="font-bold text-on-surface">Marcus Chen</h3>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span>
+<span class="text-[0.75rem] text-on-surface-variant">Senior Engineer</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-8">
+<span class="font-bold text-on-surface">₱45,500.00 gross</span>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+<!-- Collapsed Card 3 -->
+<div class="bg-surface-container-lowest rounded-[1.5rem] p-6 flex items-center justify-between shadow-ambient hover:bg-surface-container-low transition-colors group cursor-pointer">
+<div class="flex items-center gap-4">
+<img alt="Sofia Vergara" class="w-12 h-12 rounded-full object-cover" data-alt="Professional female corporate headshot avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGi0xjfgehZ9fMx6wFYlaP3umZeWvUNjPkFUdj89oDQXpCdnH2Cd8STwZxJHVSL-sNu_fZ4wVxVZEfhnCpD7HBm7vgw4y2ftPB8jDchFvFAg7nn-9vkg9nIY07f3xoDHL9nRW78PMqpeSoQiGcytLW0K0UfHU--65UnntCfzCLMyfAnnYzUX3LwiJcqxzvFtCpgjxwRy6BcCKIypOrlYPCMpTdBej-660tMvRIVJyJrawX4Y_mxbz7bBHoGUKeDHSD7L9U8_calIA"/>
+<div>
+<h3 class="font-bold text-on-surface">Sofia Vergara</h3>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim"></span>
+<span class="text-[0.75rem] text-on-surface-variant">HR Specialist</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-8">
+<span class="font-bold text-on-surface">₱24,900.00 gross</span>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Totals Strip Card -->
+<footer class="fixed bottom-8 left-[288px] right-12 bg-surface-container-lowest rounded-lg p-6 shadow-ambient flex items-center justify-between z-30">
+<div class="flex items-center gap-12">
+<div class="flex flex-col">
+<span class="text-[0.6875rem] font-bold uppercase text-outline tracking-wider">Total Gross</span>
+<span class="text-[1.125rem] font-bold">₱354,820.50</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[0.6875rem] font-bold uppercase text-outline tracking-wider">Total Deductions</span>
+<span class="text-[1.125rem] font-bold text-error">₱58,214.25</span>
+</div>
+<div class="h-10 w-[1px] bg-surface-container-high"></div>
+<div class="flex flex-col">
+<span class="text-[0.6875rem] font-bold uppercase text-primary tracking-wider">Net Payroll</span>
+<span class="text-[1.5rem] font-extrabold text-primary">₱296,606.25</span>
+</div>
+</div>
+<button class="bg-primary-gradient text-white px-8 py-3 rounded-full font-bold shadow-lg hover:opacity-90 transition-opacity flex items-center gap-2">
+<span class="material-symbols-outlined" data-icon="download">download</span>
+                Download All Payslips
+            </button>
+</footer>
+</main>
+</body></html>

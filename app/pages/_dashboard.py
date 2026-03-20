@@ -315,15 +315,15 @@ def _render_action_bar(company: dict, next_period: dict | None):
     st.markdown('<div class="gxp-quick-actions">', unsafe_allow_html=True)
     qa1, qa2, qa3, qa4 = st.columns(4)
     with qa1:
-        if st.button("▶  Run Payroll", width='stretch', type="primary", key="qa_run"):
+        if st.button("Run Payroll", width='stretch', type="primary", key="qa_run"):
             st.session_state["_nav_redirect"] = "Payroll Run"
             st.rerun()
     with qa2:
-        if st.button("＋  Add Employee", width='stretch', key="qa_add"):
+        if st.button("Add Employee", width='stretch', key="qa_add"):
             st.session_state["_nav_redirect"] = "Employees"
             st.rerun()
     with qa3:
-        if st.button("⬡  Government Reports", width='stretch', key="qa_gov"):
+        if st.button("Gov. Reports", width='stretch', key="qa_gov"):
             st.session_state["_nav_redirect"] = "Government Reports"
             st.rerun()
     with qa4:
@@ -465,7 +465,7 @@ def _render_alerts(deadlines: list[dict], periods: list[dict]):
                 '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
                 '<div style="width:30px;height:30px;border-radius:50%;background:#dcfce7;'
                 'color:#16a34a;display:flex;align-items:center;justify-content:center;'
-                'font-size:14px;"><i class="mdi mdi-check"></i></div>'
+                'font-size:14px;"><span class="material-symbols-outlined" style="font-size:16px;font-variation-settings:\'FILL\' 1;">check_circle</span></div>'
                 '<span style="font-size:9px;font-weight:800;letter-spacing:.5px;'
                 'text-transform:uppercase;background:#dcfce7;color:#166534;'
                 'padding:2px 6px;border-radius:4px;">ALL CLEAR</span></div>'
@@ -634,14 +634,10 @@ def _dlg_employees() -> None:
         _render_leave_balances_tab,
         _count_pending_admin,
     )
+
     pending_lr, pending_ot = _count_pending_admin()
     pending_total = pending_lr + pending_ot
     pending_label = f" ({pending_total})" if pending_total else ""
-
-    # Clear any pending edit so _render_employees_tab() doesn't try to open
-    # _edit_employee_dialog (a @st.dialog) inside this dialog — Streamlit
-    # raises StreamlitAPIException for nested dialogs.
-    st.session_state.pop("editing_id", None)
 
     tab_emp, tab_approvals, tab_balances = st.tabs([
         "Employees",
@@ -649,7 +645,7 @@ def _dlg_employees() -> None:
         "Leave Balances",
     ])
     with tab_emp:
-        _render_employees_tab()
+        _render_employees_tab(show_salary_toggle=False)
     with tab_approvals:
         _render_approvals_tab()
     with tab_balances:
@@ -872,7 +868,7 @@ def _render_stat_cards(active_count: int, total_count: int,
         with col:
             trend_content = card["trend"] if card["trend"] else "&nbsp;"
             html = (
-                f'<div class="gxp-stat-card" style="border-top:3px solid {card["accent"]}">'
+                f'<div class="gxp-stat-card">'
                 f'<div class="gxp-stat-icon" style="background:{card["icon_bg"]};color:{card["icon_color"]}">'
                 f'{card["svg"]}</div>'
                 f'<div class="gxp-stat-label">{card["label"]}</div>'
@@ -1162,6 +1158,12 @@ def _render_analytics_compact(history: list[dict]):
 # ============================================================
 
 def render():
+    # If editing_id was set inside the Employees dialog, redirect immediately
+    # to the Employees page where the edit dialog can open properly (no nesting).
+    if st.session_state.get("editing_id"):
+        st.session_state["_nav_redirect"] = "Employees"
+        st.rerun()
+
     inject_css()
 
     # ── Load all data ─────────────────────────────────
@@ -1188,22 +1190,33 @@ def render():
 
     headcount = len(latest_entries)
 
-    # ── Title + Live Clock ────────────────────────────
+    # ── Editorial Header + Live Clock ─────────────────
+    import datetime as _dt
+    _hour = _dt.datetime.now().hour
+    _greeting = "Good morning" if _hour < 12 else ("Good afternoon" if _hour < 18 else "Good evening")
+    _display_name = st.session_state.get("display_name", "Admin")
+    _first_name = _display_name.split()[0] if _display_name else "Admin"
+
     _col_title, _col_clock = st.columns([3, 1])
     with _col_title:
-        st.title(company.get("name", "Dashboard"))
+        st.markdown(
+            f'<p class="gxp-page-label">OVERVIEW</p>'
+            f'<h2 class="gxp-editorial-heading">{_greeting}, {_first_name}.</h2>'
+            f'<p class="gxp-editorial-sub">Everything is ready for your next pay cycle.</p>',
+            unsafe_allow_html=True,
+        )
     with _col_clock:
         _stc.html(
             """
             <div id="gxp-clock-wrap" style="
                 display:flex;flex-direction:column;align-items:flex-end;
-                justify-content:center;height:80px;padding-right:4px;
-                font-family:'Inter',system-ui,sans-serif;">
+                justify-content:center;height:100px;padding-right:4px;
+                font-family:'Plus Jakarta Sans',system-ui,sans-serif;">
               <div id="gxp-time" style="
                 font-size:22px;font-weight:700;letter-spacing:0.5px;
-                color:#1e293b;line-height:1.1;"></div>
+                color:#191c1d;line-height:1.1;"></div>
               <div id="gxp-date" style="
-                font-size:11px;font-weight:400;color:#64748b;
+                font-size:11px;font-weight:400;color:#424753;
                 margin-top:3px;"></div>
             </div>
             <script>
@@ -1227,7 +1240,7 @@ def render():
             })();
             </script>
             """,
-            height=84,
+            height=104,
             scrolling=False,
         )
 

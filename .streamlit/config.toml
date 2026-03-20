@@ -5,3 +5,6 @@ font                   = "sans serif"
 [client]
 showSidebarNavigation  = false
 
+[server]
+enableStaticServing    = true
+

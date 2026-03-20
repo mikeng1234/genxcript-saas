@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Preferences | GenXcript Payroll</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .ambient-shadow {
+            box-shadow: 0px 20px 40px rgba(45, 51, 53, 0.06);
+        }
+        .cta-gradient {
+            background: linear-gradient(135deg, #005bc1 0%, #3d89ff 100%);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "on-primary": "#ffffff",
+                "surface-dim": "#d9dadb",
+                "primary-container": "#005bc1",
+                "error": "#ba1a1a",
+                "outline": "#727784",
+                "on-surface-variant": "#424753",
+                "tertiary-fixed": "#89fa9b",
+                "on-tertiary-fixed-variant": "#005320",
+                "on-error": "#ffffff",
+                "surface-container-highest": "#e1e3e4",
+                "on-secondary-fixed": "#261a00",
+                "on-secondary-container": "#6d5000",
+                "on-primary-fixed-variant": "#004493",
+                "surface": "#f8f9fa",
+                "surface-container-high": "#e7e8e9",
+                "secondary-fixed-dim": "#fbbc06",
+                "on-tertiary-fixed": "#002108",
+                "tertiary-fixed-dim": "#6ddd82",
+                "on-error-container": "#93000a",
+                "secondary": "#795900",
+                "on-primary-container": "#c9d9ff",
+                "on-surface": "#191c1d",
+                "primary-fixed-dim": "#adc6ff",
+                "error-container": "#ffdad6",
+                "inverse-primary": "#adc6ff",
+                "surface-variant": "#e1e3e4",
+                "primary": "#004494",
+                "inverse-surface": "#2e3132",
+                "tertiary-container": "#006e2d",
+                "outline-variant": "#c2c6d5",
+                "surface-bright": "#f8f9fa",
+                "on-primary-fixed": "#001a41",
+                "primary-fixed": "#d8e2ff",
+                "secondary-container": "#febf0d",
+                "surface-container-lowest": "#ffffff",
+                "on-secondary": "#ffffff",
+                "inverse-on-surface": "#f0f1f2",
+                "surface-tint": "#005bc0",
+                "on-secondary-fixed-variant": "#5c4300",
+                "background": "#f8f9fa",
+                "tertiary": "#005320",
+                "secondary-fixed": "#ffdea0",
+                "surface-container-low": "#f3f4f5",
+                "on-tertiary-container": "#80f193",
+                "surface-container": "#edeeef",
+                "on-background": "#191c1d",
+                "on-tertiary": "#ffffff"
+              },
+              fontFamily: {
+                "headline": ["Plus Jakarta Sans"],
+                "body": ["Plus Jakarta Sans"],
+                "label": ["Plus Jakarta Sans"]
+              },
+              borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+            },
+          },
+        }
+      </script>
+</head>
+<body class="bg-surface text-on-surface min-h-screen">
+<!-- TopAppBar Shell -->
+<header class="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-xl shadow-sm flex justify-between items-center px-8 h-16 w-full">
+<div class="flex items-center gap-4">
+<span class="text-xl font-bold tracking-tight text-slate-900">GenXcript Payroll</span>
+</div>
+<div class="hidden md:flex items-center gap-8 font-medium text-sm text-slate-600">
+<a class="hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="hover:text-primary transition-colors" href="#">Employees</a>
+<a class="hover:text-primary transition-colors" href="#">Reports</a>
+<a class="text-blue-700 font-semibold" href="#">Preferences</a>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-slate-600 cursor-pointer p-2 hover:bg-slate-100/50 rounded-full transition-colors" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined text-slate-600 cursor-pointer p-2 hover:bg-slate-100/50 rounded-full transition-colors" data-icon="help_outline">help_outline</span>
+<div class="w-8 h-8 rounded-full overflow-hidden bg-slate-200">
+<img alt="User profile" data-alt="User profile avatar of Jasper Dizon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD2XYyOFvtPDaodPlmUO8ZJHsQ2B6U3Xmq_9enoNVEBb8tYqutS_GrG-NLdP0rXFgR1NmqgpYLtA8OdwcedX_nvFHyCnujyPDA1ep4LkP334LEb0bcIcEdPxuODD56ONxHQS6eO_LCMDJfMZ1JnF_JfQzqNTfeCBrG3fDPc1WRWRkDU5ZqWHZg4FtVnroEab-hQE6XibY9IQyqXfmnG4QYP3sBCP7VqbmFKtC9-m77Jmw8yBnaWwTd8dml4wxSIVe_-dkfxGsthwqo"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-screen w-[240px] pt-20 bg-slate-50 flex flex-col gap-y-1 hidden md:flex">
+<div class="px-8 mb-6">
+<h2 class="text-lg font-bold text-slate-900">GenXcript</h2>
+<p class="text-[11px] text-slate-500 uppercase tracking-widest font-bold">Payroll Systems</p>
+</div>
+<nav class="flex flex-col gap-y-1">
+<div class="flex items-center gap-3 text-slate-500 mx-4 py-2 px-4 hover:text-slate-900 transition-all cursor-pointer">
+<span class="material-symbols-outlined text-xl" data-icon="dashboard">dashboard</span>
+<span class="text-[13px] font-medium">Dashboard</span>
+</div>
+<div class="flex items-center gap-3 text-slate-500 mx-4 py-2 px-4 hover:text-slate-900 transition-all cursor-pointer">
+<span class="material-symbols-outlined text-xl" data-icon="group">group</span>
+<span class="text-[13px] font-medium">Employees</span>
+</div>
+<div class="flex items-center gap-3 text-slate-500 mx-4 py-2 px-4 hover:text-slate-900 transition-all cursor-pointer">
+<span class="material-symbols-outlined text-xl" data-icon="payments">payments</span>
+<span class="text-[13px] font-medium">Payroll Run</span>
+</div>
+<div class="flex items-center gap-3 text-slate-500 mx-4 py-2 px-4 hover:text-slate-900 transition-all cursor-pointer">
+<span class="material-symbols-outlined text-xl" data-icon="analytics">analytics</span>
+<span class="text-[13px] font-medium">Workforce Analytics</span>
+</div>
+<div class="bg-blue-100 text-blue-700 rounded-full mx-4 py-2 px-4 flex items-center gap-3 cursor-pointer">
+<span class="material-symbols-outlined text-xl" data-icon="settings">settings</span>
+<span class="text-[13px] font-semibold">Preferences</span>
+</div>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="md:ml-[240px] pt-24 pb-12 px-8 md:px-16 max-w-6xl">
+<!-- Editorial Header -->
+<header class="mb-12">
+<h1 class="text-5xl font-light tracking-tight text-on-surface mb-2">Preferences</h1>
+<p class="text-lg text-on-surface-variant/80">Customize your GenXcript experience.</p>
+</header>
+<div class="flex flex-col gap-6">
+<!-- Card 1: Appearance -->
+<section class="bg-surface-container-lowest rounded-lg p-10 ambient-shadow">
+<header class="mb-8">
+<span class="text-[11px] font-bold tracking-[0.2em] text-primary-container">APPEARANCE</span>
+</header>
+<div class="space-y-8">
+<!-- Theme Switcher -->
+<div class="flex items-center justify-between">
+<label class="text-sm font-medium text-on-surface">Theme</label>
+<div class="bg-surface-container-low p-1 rounded-full flex gap-1">
+<button class="px-6 py-1.5 rounded-full bg-primary-container text-white text-xs font-semibold shadow-sm">Light</button>
+<button class="px-6 py-1.5 rounded-full text-on-surface-variant text-xs font-medium hover:bg-surface-container-high transition-colors">Dark</button>
+</div>
+</div>
+<!-- Accent Color -->
+<div class="flex items-center justify-between">
+<label class="text-sm font-medium text-on-surface">Accent Color</label>
+<div class="flex gap-4 items-center">
+<button class="w-8 h-8 rounded-full bg-[#005bc1] ring-2 ring-offset-2 ring-primary-container"></button>
+<button class="w-8 h-8 rounded-full bg-[#34a853] hover:scale-105 transition-transform"></button>
+<button class="w-8 h-8 rounded-full bg-[#fbbc05] hover:scale-105 transition-transform"></button>
+<button class="w-8 h-8 rounded-full bg-[#a142f4] hover:scale-105 transition-transform"></button>
+<button class="w-8 h-8 rounded-full bg-[#009688] hover:scale-105 transition-transform"></button>
+</div>
+</div>
+<!-- Font Size -->
+<div class="flex items-center justify-between">
+<label class="text-sm font-medium text-on-surface">Font Size</label>
+<div class="bg-surface-container-low p-1 rounded-full flex gap-1">
+<button class="w-10 h-8 flex items-center justify-center rounded-full text-xs font-medium text-on-surface-variant hover:bg-surface-container-high transition-colors">S</button>
+<button class="w-10 h-8 flex items-center justify-center rounded-full bg-white text-xs font-bold shadow-sm text-primary">M</button>
+<button class="w-10 h-8 flex items-center justify-center rounded-full text-xs font-medium text-on-surface-variant hover:bg-surface-container-high transition-colors">L</button>
+</div>
+</div>
+<!-- Date Format -->
+<div class="flex items-center justify-between">
+<label class="text-sm font-medium text-on-surface">Date Format</label>
+<div class="relative min-w-[180px]">
+<select class="w-full bg-surface-container-low border-none rounded-full px-5 py-2 text-xs font-medium focus:ring-2 focus:ring-primary-container/20 appearance-none cursor-pointer">
+<option>MM/DD/YYYY</option>
+<option>DD/MM/YYYY</option>
+<option>YYYY-MM-DD</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-sm pointer-events-none" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Card 2: Notifications -->
+<section class="bg-surface-container-lowest rounded-lg p-10 ambient-shadow">
+<header class="mb-8">
+<span class="text-[11px] font-bold tracking-[0.2em] text-primary-container">NOTIFICATIONS</span>
+</header>
+<div class="space-y-4">
+<!-- Row 1 -->
+<div class="flex items-center justify-between p-4 hover:bg-surface/50 rounded-xl transition-colors group">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-xl" data-icon="notifications">notifications</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-on-surface">Payroll Finalized</p>
+<p class="text-xs text-on-surface-variant">Get notified when payroll is approved</p>
+</div>
+</div>
+<button class="w-11 h-6 bg-primary-container rounded-full relative transition-colors">
+<span class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></span>
+</button>
+</div>
+<!-- Row 2 -->
+<div class="flex items-center justify-between p-4 hover:bg-surface/50 rounded-xl transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-xl" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-on-surface">Leave Approved</p>
+<p class="text-xs text-on-surface-variant">When your leave request is approved</p>
+</div>
+</div>
+<button class="w-11 h-6 bg-primary-container rounded-full relative transition-colors">
+<span class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></span>
+</button>
+</div>
+<!-- Row 3 -->
+<div class="flex items-center justify-between p-4 hover:bg-surface/50 rounded-xl transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-xl" data-icon="schedule">schedule</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-on-surface">OT Approved</p>
+<p class="text-xs text-on-surface-variant">When your overtime request is approved</p>
+</div>
+</div>
+<button class="w-11 h-6 bg-primary-container rounded-full relative transition-colors">
+<span class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></span>
+</button>
+</div>
+<!-- Row 4 -->
+<div class="flex items-center justify-between p-4 hover:bg-surface/50 rounded-xl transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-xl" data-icon="calendar_month">calendar_month</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-on-surface">Remittance Reminder</p>
+<p class="text-xs text-on-surface-variant">3 days before government dues</p>
+</div>
+</div>
+<button class="w-11 h-6 bg-primary-container rounded-full relative transition-colors">
+<span class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></span>
+</button>
+</div>
+<!-- Row 5 (Off State) -->
+<div class="flex items-center justify-between p-4 hover:bg-surface/50 rounded-xl transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-xl" data-icon="person_add">person_add</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-on-surface">New Employee</p>
+<p class="text-xs text-on-surface-variant">When a new employee is onboarded</p>
+</div>
+</div>
+<button class="w-11 h-6 bg-surface-container-highest rounded-full relative transition-colors">
+<span class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full"></span>
+</button>
+</div>
+</div>
+</section>
+<!-- Card 3: Account -->
+<section class="bg-surface-container-lowest rounded-lg p-10 ambient-shadow">
+<header class="mb-8">
+<span class="text-[11px] font-bold tracking-[0.2em] text-primary-container">ACCOUNT</span>
+</header>
+<div class="space-y-8">
+<!-- Name Update -->
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold text-on-surface-variant ml-4">DISPLAY NAME</label>
+<div class="flex gap-4">
+<input class="flex-1 bg-surface-container-low border-none rounded-full px-6 py-3 text-sm focus:ring-2 focus:ring-primary-container/20" type="text" value="Jasper Dizon"/>
+<button class="px-8 py-3 rounded-full border border-primary-container/20 text-primary-container text-xs font-bold hover:bg-primary-fixed transition-colors">Update Name</button>
+</div>
+</div>
+<!-- Password Section -->
+<div class="pt-4 space-y-4">
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold text-on-surface-variant ml-4">CHANGE PASSWORD</label>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<input class="bg-surface-container-low border-none rounded-full px-6 py-3 text-sm focus:ring-2 focus:ring-primary-container/20" placeholder="Current Password" type="password"/>
+<input class="bg-surface-container-low border-none rounded-full px-6 py-3 text-sm focus:ring-2 focus:ring-primary-container/20" placeholder="New Password" type="password"/>
+<input class="bg-surface-container-low border-none rounded-full px-6 py-3 text-sm focus:ring-2 focus:ring-primary-container/20" placeholder="Confirm Password" type="password"/>
+</div>
+</div>
+</div>
+<!-- Footer Action -->
+<div class="pt-6 flex justify-end">
+<button class="cta-gradient px-12 py-4 rounded-full text-white text-sm font-bold shadow-xl hover:scale-[1.02] transition-transform active:scale-95">
+                            Save Changes
+                        </button>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- BottomNavBar for Mobile -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-xl px-8 h-16 flex justify-around items-center z-50">
+<span class="material-symbols-outlined text-slate-500" data-icon="dashboard">dashboard</span>
+<span class="material-symbols-outlined text-slate-500" data-icon="group">group</span>
+<span class="material-symbols-outlined text-primary-container" data-icon="settings" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="material-symbols-outlined text-slate-500" data-icon="person">person</span>
+</nav>
+</body></html>

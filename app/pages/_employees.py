@@ -1966,20 +1966,21 @@ def _edit_employee_dialog(emp_id: str):
 # Main Page Render
 # ============================================================
 
-def _render_employees_tab():
+def _render_employees_tab(show_salary_toggle: bool = True):
+    """Render the employee list table.
+
+    Args:
+        show_salary_toggle: If True (full page), salary is hidden by default
+            with a reveal toggle. If False (dashboard dialog), salary is
+            never shown.
+    """
     # Open edit dialog if editing_id is set (dialog stays open until save/cancel clears it)
     if st.session_state.get("editing_id"):
         _edit_employee_dialog(st.session_state["editing_id"])
 
-    # Row 1: search + add button
-    col_search, col_add = st.columns([5, 1])
-    with col_search:
-        search = st.text_input(
-            "Search", placeholder="Name or employee number…",
-            label_visibility="collapsed", key="emp_search",
-        )
+    # Row 1: add button (right-aligned) + flags
+    _, col_add = st.columns([5, 1])
     with col_add:
-        st.write(""); st.write("")
         add_clicked = st.button("+ Add Employee", type="primary", width="stretch")
 
     # Row 2: flags
@@ -2037,6 +2038,12 @@ def _render_employees_tab():
     with f2:
         sel_dept = st.multiselect("Department", all_depts, key="emp_f_dept", placeholder="All departments")
 
+    # Search bar — below the dropdowns
+    search = st.text_input(
+        "Search", placeholder="Name or employee number…",
+        label_visibility="collapsed", key="emp_search",
+    )
+
     # --- Onboarding summary banner ---
     if employees:
         incomplete = [e for e in employees if _onboarding_status(e)[0] < len(ONBOARDING_FIELDS)]
@@ -2081,12 +2088,32 @@ def _render_employees_tab():
         return
 
     total = len(ONBOARDING_FIELDS)
-    st.caption(f"Showing {len(filtered)} employee{'s' if len(filtered) != 1 else ''}")
 
-    # Table header
-    cols_w = [1.2, 2.5, 2, 2, 2, 1.5, 1, 1, 4]
+    # ── Salary visibility toggle (full page only) ──────────────────────────
+    if show_salary_toggle:
+        salary_visible = st.session_state.get("emp_salary_visible", False)
+        cap_col, tog_col = st.columns([8, 2])
+        cap_col.caption(f"Showing {len(filtered)} employee{'s' if len(filtered) != 1 else ''}")
+        with tog_col:
+            if st.button(
+                "Show Salary" if not salary_visible else "Hide Salary",
+                key="toggle_salary",
+                icon=":material/visibility:" if not salary_visible else ":material/visibility_off:",
+            ):
+                st.session_state.emp_salary_visible = not salary_visible
+    else:
+        salary_visible = False
+        st.caption(f"Showing {len(filtered)} employee{'s' if len(filtered) != 1 else ''}")
+
+    # Table header — salary column included only when visible
+    if salary_visible:
+        cols_w  = [1.2, 2.5, 2, 2, 2,   1.5, 1, 1, 4]
+        headers = ["No.", "Name", "Position", "Department", "Salary", "Type", "IDs", "Status", "Actions"]
+    else:
+        cols_w  = [1.2, 2.5, 2, 2, 1.5, 1, 1, 4]
+        headers = ["No.", "Name", "Position", "Department", "Type", "IDs", "Status", "Actions"]
     cols = st.columns(cols_w)
-    for col, header in zip(cols, ["No.", "Name", "Position", "Department", "Salary", "Type", "IDs", "Status", "Actions"]):
+    for col, header in zip(cols, headers):
         col.markdown(f"**{header}**")
 
     # Table rows
@@ -2094,6 +2121,8 @@ def _render_employees_tab():
         completed, missing = _onboarding_status(emp)
         cols = st.columns(cols_w)
 
+        # s = salary column offset (1 when visible, 0 when hidden)
+        s = 1 if salary_visible else 0
         with cols[0]:
             st.text(emp["employee_no"])
         with cols[1]:
@@ -2104,18 +2133,19 @@ def _render_employees_tab():
             st.text(emp.get("position") or "—")
         with cols[3]:
             st.text(emp.get("department") or "—")
-        with cols[4]:
-            salary_display = f"₱{_centavos_to_pesos(emp['basic_salary']):,.2f}/{emp['salary_type'][:2]}"
-            st.text(salary_display)
-        with cols[5]:
+        if salary_visible:
+            with cols[4]:
+                salary_display = f"₱{_centavos_to_pesos(emp['basic_salary']):,.2f}/{emp['salary_type'][:2]}"
+                st.text(salary_display)
+        with cols[4 + s]:
             st.text(emp["employment_type"].title())
-        with cols[6]:
+        with cols[5 + s]:
             badge = _onboarding_badge(completed, total)
             if missing:
                 st.markdown(badge, help=f"Missing: {', '.join(missing)}")
             else:
                 st.markdown(badge)
-        with cols[7]:
+        with cols[6 + s]:
             if emp.get("is_active", True):
                 st.markdown(
                     '<span style="display:inline-flex;align-items:center;gap:5px;">'
@@ -2134,7 +2164,7 @@ def _render_employees_tab():
                     '</span>',
                     unsafe_allow_html=True,
                 )
-        with cols[8]:
+        with cols[7 + s]:
             btn_col1, btn_col2, btn_col3, btn_col4, btn_col5 = st.columns([1, 1, 1, 1, 1])
             with btn_col1:
                 if st.button(
@@ -2144,6 +2174,7 @@ def _render_employees_tab():
                     help="Edit employee",
                 ):
                     st.session_state.editing_id = emp["id"]
+                    st.rerun()
             with btn_col2:
                 if not emp.get("email"):
                     st.markdown(
@@ -2190,21 +2221,21 @@ def _render_employees_tab():
                     )
             with btn_col4:
                 if emp.get("is_active", True):
-                    if st.button(
+                    st.button(
                         "", key=f"deact_{emp['id']}", width="stretch",
                         icon=":material/radio_button_checked:",
                         help="Deactivate this employee",
-                    ):
-                        _update_employee(emp["id"], {"is_active": False})
-                        st.rerun()
+                        on_click=_update_employee,
+                        args=(emp["id"], {"is_active": False}),
+                    )
                 else:
-                    if st.button(
+                    st.button(
                         "", key=f"react_{emp['id']}", width="stretch",
                         icon=":material/radio_button_unchecked:",
                         help="Reactivate this employee",
-                    ):
-                        _update_employee(emp["id"], {"is_active": True})
-                        st.rerun()
+                        on_click=_update_employee,
+                        args=(emp["id"], {"is_active": True}),
+                    )
             with btn_col5:
                 if st.button(
                     "", key=f"print201_{emp['id']}", width="stretch",
@@ -2288,13 +2319,15 @@ def _render_employees_tab():
 
     # ── Employee 201 Print ────────────────────────────────────────────────────
     if st.session_state.get("print201_id"):
-        _print_emp_id = st.session_state["print201_id"]
+        _print_emp_id = st.session_state.pop("print201_id")   # clear immediately
         _print_emp    = next((e for e in employees if e["id"] == _print_emp_id), None)
         if _print_emp:
             try:
                 from reports.emp201_pdf import generate_emp201_pdf
-                _dept_lkp = _load_all_departments()
-                _p201     = _load_employee_profile(_print_emp_id)
+                import base64 as _b64mod
+                import streamlit.components.v1 as _cv1
+                _dept_lkp  = _load_all_departments()
+                _p201      = _load_employee_profile(_print_emp_id)
                 _pdf_bytes = generate_emp201_pdf(
                     _print_emp, _p201, _dept_lkp.get(_print_emp_id, "")
                 )
@@ -2302,25 +2335,38 @@ def _render_employees_tab():
                     f"201_{_print_emp.get('employee_no','EMP')}_"
                     f"{_print_emp.get('last_name','').upper()}.pdf"
                 )
-                c1, c2, _ = st.columns([2, 1, 4])
-                with c1:
-                    st.download_button(
-                        label=f"⬇️ 201 — {_print_emp['first_name']} {_print_emp['last_name']}",
-                        data=_pdf_bytes,
-                        file_name=_fname,
-                        mime="application/pdf",
-                        key="dl_201_btn",
-                        type="primary",
-                    )
-                with c2:
-                    if st.button("✕ Close", key="close_201"):
-                        st.session_state.pop("print201_id", None)
-                        st.rerun()
+                # Open PDF in new tab + auto-trigger print dialog
+                _b64_str = _b64mod.b64encode(_pdf_bytes).decode()
+                _cv1.html(f"""
+<script>
+(function(){{
+  try {{
+    var b64="{_b64_str}";
+    var raw=atob(b64);
+    var bytes=new Uint8Array(raw.length);
+    for(var i=0;i<raw.length;i++){{bytes[i]=raw.charCodeAt(i);}}
+    var blob=new Blob([bytes],{{type:'application/pdf'}});
+    var url=(window.parent.URL||URL).createObjectURL(blob);
+    var win=(window.parent.open||window.open).call(window.parent,url,'_blank');
+    if(win){{
+      win.addEventListener('load',function(){{
+        setTimeout(function(){{win.print();}},400);
+      }});
+    }}
+  }} catch(e){{ console.error('Print 201 error:',e); }}
+}})();
+</script>
+""", height=0, scrolling=False)
+                # Download fallback (in case popup blocked)
+                st.download_button(
+                    label=f"⬇️ Download 201 — {_print_emp['last_name']} (popup blocked?)",
+                    data=_pdf_bytes,
+                    file_name=_fname,
+                    mime="application/pdf",
+                    key="dl_201_btn",
+                )
             except Exception as _e:
                 st.error(f"Could not generate 201 PDF: {_e}")
-                if st.button("Close", key="close_201_err"):
-                    st.session_state.pop("print201_id", None)
-                    st.rerun()
 
 
 # ============================================================
