@@ -139,6 +139,27 @@ def _update_correction(corr_id: str, status: str, admin_notes: str):
     }).eq("id", corr_id).execute()
 
 
+def _load_monthly_metrics() -> dict:
+    """Compute attendance KPIs for the current calendar month."""
+    today = date.today()
+    month_start = today.replace(day=1)
+    rows = (
+        get_db().table("time_logs")
+        .select("status, late_minutes, nsd_hours")
+        .eq("company_id", get_company_id())
+        .gte("work_date", str(month_start))
+        .lte("work_date", str(today))
+        .execute()
+    ).data or []
+
+    total       = len(rows)
+    present     = sum(1 for r in rows if r.get("status") in ("present", "late", "half_day"))
+    late_count  = sum(1 for r in rows if (r.get("late_minutes") or 0) > 0)
+    nsd_total   = sum(float(r.get("nsd_hours") or 0) for r in rows)
+    rate        = round(present / total * 100) if total else 0
+    return {"rate": rate, "late": late_count, "nsd": nsd_total}
+
+
 # ============================================================
 # Helpers
 # ============================================================
@@ -147,22 +168,42 @@ def _employee_display_name(emp: dict) -> str:
     return f"{emp['last_name']}, {emp['first_name']}"
 
 
+_AVATAR_COLORS = [
+    ("#005bc1","#d8e2ff"), ("#795900","#ffdea0"), ("#005320","#89fa9b"),
+    ("#6a3b9c","#e8daef"), ("#b5470f","#fde8d0"), ("#006874","#cff4f8"),
+    ("#7c4f00","#ffe8b0"), ("#444444","#e1e3e4"),
+]
+
+def _dtr_avatar(name: str, idx: int = 0, size: int = 34) -> str:
+    initials = "".join(p[0].upper() for p in name.split()[:2] if p)
+    fg, bg = _AVATAR_COLORS[idx % len(_AVATAR_COLORS)]
+    return (
+        f'<div style="width:{size}px;height:{size}px;border-radius:50%;'
+        f'background:{bg};color:{fg};display:inline-flex;align-items:center;'
+        f'justify-content:center;font-size:{size//3}px;font-weight:700;'
+        f'flex-shrink:0;margin-right:6px;">{initials}</div>'
+    )
+
 def _status_html(status: str) -> str:
     mapping = {
-        "present":    ('<span class="mdi mdi-check-circle" style="font-size:18px;"></span>', "var(--gxp-success)", "var(--gxp-success-bg)"),
-        "half_day":   ("½", "var(--gxp-warning)", "var(--gxp-warning-bg)"),
-        "absent":     ('<span class="mdi mdi-close-circle" style="font-size:18px;"></span>', "var(--gxp-danger)", "var(--gxp-danger-bg)"),
-        "on_leave":   ('<span class="mdi mdi-beach" style="font-size:18px;"></span>', "var(--gxp-accent)", "var(--gxp-accent-bg)"),
-        "holiday":    ('<span class="mdi mdi-party-popper" style="font-size:18px;"></span>', "var(--gxp-accent)", "var(--gxp-accent-bg)"),
-        "rest_day":   ('<span class="mdi mdi-weather-night" style="font-size:18px;"></span>', "var(--gxp-text3)", "var(--gxp-surface2)"),
-        "no_schedule": ("—", "var(--gxp-text3)", "var(--gxp-surface2)"),
+        "present":     ("check_circle", "#005320", "#89fa9b"),
+        "half_day":    ("adjust",       "#795900", "#ffdea0"),
+        "absent":      ("cancel",       "#5a6062", "#e7e8e9"),
+        "on_leave":    ("beach_access", "#004494", "#d8e2ff"),
+        "holiday":     ("celebration",  "#004494", "#d8e2ff"),
+        "rest_day":    ("bedtime",      "#424753", "#e1e3e4"),
+        "no_schedule": ("remove",       "#424753", "#e1e3e4"),
+        "late":        ("schedule",     "#795900", "#ffdea0"),
     }
-    icon, color, bg = mapping.get(status, ("?", "var(--gxp-text2)", "var(--gxp-surface)"))
+    icon, color, bg = mapping.get(status, ("help", "#424753", "#e1e3e4"))
     label = status.replace("_", " ").title()
     return (
-        f'<span style="background:{bg};color:{color};padding:2px 8px;'
-        f'border-radius:4px;font-size:12px;font-weight:600;">'
-        f'{icon} {label}</span>'
+        f'<span style="background:{bg};color:{color};padding:3px 10px;'
+        f'border-radius:9999px;font-size:11px;font-weight:700;'
+        f'display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">'
+        f'<span class="material-symbols-outlined" style="font-size:13px;'
+        f'font-variation-settings:\'FILL\' 1,\'wght\' 600,\'opsz\' 20;">{icon}</span>'
+        f'{label}</span>'
     )
 
 
@@ -205,7 +246,7 @@ def _render_daily_entry():
     def _jump_today():
         st.session_state["dtr_date_picker"] = date.today()
 
-    col_date, col_today, _ = st.columns([2, 1, 2])
+    col_date, col_today, col_spacer, col_save = st.columns([2, 1, 4, 1])
     with col_date:
         work_date = st.date_input(
             "Date",
@@ -214,6 +255,8 @@ def _render_daily_entry():
         )
     with col_today:
         st.button("Today", key="dtr_today", help="Jump to today", on_click=_jump_today)
+    with col_save:
+        save_all_top = st.button("Save All", type="primary", key="dtr_save_all_top", width="stretch")
 
     st.caption(f"**{work_date.strftime('%A, %B %d, %Y')}**")
 
@@ -270,32 +313,39 @@ def _render_daily_entry():
     st.divider()
 
     # ── Column headers ────────────────────────────────────────
-    cols_w = [1, 1.5, 1.2, 1.2, 1.8, 1.3, 1.3, 1, 1, 1, 1.5]
+    cols_w = [2.2, 1.8, 1.3, 1.3, 1, 1, 1, 1.5]
     hdr = st.columns(cols_w)
-    for c, lbl in zip(hdr, ["No.", "Name", "Position", "Dept", "Shift", "Time In", "Time Out", "Late", "Undertime", "OT", "Status"]):
-        c.markdown(f"**{lbl}**")
+    for c, lbl in zip(hdr, ["Employee", "Shift", "Time In", "Time Out", "Late (m)", "UT (m)", "OT", "Status"]):
+        c.markdown(f'<span style="font-size:11px;font-weight:700;color:#5a6062;'
+                   f'text-transform:uppercase;letter-spacing:0.08em;">{lbl}</span>',
+                   unsafe_allow_html=True)
 
     # ── Per-employee rows ─────────────────────────────────────
     new_logs = {}   # employee_id → dict to upsert on Save All
 
-    for entry in entries:
+    for i_entry, entry in enumerate(entries):
         emp   = entry["emp"]
         sched = entry["sched"]
         log   = entry["log"]
         eid   = emp["id"]
         name  = _employee_display_name(emp)
+        avatar_html = _dtr_avatar(name, i_entry)
 
         # If rest day or no schedule — show greyed row
         if sched is None:
             row = st.columns(cols_w)
-            row[0].caption(emp.get("employee_no", ""))
-            row[1].text(_employee_display_name(emp))
-            row[2].caption(emp.get("position") or "—")
-            row[3].caption(emp.get("department") or "—")
-            row[4].caption("—")   # Shift
-            row[5].text("—"); row[6].text("—"); row[7].text("—")
-            row[8].text("—"); row[9].text("—")
-            row[10].markdown(_status_html("rest_day"), unsafe_allow_html=True)
+            row[0].markdown(
+                f'<div style="display:flex;align-items:center;gap:6px;opacity:0.45;">'
+                f'{avatar_html}'
+                f'<div><div style="font-size:13px;font-weight:600;">{name}</div>'
+                f'<div style="font-size:11px;color:#727784;">{emp.get("employee_no","")}</div></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            row[1].caption("—")
+            row[2].text("—"); row[3].text("—")
+            row[4].text("—"); row[5].text("—"); row[6].text("—")
+            row[7].markdown(_status_html("rest_day"), unsafe_allow_html=True)
             continue
 
         # Parse existing times
@@ -303,21 +353,30 @@ def _render_daily_entry():
         existing_out = _parse_time(log["time_out"]) if log and log.get("time_out") else None
 
         row = st.columns(cols_w)
-        row[0].caption(emp.get("employee_no", ""))
-        row[1].text(_employee_display_name(emp))
-        row[2].caption(emp.get("position") or "—")
-        row[3].caption(emp.get("department") or "—")
+        row[0].markdown(
+            f'<div style="display:flex;align-items:center;gap:6px;">'
+            f'{avatar_html}'
+            f'<div><div style="font-size:13px;font-weight:600;">{name}</div>'
+            f'<div style="font-size:11px;color:#727784;">{emp.get("employee_no","")}</div></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
-        # Shift name (col 4)
+        # Shift pill (col 1)
         sched_name = sched.get("name", "—") if sched else "—"
         _s_start   = (sched.get("start_time") or "")[:5]
         _s_end     = (sched.get("end_time")   or "")[:5]
-        row[4].caption(f"{sched_name}\n{_s_start}–{_s_end}" if _s_start else sched_name)
+        shift_label = f"{_s_start}–{_s_end}" if _s_start else sched_name
+        row[1].markdown(
+            f'<span style="background:#e7e8e9;color:#424753;padding:3px 10px;'
+            f'border-radius:9999px;font-size:11px;font-weight:600;">{shift_label}</span>',
+            unsafe_allow_html=True,
+        )
 
-        with row[5]:
+        with row[2]:
             t_in = st.time_input("In", value=existing_in or time(8, 0),
                                  key=f"dtr_in_{eid}", label_visibility="collapsed")
-        with row[6]:
+        with row[3]:
             t_out = st.time_input("Out", value=existing_out or time(17, 0),
                                   key=f"dtr_out_{eid}", label_visibility="collapsed")
 
@@ -335,14 +394,29 @@ def _render_daily_entry():
         if has_entry or log:
             result = compute_dtr(t_in, t_out, exp_start, exp_end,
                                   exp_hours, break_min, is_overnight)
-            row[7].text(_fmt_mins(result.late_minutes))
-            row[8].text(_fmt_mins(result.undertime_minutes))
-            row[9].text(f"{result.ot_hours:.1f}h" if result.ot_hours else "—")
-            row[10].markdown(_status_html(result.status), unsafe_allow_html=True)
+            _late = result.late_minutes
+            _ut   = result.undertime_minutes
+            row[4].markdown(
+                f'<span style="color:{"#ba1a1a" if _late else "#727784"};font-weight:{"700" if _late else "400"};">'
+                f'{_fmt_mins(_late) if _late else "—"}</span>',
+                unsafe_allow_html=True,
+            )
+            row[5].markdown(
+                f'<span style="color:{"#ba1a1a" if _ut else "#727784"};font-weight:{"700" if _ut else "400"};">'
+                f'{_fmt_mins(_ut) if _ut else "—"}</span>',
+                unsafe_allow_html=True,
+            )
+            row[6].markdown(
+                f'<span style="color:{"#005bc1" if result.ot_hours else "#727784"};font-weight:{"700" if result.ot_hours else "400"};">'
+                f'{f"{result.ot_hours:.1f}h" if result.ot_hours else "—"}</span>',
+                unsafe_allow_html=True,
+            )
+            row[7].markdown(_status_html(result.status), unsafe_allow_html=True)
         else:
-            for i in range(7, 10):
-                row[i].text("—")
-            row[10].markdown(_status_html("absent"), unsafe_allow_html=True)
+            row[4].markdown('<span style="color:#727784;">—</span>', unsafe_allow_html=True)
+            row[5].markdown('<span style="color:#727784;">—</span>', unsafe_allow_html=True)
+            row[6].markdown('<span style="color:#727784;">—</span>', unsafe_allow_html=True)
+            row[7].markdown(_status_html("absent"), unsafe_allow_html=True)
             result = None
 
         # Stage for bulk save
@@ -372,7 +446,7 @@ def _render_daily_entry():
     with sa1:
         save_all = st.button("Save All", type="primary", key="dtr_save_all", width="stretch")
 
-    if save_all:
+    if save_all or save_all_top:
         saved = 0
         errors = []
         for eid, row_data in new_logs.items():
@@ -592,46 +666,59 @@ def _render_corrections():
     if pending_count:
         st.warning(f"**{pending_count}** correction request(s) pending review.")
 
-    for corr in corrections:
+    for i_corr, corr in enumerate(corrections):
         emp_data = corr.get("employees") or {}
         emp_name = f"{emp_data.get('last_name', '')}, {emp_data.get('first_name', '')}"
         work_date_str = date.fromisoformat(corr["work_date"]).strftime("%B %d, %Y")
 
         status = corr["status"]
-        status_color = {
-            "pending":  "var(--gxp-warning)",
-            "approved": "var(--gxp-success)",
-            "rejected": "var(--gxp-danger)",
-        }.get(status, "var(--gxp-text2)")
+        _st_pill = {
+            "pending":  ("#795900", "#ffdea0"),
+            "approved": ("#005320", "#89fa9b"),
+            "rejected": ("#ba1a1a", "#ffdad6"),
+        }.get(status, ("#424753", "#e1e3e4"))
 
-        with st.container(border=True):
-            h1, h2 = st.columns([3, 1])
-            h1.markdown(f"**{emp_name}** · {work_date_str}")
-            h2.markdown(
-                f'<div style="text-align:right;color:{status_color};font-weight:600">'
-                f'{status.upper()}</div>',
+        # Load the original time log for comparison
+        original = (
+            get_db().table("time_logs")
+            .select("time_in, time_out, status")
+            .eq("employee_id", corr["employee_id"])
+            .eq("work_date", corr["work_date"])
+            .execute()
+        ).data
+        orig = original[0] if original else {}
+
+        corr_type = "MISSING IN" if not orig.get("time_in") else "OUT ADJUST" if orig.get("time_out") else "TIME ADJUST"
+
+        with st.container():
+            # Card header HTML
+            st.markdown(
+                f'<div style="background:#ffffff;border-radius:16px;padding:20px 24px 12px;'
+                f'box-shadow:0 4px 20px rgba(45,51,53,0.06);margin-bottom:4px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">'
+                f'<div style="display:flex;align-items:center;gap:10px;">'
+                f'{_dtr_avatar(emp_name, i_corr, 44)}'
+                f'<div><div style="font-size:14px;font-weight:700;color:#191c1d;">{emp_name}</div>'
+                f'<div style="font-size:11px;color:#727784;">Requested {work_date_str}</div></div></div>'
+                f'<div style="display:flex;gap:8px;align-items:center;">'
+                f'<span style="background:#e7e8e9;color:#424753;padding:3px 10px;border-radius:9999px;'
+                f'font-size:10px;font-weight:700;">{corr_type}</span>'
+                f'<span style="background:{_st_pill[1]};color:{_st_pill[0]};padding:3px 10px;'
+                f'border-radius:9999px;font-size:10px;font-weight:700;">{status.upper()}</span>'
+                f'</div></div>'
+                f'<div style="background:#f3f4f5;border-radius:12px;padding:14px 16px;'
+                f'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+                f'<div><div style="font-size:9px;font-weight:700;color:#727784;text-transform:uppercase;letter-spacing:0.08em;">Original</div>'
+                f'<div style="font-size:14px;font-weight:700;margin-top:2px;">{_fmt_time(orig.get("time_in"))} → {_fmt_time(orig.get("time_out"))}</div></div>'
+                f'<span class="material-symbols-outlined" style="color:#c2c6d5;font-size:20px;">east</span>'
+                f'<div style="text-align:right;"><div style="font-size:9px;font-weight:700;color:#005bc1;text-transform:uppercase;letter-spacing:0.08em;">Requested</div>'
+                f'<div style="font-size:14px;font-weight:700;color:#005bc1;margin-top:2px;">{_fmt_time(corr.get("requested_time_in"))} → {_fmt_time(corr.get("requested_time_out"))}</div></div>'
+                f'</div>'
+                f'<div style="font-size:12px;color:#5a6062;font-style:italic;margin-bottom:8px;">'
+                f'"{corr.get("reason") or "No reason provided."}"</div>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
-
-            # Load the original time log for comparison
-            original = (
-                get_db().table("time_logs")
-                .select("time_in, time_out, status")
-                .eq("employee_id", corr["employee_id"])
-                .eq("work_date", corr["work_date"])
-                .execute()
-            ).data
-            orig = original[0] if original else {}
-
-            c1, c2, c3 = st.columns(3)
-            c1.markdown("**Recorded**")
-            c1.text(f"In:  {_fmt_time(orig.get('time_in'))}")
-            c1.text(f"Out: {_fmt_time(orig.get('time_out'))}")
-            c2.markdown("**Requested**")
-            c2.text(f"In:  {_fmt_time(corr.get('requested_time_in'))}")
-            c2.text(f"Out: {_fmt_time(corr.get('requested_time_out'))}")
-            c3.markdown("**Reason**")
-            c3.caption(corr.get("reason", "—"))
 
             if corr.get("admin_notes"):
                 st.caption(f"Admin notes: {corr['admin_notes']}")
@@ -709,12 +796,61 @@ def _render_corrections():
 
 def render():
     inject_css()
-    st.title("Attendance & DTR")
+
+    # ── Editorial heading ─────────────────────────────────────
+    st.markdown(
+        '<p class="gxp-page-label">ATTENDANCE</p>'
+        '<h2 class="gxp-editorial-heading">Attendance</h2>'
+        '<p class="gxp-editorial-sub">Daily Time Record &amp; Corrections</p>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Monthly KPI cards ─────────────────────────────────────
+    try:
+        _m = _load_monthly_metrics()
+    except Exception:
+        _m = {"rate": 0, "late": 0, "nsd": 0.0}
+
+    _rate_color = "#005320" if _m["rate"] >= 90 else ("#795900" if _m["rate"] >= 75 else "#ba1a1a")
+    _kpi_style = (
+        "background:#ffffff;border-radius:16px;padding:20px 24px;"
+        "box-shadow:0 4px 20px rgba(45,51,53,0.06);"
+    )
+    k1, k2, k3 = st.columns(3)
+    k1.markdown(
+        f'<div style="{_kpi_style}">'
+        f'<div style="font-size:10px;font-weight:700;color:#5a6062;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">Avg Attendance Rate</div>'
+        f'<div style="display:flex;align-items:flex-end;gap:8px;">'
+        f'<span style="font-size:2.2rem;font-weight:800;color:#191c1d;line-height:1;">{_m["rate"]}%</span>'
+        f'<span style="font-size:12px;font-weight:700;color:{_rate_color};margin-bottom:4px;">MTD</span>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+    _late_color = "#ba1a1a" if _m["late"] > 0 else "#005320"
+    k2.markdown(
+        f'<div style="{_kpi_style}">'
+        f'<div style="font-size:10px;font-weight:700;color:#5a6062;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">Late Incidents</div>'
+        f'<div style="display:flex;align-items:flex-end;gap:8px;">'
+        f'<span style="font-size:2.2rem;font-weight:800;color:#191c1d;line-height:1;">{_m["late"]}</span>'
+        f'<span style="font-size:12px;font-weight:700;color:{_late_color};margin-bottom:4px;">MTD</span>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+    k3.markdown(
+        f'<div style="{_kpi_style}">'
+        f'<div style="font-size:10px;font-weight:700;color:#5a6062;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">Total NSD Hours</div>'
+        f'<div style="display:flex;align-items:flex-end;gap:8px;">'
+        f'<span style="font-size:2.2rem;font-weight:800;color:#191c1d;line-height:1;">{_m["nsd"]:.1f}</span>'
+        f'<span style="font-size:12px;font-weight:700;color:#424753;margin-bottom:4px;">MTD</span>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
     tab_entry, tab_summary, tab_corrections = st.tabs([
-        "Daily Entry",
-        "Attendance Summary",
-        "Corrections",
+        "📅 Daily Entry",
+        "📊 Attendance Summary",
+        "🔧 Corrections",
     ])
 
     with tab_entry:

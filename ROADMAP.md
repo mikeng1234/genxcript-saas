@@ -18,7 +18,7 @@
 - [x] **Phase D — Dashboard** — M3 bento hero grid: Next Pay Date hero, Active Employees accent card, Payroll Expenditure mini-bar chart, Recent Activity feed, Quick Actions row; existing KPI/alerts/remittance panels retained below
 - [x] **Phase E — Employees** — Table replaced with 3-column M3 card grid: initials avatar (8-color palette), department pill, name/position/emp no, salary toggle, employment type badge, SSS/PH/PI/TIN gov ID dots; editorial heading; all action buttons retained
 - [x] **Phase F — Payroll Run** — M3 redesign: 3-column grid summary (Earnings / Deductions / Employer), accent Net Pay, danger-colored tax + absent rows, improved employee mini-header with avatar + inline badge + Net Pay; filter bar repositioned; emoji tab labels
-- [ ] **Phase G — Attendance** — Stitch ref: `fromstitch/07_attendance.html`
+- [x] **Phase G — Attendance** — Editorial heading; 3 MTD KPI cards (attendance rate / late incidents / NSD hours); status pills upgraded to Material Symbols FILL icons + rounded-full M3 style; daily entry table: avatar+name col, shift pill, colored late/UT/OT values; corrections: M3 card layout with Original→Requested comparison box
 - [ ] **Phase H — Workforce Analytics** — Stitch ref: `fromstitch/08_ot_analytics.html`
 - [ ] **Phase I — Government Reports** — Stitch ref: `fromstitch/09_government_reports.html`; fix duplicate heading
 - [ ] **Phase J — Calendar** — Stitch ref: `fromstitch/10_calendar.html`
