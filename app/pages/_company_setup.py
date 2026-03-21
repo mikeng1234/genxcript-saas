@@ -1837,11 +1837,11 @@ def _render_org_tab():
                             if editing_id:
                                 _update_department(editing_id, payload)
                                 log_action("updated", "department", editing_id, f_name.strip())
-                                st.toast("Department updated!", icon=":material/check_circle:")
+                                st.toast("Department updated!", icon="✅")
                             else:
                                 new_dept = _create_department(payload)
                                 log_action("created", "department", new_dept["id"], f_name.strip())
-                                st.toast("Department created!", icon=":material/check_circle:")
+                                st.toast("Department created!", icon="✅")
                             st.session_state["org_show_form"] = False
                             st.session_state["org_edit_id"]   = None
                             st.rerun()
@@ -1971,7 +1971,7 @@ def _render_org_tab():
                             _delete_department(dept["id"])
                             log_action("deleted", "department", dept["id"], dept["name"])
                             st.session_state.pop(f"org_confirm_del_{dept['id']}", None)
-                            st.toast(f"'{dept['name']}' deleted.", icon=":material/delete:")
+                            st.toast(f"'{dept['name']}' deleted.", icon="🗑️")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error deleting: {e}")
@@ -2170,11 +2170,11 @@ def render():
                 "Anniversary: each employee's leave resets on their own hire anniversary."
             ),
         )
-        if st.button("Save Leave Policy", type="primary", icon=":material/check:", key="save_leave_rep"):
+        if st.button("Save Leave Policy", type="primary", icon="✅", key="save_leave_rep"):
             try:
                 _update_company({"leave_replenishment": _new_rep})
                 log_action("updated", "company", get_company_id(), "leave_replenishment")
-                st.toast("Leave policy saved!", icon=":material/check_circle:")
+                st.toast("Leave policy saved!", icon="✅")
                 st.rerun()
             except Exception as e:
                 st.error(f"Error saving: {e}")

@@ -5,7 +5,14 @@ Run with:  streamlit run app/main.py
 """
 
 import sys
+import mimetypes
 from pathlib import Path
+
+# ── Fix MIME types for font files (Windows Python doesn't register them) ──
+# Without this, Streamlit's Tornado server sends wrong Content-Type for .woff2/.woff
+# and the browser rejects the font files — breaking ALL Material Symbols icons.
+mimetypes.add_type("font/woff2", ".woff2")
+mimetypes.add_type("font/woff",  ".woff")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -93,7 +100,7 @@ if not is_logged_in():
             st.markdown("#### Set New Password")
             st.divider()
             _ru = st.session_state["pw_reset_user"]
-            st.info(f"Setting password for **{_ru['email']}**", icon=":material/key:")
+            st.info(f"Setting password for **{_ru['email']}**", icon="🔑")
             with st.form("set_pw_form"):
                 _new_pw   = st.text_input("New password", type="password",
                                           help="Minimum 6 characters")
@@ -356,16 +363,16 @@ if _dirty_nav:
 
 # ── Grouped sidebar navigation ────────────────────────────────────────────
 _NAV_ICONS = {
-    "Dashboard":          "dashboard",
-    "Employees":          "group",
-    "Payroll Run":        "payments",
-    "Payroll Comparison": "monitoring",
-    "OT Analytics":       "local_fire_department",
-    "Attendance":         "schedule",
-    "Government Reports": "account_balance",
-    "Calendar":           "calendar_month",
+    "Dashboard":          "view-dashboard",
+    "Employees":          "account-group",
+    "Payroll Run":        "cash-multiple",
+    "Payroll Comparison": "chart-box-outline",
+    "OT Analytics":       "fire",
+    "Attendance":         "clock-outline",
+    "Government Reports": "bank",
+    "Calendar":           "calendar-month",
     "Company Setup":      "domain",
-    "Preferences":        "settings",
+    "Preferences":        "cog",
 }
 _NAV_GROUPS = [
     ("Overview",    ["Dashboard"]),
@@ -472,23 +479,18 @@ components.html(f"""
     }}
   }}
 
-  // ── Inject Material Symbols + Plus Jakarta Sans fonts ─────────────────
+  // ── Inject MDI (Pictogrammers) + Plus Jakarta Sans fonts ─────────────
   function injectFonts(){{
-    if(d.getElementById('gxp-mat-symbols-css')) return;
-    // Material Symbols Outlined — served locally to avoid async race condition
-    var matStyle=d.createElement('style');
-    matStyle.id='gxp-mat-symbols-css';
-    matStyle.textContent=[
-      '@font-face{{',
-      '  font-family:"Material Symbols Outlined";',
-      '  font-style:normal;',
-      '  font-weight:100 700;',
-      '  font-display:block;',
-      '  src:url("/app/static/MaterialSymbolsOutlined.woff2") format("woff2");',
-      '}}',
-    ].join('');
-    d.head.insertBefore(matStyle, d.head.firstChild);
-    // Plus Jakarta Sans — from Google Fonts (body text, less critical)
+    if(d.getElementById('gxp-mdi-css')) return;
+
+    // 1. MDI icon font from CDN (CSS-class based — always reliable)
+    var mdiLink=d.createElement('link');
+    mdiLink.id='gxp-mdi-css';
+    mdiLink.rel='stylesheet';
+    mdiLink.href='https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css';
+    d.head.appendChild(mdiLink);
+
+    // 2. Plus Jakarta Sans — from Google Fonts (body text)
     var link2=d.createElement('link');
     link2.id='gxp-jakarta-css';
     link2.rel='stylesheet';
@@ -515,16 +517,8 @@ components.html(f"""
       // Kill the gap Streamlit reserves for the sidebar
       '[data-testid="stAppViewContainer"]{{padding-left:0!important;}}',
       'section[data-testid="stMain"]{{margin-left:0!important;padding-left:0!important;}}',
-      // Define Material Symbols Outlined class so icons render even if Google Fonts CSS
-      // hasn't fully applied yet (font-face loaded by injectFonts separately)
-      '.material-symbols-outlined{{',
-      '  font-family:"Material Symbols Outlined"!important;',
-      '  font-weight:normal;font-style:normal;font-size:24px;',
-      '  line-height:1;letter-spacing:normal;text-transform:none;',
-      '  display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;',
-      '  -webkit-font-smoothing:antialiased;',
-      '  font-variation-settings:"FILL" 0,"wght" 400,"GRAD" 0,"opsz" 24;',
-      '}}',
+      // MDI icon sizing overrides for sidebar / topbar
+      '#gxp-lnav .mdi,#gxp-topbar .mdi{{line-height:1;}}',
     ].join('');
     d.head.appendChild(s);
   }}
@@ -630,7 +624,7 @@ components.html(f"""
     var brand=d.createElement('div');
     brand.style.cssText='display:flex;align-items:center;gap:8px;overflow:hidden;min-width:0;';
     brand.innerHTML=
-      '<span style="font-size:22px;flex-shrink:0;line-height:1;"><span class="material-symbols-outlined" style="color:'+ac+';font-size:22px;">payments</span></span>'+
+      '<span class="mdi mdi-cash-register" style="font-size:22px;flex-shrink:0;line-height:1;color:'+ac+';"></span>'+
       '<div class="ln-brand" style="'+
       'white-space:nowrap;overflow:hidden;'+
       'transition:opacity 0.18s,max-width 0.18s;'+
@@ -675,7 +669,7 @@ components.html(f"""
         var ico=d.createElement('span');
         ico.style.cssText=
           'font-size:20px;flex-shrink:0;width:24px;text-align:center;line-height:1;display:flex;align-items:center;justify-content:center;';
-        ico.innerHTML='<span class="material-symbols-outlined" style="font-size:20px;">'+(pi.i||'circle')+'</span>';
+        ico.innerHTML='<span class="mdi mdi-'+(pi.i||'circle')+'" style="font-size:20px;"></span>';
 
         var lbl=d.createElement('span');
         lbl.className='ln-lbl';
@@ -733,7 +727,7 @@ components.html(f"""
         (isC?'justify-content:center;':'');
 
       var coIcon=d.createElement('span');
-      coIcon.innerHTML='<span class="material-symbols-outlined" style="font-size:18px;flex-shrink:0;">domain</span>';
+      coIcon.innerHTML='<span class="mdi mdi-domain" style="font-size:18px;flex-shrink:0;"></span>';
 
       var coName=d.createElement('span');
       coName.className='ln-lbl';
@@ -778,8 +772,8 @@ components.html(f"""
 
         var rIcon=d.createElement('span');
         rIcon.innerHTML=isActive
-          ?'<span class="material-symbols-outlined" style="font-size:18px;color:'+ac+';flex-shrink:0;">check_circle</span>'
-          :'<span class="material-symbols-outlined" style="font-size:18px;flex-shrink:0;opacity:0.5;">domain</span>';
+          ?'<span class="mdi mdi-check-circle" style="font-size:18px;color:'+ac+';flex-shrink:0;"></span>'
+          :'<span class="mdi mdi-domain" style="font-size:18px;flex-shrink:0;opacity:0.5;"></span>';
 
         var rName=d.createElement('span');
         rName.style.cssText='flex:1;overflow:hidden;text-overflow:ellipsis;';
@@ -884,7 +878,7 @@ components.html(f"""
     var left=d.createElement('div');
     left.style.cssText='display:flex;align-items:center;gap:8px;min-width:0;';
     left.innerHTML=
-      '<span class="material-symbols-outlined" style="font-size:18px;color:'+ac+';flex-shrink:0;">domain</span>'+
+      '<span class="mdi mdi-domain" style="font-size:18px;color:'+ac+';flex-shrink:0;"></span>'+
       '<span style="font-size:13px;font-weight:600;color:'+tx+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;">'+COMPANY_NAME+'</span>';
 
     // ── Right: user + quick actions ────────────────────────────────────────
@@ -902,7 +896,7 @@ components.html(f"""
         'font-size:12px;font-weight:500;font-family:inherit;'+
         'transition:background 0.12s,color 0.12s;white-space:nowrap;';
       b.innerHTML=
-        '<span class="material-symbols-outlined" style="font-size:17px;">'+icon+'</span>'+
+        '<span class="mdi mdi-'+icon+'" style="font-size:17px;"></span>'+
         '<span class="tb-lbl">'+label+'</span>';
       b.onmouseenter=function(){{
         this.style.background=danger?gc('--gxp-danger-bg','#ffdad6'):sf2;
@@ -922,7 +916,7 @@ components.html(f"""
       'display:flex;align-items:center;gap:6px;padding:5px 12px;'+
       'background:'+ab+';border-radius:9999px;margin-right:4px;';
     chip.innerHTML=
-      '<span class="material-symbols-outlined" style="font-size:16px;color:'+ac+';">account_circle</span>'+
+      '<span class="mdi mdi-account-circle" style="font-size:16px;color:'+ac+';"></span>'+
       '<span style="font-size:12px;font-weight:600;color:'+ac+';max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+USER_EMAIL+'">'+USER_DISPLAY+'</span>';
 
     // Divider
@@ -930,8 +924,8 @@ components.html(f"""
     div.style.cssText='width:1px;height:22px;background:'+br+';margin:0 4px;';
 
     right.appendChild(chip);
-    right.appendChild(tbBtn('settings','Preferences','{_nav_pref_label}',false));
-    right.appendChild(tbBtn('manage_accounts','My Account',ACCT_LABEL,false));
+    right.appendChild(tbBtn('cog','Preferences','{_nav_pref_label}',false));
+    right.appendChild(tbBtn('account-cog','My Account',ACCT_LABEL,false));
     right.appendChild(div);
     right.appendChild(tbBtn('logout','Sign Out',SIGNOUT_LABEL,true));
 
@@ -1030,7 +1024,7 @@ def _my_account_dialog():
         else:
             ok, err = update_own_display_name(new_name)
             if ok:
-                st.toast("Display name updated!", icon=":material/check_circle:")
+                st.toast("Display name updated!", icon="✅")
                 st.rerun()
             else:
                 st.error(err)
@@ -1059,6 +1053,8 @@ def _my_account_dialog():
                 st.error(err)
 
 if st.session_state.pop("_show_my_account", False):
+    # Clear any page-level dialog triggers so only one dialog opens per run
+    st.session_state.pop("editing_id", None)
     _my_account_dialog()
 
 # ============================================================
@@ -1121,7 +1117,7 @@ except Exception as _page_exc:
         logout()
         st.error(
             "Your session has expired. Please sign in again.",
-            icon=":material/lock:",
+            icon="🔒",
         )
         st.rerun()
     else:

@@ -149,12 +149,12 @@ def _employee_display_name(emp: dict) -> str:
 
 def _status_html(status: str) -> str:
     mapping = {
-        "present":    ('<i class="mdi mdi-check-circle-outline"></i>', "var(--gxp-success)", "var(--gxp-success-bg)"),
+        "present":    ('<span class="mdi mdi-check-circle" style="font-size:18px;"></span>', "var(--gxp-success)", "var(--gxp-success-bg)"),
         "half_day":   ("½", "var(--gxp-warning)", "var(--gxp-warning-bg)"),
-        "absent":     ('<i class="mdi mdi-close-circle-outline"></i>', "var(--gxp-danger)", "var(--gxp-danger-bg)"),
-        "on_leave":   ('<i class="mdi mdi-umbrella-beach"></i>', "var(--gxp-accent)", "var(--gxp-accent-bg)"),
-        "holiday":    ('<i class="mdi mdi-party-popper"></i>', "var(--gxp-accent)", "var(--gxp-accent-bg)"),
-        "rest_day":   ('<i class="mdi mdi-sleep"></i>', "var(--gxp-text3)", "var(--gxp-surface2)"),
+        "absent":     ('<span class="mdi mdi-close-circle" style="font-size:18px;"></span>', "var(--gxp-danger)", "var(--gxp-danger-bg)"),
+        "on_leave":   ('<span class="mdi mdi-beach" style="font-size:18px;"></span>', "var(--gxp-accent)", "var(--gxp-accent-bg)"),
+        "holiday":    ('<span class="mdi mdi-party-popper" style="font-size:18px;"></span>', "var(--gxp-accent)", "var(--gxp-accent-bg)"),
+        "rest_day":   ('<span class="mdi mdi-weather-night" style="font-size:18px;"></span>', "var(--gxp-text3)", "var(--gxp-surface2)"),
         "no_schedule": ("—", "var(--gxp-text3)", "var(--gxp-surface2)"),
     }
     icon, color, bg = mapping.get(status, ("?", "var(--gxp-text2)", "var(--gxp-surface)"))
@@ -197,23 +197,23 @@ def _render_daily_entry():
             st.error(msg)
 
     # ── Date navigation ──────────────────────────────────────
-    # Initialise the widget key once; after that the widget owns its own value.
-    # The Today button writes directly to the key before st.rerun() so the
-    # upcoming widget instantiation picks up the forced date.
+    # on_click sets the key BEFORE the next render cycle, so the
+    # date_input widget picks up the new value without conflict.
     if "dtr_date_picker" not in st.session_state:
         st.session_state["dtr_date_picker"] = date.today()
 
-    col_date, _ = st.columns([2, 3])
+    def _jump_today():
+        st.session_state["dtr_date_picker"] = date.today()
+
+    col_date, col_today, _ = st.columns([2, 1, 2])
     with col_date:
         work_date = st.date_input(
             "Date",
             key="dtr_date_picker",
             label_visibility="collapsed",
         )
-
-    if st.button("Today", key="dtr_today", help="Jump to today"):
-        st.session_state["dtr_date_picker"] = date.today()
-        st.rerun()
+    with col_today:
+        st.button("Today", key="dtr_today", help="Jump to today", on_click=_jump_today)
 
     st.caption(f"**{work_date.strftime('%A, %B %d, %Y')}**")
 
@@ -237,14 +237,13 @@ def _render_daily_entry():
     _dept_names_structured = _load_dept_names_from_table()
     if _dept_names_structured:
         all_depts = _dept_names_structured
-    de_s, de_p, de_d = st.columns([2, 1.5, 1.5])
-    with de_s:
-        de_search = st.text_input("Search", placeholder="Name or employee no…",
-                                  label_visibility="collapsed", key="de_search")
-    with de_p:
-        de_sel_pos  = st.multiselect("Position",   all_positions, key="de_f_pos",  placeholder="All positions")
-    with de_d:
+    # ── Filter bar (vertical) ─────────────────────────────────
+    fcol, _ = st.columns([2, 5])
+    with fcol:
         de_sel_dept = st.multiselect("Department", all_depts,     key="de_f_dept", placeholder="All departments")
+        de_sel_pos  = st.multiselect("Position",   all_positions, key="de_f_pos",  placeholder="All positions")
+        de_search   = st.text_input("Employee",    placeholder="Name or employee no…",
+                                    label_visibility="visible", key="de_search")
 
     def _de_match(emp):
         if de_search:
@@ -267,11 +266,6 @@ def _render_daily_entry():
         sched = resolve_schedule_for_date(emp, schedules, overrides, work_date)
         log   = existing.get(emp["id"])
         entries.append({"emp": emp, "sched": sched, "log": log})
-
-    # ── Quick-action buttons ──────────────────────────────────
-    qa1, _ = st.columns([1.5, 6.5])
-    with qa1:
-        save_all = st.button("Save All", type="primary", key="dtr_save_all", width="stretch")
 
     st.divider()
 
@@ -372,7 +366,12 @@ def _render_daily_entry():
                 "status":            result.status,
             }
 
-    # ── Save All ──────────────────────────────────────────────
+    # ── Save All button (below table) ────────────────────────
+    st.divider()
+    sa1, _ = st.columns([1.5, 6.5])
+    with sa1:
+        save_all = st.button("Save All", type="primary", key="dtr_save_all", width="stretch")
+
     if save_all:
         saved = 0
         errors = []
@@ -441,14 +440,13 @@ def _render_summary():
     _dept_names_structured = _load_dept_names_from_table()
     if _dept_names_structured:
         all_depts = _dept_names_structured
-    sm_s, sm_p, sm_d = st.columns([2, 1.5, 1.5])
-    with sm_s:
-        sm_search   = st.text_input("Search", placeholder="Name or employee no…",
-                                    label_visibility="collapsed", key="sm_search")
-    with sm_p:
-        sm_sel_pos  = st.multiselect("Position",   all_positions, key="sm_f_pos",  placeholder="All positions")
-    with sm_d:
+    # ── Filter bar (vertical) ─────────────────────────────────
+    fcol, _ = st.columns([2, 5])
+    with fcol:
         sm_sel_dept = st.multiselect("Department", all_depts,     key="sm_f_dept", placeholder="All departments")
+        sm_sel_pos  = st.multiselect("Position",   all_positions, key="sm_f_pos",  placeholder="All positions")
+        sm_search   = st.text_input("Employee",    placeholder="Name or employee no…",
+                                    label_visibility="visible",   key="sm_search")
 
     # Aggregate per employee
     from collections import defaultdict

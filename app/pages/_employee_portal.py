@@ -412,7 +412,7 @@ def _render_payslips(emp: dict, company: dict):
     if not payslips:
         st.markdown(
             '<div class="gxp-panel" style="text-align:center;padding:40px 24px">'
-            '<div style="font-size:32px;margin-bottom:12px"><i class="mdi mdi-file-document-outline"></i></div>'
+            '<div style="font-size:32px;margin-bottom:12px"><span class="mdi mdi-file-document-outline" style="font-size:18px;"></span></div>'
             '<div style="font-size:15px;font-weight:600;color:#6b7280">No payslips yet</div>'
             '<div style="font-size:13px;margin-top:4px;color:#9ca3af">'
             'Your payslips will appear here once payroll is finalized by HR.</div>'
@@ -1405,7 +1405,7 @@ def _render_clock_widget(
     # ── Status badge ────────────────────────────────────────────
     if has_in and has_out:
         status_html = (
-            f'<span style="color:#16a34a;font-weight:600;"><i class="mdi mdi-check-circle" style="color:#22c55e;"></i> Clocked in '
+            f'<span style="color:#16a34a;font-weight:600;"><span class="mdi mdi-check-circle" style="font-size:18px;color:#22c55e;"></span> Clocked in '
             f'{_fmt_time_portal(today_log["time_in"])} · '
             f'Out {_fmt_time_portal(today_log["time_out"])}</span>'
         )
@@ -1414,19 +1414,19 @@ def _render_clock_widget(
         if on_break:
             status_html = (
                 f'<span style="color:#d97706;font-weight:600;">'
-                f'<i class="mdi mdi-coffee" style="color:#d97706;"></i>'
+                f'<span class="mdi mdi-coffee" style="font-size:18px;color:#d97706;"></span>'
                 f' On break since {_fmt_time_portal(today_log["break_out"])}'
                 f' (in at {_fmt_time_portal(today_log["time_in"])}) — tap End Break when back!</span>'
             )
         else:
             status_html = (
                 f'<span style="color:#2563eb;font-weight:600;">'
-                f'<i class="mdi mdi-check-circle" style="color:#22c55e;"></i> Clocked in at {_fmt_time_portal(today_log["time_in"])} '
+                f'<span class="mdi mdi-check-circle" style="font-size:18px;color:#22c55e;"></span> Clocked in at {_fmt_time_portal(today_log["time_in"])} '
                 f'— remember to clock out!</span>'
             )
         action = "out"
     else:
-        status_html = '<span style="color:#9ca3af;"><i class="mdi mdi-clock-outline" style="color:#9ca3af;"></i> Not clocked in yet today</span>'
+        status_html = '<span style="color:#9ca3af;"><span class="mdi mdi-clock-outline" style="font-size:18px;color:#9ca3af;"></span> Not clocked in yet today</span>'
         action = "in"
 
     # ── Card header ─────────────────────────────────────────────
@@ -1435,7 +1435,7 @@ def _render_clock_widget(
         f'border:1px solid var(--gx-border,#e5e7eb);border-radius:12px;'
         f'padding:14px 18px;margin-bottom:4px;">'
         f'<div style="display:flex;justify-content:space-between;align-items:center;">'
-        f'<div style="font-size:12px;font-weight:700;color:#6b7280;"><i class="mdi mdi-clock-outline"></i> TODAY\'S ATTENDANCE</div>'
+        f'<div style="font-size:12px;font-weight:700;color:#6b7280;"><span class="mdi mdi-clock-outline" style="font-size:18px;"></span> TODAY\'S ATTENDANCE</div>'
         f'<div style="font-size:12px;color:#9ca3af;">{today.strftime("%a, %B %d")}</div>'
         f'</div>'
         f'<div style="font-size:13px;margin-top:8px;">{status_html}</div>'
@@ -1799,7 +1799,7 @@ def _render_dashboard(emp: dict, company: dict):
 
     st.markdown(
         f'<div style="font-size:20px;font-weight:700;margin-bottom:4px;">'
-        f'{greeting}, {first_name}! <i class="mdi mdi-hand-wave"></i></div>'
+        f'{greeting}, {first_name}! <span class="mdi mdi-hand-wave" style="font-size:18px;"></span></div>'
         f'<div style="font-size:13px;color:#6b7280;margin-bottom:16px;">'
         f'{today.strftime("%A, %B %d, %Y")}</div>',
         unsafe_allow_html=True,
@@ -1841,9 +1841,9 @@ def _render_dashboard(emp: dict, company: dict):
             unsafe_allow_html=True,
         )
 
-    _leave_card(col_vl, "VL", '<i class="mdi mdi-palm-tree"></i>', "#f0fdf4", "#16a34a")
-    _leave_card(col_sl, "SL", '<i class="mdi mdi-medical-bag"></i>', "#eff6ff", "#2563eb")
-    _leave_card(col_cl, "CL", '<i class="mdi mdi-shimmer"></i>', "#fdf4ff", "#9333ea")
+    _leave_card(col_vl, "VL", '<span class="mdi mdi-tree" style="font-size:18px;"></span>', "#f0fdf4", "#16a34a")
+    _leave_card(col_sl, "SL", '<span class="mdi mdi-hospital-box" style="font-size:18px;"></span>', "#eff6ff", "#2563eb")
+    _leave_card(col_cl, "CL", '<span class="mdi mdi-auto-fix" style="font-size:18px;"></span>', "#fdf4ff", "#9333ea")
 
     # Upcoming holidays card
     upcoming = _load_upcoming_holidays(company["id"], n=4)
@@ -1870,7 +1870,7 @@ def _render_dashboard(emp: dict, company: dict):
         col_holiday.markdown(
             f'<div style="background:var(--gx-card-bg,#fff);border:1px solid var(--gx-border,#e5e7eb);'
             f'border-radius:12px;padding:14px 16px;height:100%;">'
-            f'<div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:10px;"><i class="mdi mdi-calendar-month"></i> UPCOMING HOLIDAYS</div>'
+            f'<div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:10px;"><span class="mdi mdi-calendar-today" style="font-size:18px;"></span> UPCOMING HOLIDAYS</div>'
             + holiday_html
             + '</div>',
             unsafe_allow_html=True,
@@ -1879,7 +1879,7 @@ def _render_dashboard(emp: dict, company: dict):
         col_holiday.markdown(
             '<div style="background:var(--gx-card-bg,#fff);border:1px solid var(--gx-border,#e5e7eb);'
             'border-radius:12px;padding:14px 16px;height:100%;">'
-            '<div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:8px;"><i class="mdi mdi-calendar-month"></i> UPCOMING HOLIDAYS</div>'
+            '<div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:8px;"><span class="mdi mdi-calendar-today" style="font-size:18px;"></span> UPCOMING HOLIDAYS</div>'
             '<div style="font-size:12px;color:#9ca3af;">No upcoming holidays.</div>'
             '</div>',
             unsafe_allow_html=True,
@@ -1926,7 +1926,7 @@ def _render_dashboard(emp: dict, company: dict):
             st.markdown(
                 f'<div style="background:var(--gx-card-bg,#fff);border:1px solid var(--gx-border,#e5e7eb);'
                 f'border-radius:12px;padding:16px 18px;">'
-                f'<div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:4px;"><i class="mdi mdi-cash"></i> LATEST PAY BREAKDOWN</div>'
+                f'<div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:4px;"><span class="mdi mdi-cash-multiple" style="font-size:18px;"></span> LATEST PAY BREAKDOWN</div>'
                 f'<div style="font-size:11px;color:#9ca3af;margin-bottom:12px;">{period_label}</div>'
                 + bars
                 + f'<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--gx-border,#e5e7eb);'
@@ -1940,7 +1940,7 @@ def _render_dashboard(emp: dict, company: dict):
             st.markdown(
                 '<div style="background:var(--gx-card-bg,#fff);border:1px solid var(--gx-border,#e5e7eb);'
                 'border-radius:12px;padding:32px 18px;text-align:center;">'
-                '<div style="font-size:24px"><i class="mdi mdi-cash"></i></div>'
+                '<div style="font-size:24px"><span class="mdi mdi-cash-multiple" style="font-size:18px;"></span></div>'
                 '<div style="font-size:13px;color:#6b7280;margin-top:8px;">No payslips yet.</div>'
                 '</div>',
                 unsafe_allow_html=True,
@@ -2148,12 +2148,12 @@ def _fmt_time_portal(t) -> str:
 
 def _dtr_status_badge(status: str) -> str:
     mapping = {
-        "present":    ('<i class="mdi mdi-check-circle-outline"></i> Present',    "#15803d", "#dcfce7"),
+        "present":    ('<span class="mdi mdi-check-circle" style="font-size:18px;"></span> Present',    "#15803d", "#dcfce7"),
         "half_day":   ("½ Half Day",   "#92400e", "#fef3c7"),
-        "absent":     ('<i class="mdi mdi-close-circle-outline"></i> Absent',     "#b91c1c", "#fee2e2"),
-        "on_leave":   ('<i class="mdi mdi-umbrella-beach"></i> On Leave',  "#1e40af", "#dbeafe"),
-        "holiday":    ('<i class="mdi mdi-party-popper"></i> Holiday',   "#6d28d9", "#ede9fe"),
-        "rest_day":   ('<i class="mdi mdi-sleep"></i> Rest Day',  "#475569", "#f1f5f9"),
+        "absent":     ('<span class="mdi mdi-close-circle" style="font-size:18px;"></span> Absent',     "#b91c1c", "#fee2e2"),
+        "on_leave":   ('<span class="mdi mdi-beach" style="font-size:18px;"></span> On Leave',  "#1e40af", "#dbeafe"),
+        "holiday":    ('<span class="mdi mdi-party-popper" style="font-size:18px;"></span> Holiday',   "#6d28d9", "#ede9fe"),
+        "rest_day":   ('<span class="mdi mdi-weather-night" style="font-size:18px;"></span> Rest Day',  "#475569", "#f1f5f9"),
         "no_schedule": ("— No Sched",  "#475569", "#f1f5f9"),
     }
     label, color, bg = mapping.get(status, ("? Unknown", "#6b7280", "#f3f4f6"))

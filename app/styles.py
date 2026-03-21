@@ -17,7 +17,7 @@ import streamlit.components.v1 as _components
 THEMES: dict[str, dict] = {
     "midnight": {
         "label": "Midnight Navy",
-        "emoji": '<i class="mdi mdi-weather-night"></i>',
+        "emoji": '<span class="mdi mdi-weather-night" style="font-size:18px;"></span>',
         "swatches": ["#0f172a", "#1e2530", "#3b82f6", "#93c5fd"],
         "vars": {
             "--gxp-bg":         "#0f172a",
@@ -43,7 +43,7 @@ THEMES: dict[str, dict] = {
     },
     "lavender": {
         "label": "Lavender Dusk",
-        "emoji": '<i class="mdi mdi-star-four-points"></i>',
+        "emoji": '<span class="mdi mdi-auto-fix" style="font-size:18px;"></span>',
         "swatches": ["#100d1e", "#1a1530", "#a78bfa", "#ddd6fe"],
         "vars": {
             "--gxp-bg":         "#100d1e",
@@ -69,7 +69,7 @@ THEMES: dict[str, dict] = {
     },
     "forest": {
         "label": "Forest Moss",
-        "emoji": '<i class="mdi mdi-leaf"></i>',
+        "emoji": '<span class="mdi mdi-leaf" style="font-size:18px;"></span>',
         "swatches": ["#0d1a12", "#162118", "#4ade80", "#bbf7d0"],
         "vars": {
             "--gxp-bg":         "#0d1a12",
@@ -95,7 +95,7 @@ THEMES: dict[str, dict] = {
     },
     "rose": {
         "label": "Rose Quartz",
-        "emoji": '<i class="mdi mdi-flower-poppy"></i>',
+        "emoji": '<span class="mdi mdi-flower" style="font-size:18px;"></span>',
         "swatches": ["#1a1014", "#251520", "#fb7185", "#fecdd3"],
         "vars": {
             "--gxp-bg":         "#1a1014",
@@ -121,7 +121,7 @@ THEMES: dict[str, dict] = {
     },
     "amber": {
         "label": "Amber Ember",
-        "emoji": '<i class="mdi mdi-fire"></i>',
+        "emoji": '<span class="mdi mdi-fire" style="font-size:18px;"></span>',
         "swatches": ["#1a1508", "#251e0d", "#fbbf24", "#fef3c7"],
         "vars": {
             "--gxp-bg":         "#1a1508",
@@ -147,7 +147,7 @@ THEMES: dict[str, dict] = {
     },
     "ocean": {
         "label": "Ocean Mist",
-        "emoji": '<i class="mdi mdi-waves"></i>',
+        "emoji": '<span class="mdi mdi-wave" style="font-size:18px;"></span>',
         "swatches": ["#0d1820", "#132030", "#22d3ee", "#a5f3fc"],
         "vars": {
             "--gxp-bg":         "#0d1820",
@@ -173,7 +173,7 @@ THEMES: dict[str, dict] = {
     },
     "sakura": {
         "label": "Sakura",
-        "emoji": '<i class="mdi mdi-flower"></i>',
+        "emoji": '<span class="mdi mdi-tree" style="font-size:18px;"></span>',
         "swatches": ["#180f14", "#221520", "#f472b6", "#fce7f3"],
         "vars": {
             "--gxp-bg":         "#180f14",
@@ -199,7 +199,7 @@ THEMES: dict[str, dict] = {
     },
     "slate": {
         "label": "Charcoal Slate",
-        "emoji": '<i class="mdi mdi-hexagon-outline"></i>',
+        "emoji": '<span class="mdi mdi-hexagon" style="font-size:18px;"></span>',
         "swatches": ["#111827", "#1f2937", "#60a5fa", "#bfdbfe"],
         "vars": {
             "--gxp-bg":         "#111827",
@@ -227,7 +227,7 @@ THEMES: dict[str, dict] = {
     # ── Light Themes ─────────────────────────────────────────
     "cloud": {
         "label": "Cloud",
-        "emoji": '<i class="mdi mdi-cloud-outline"></i>',
+        "emoji": '<span class="mdi mdi-cloud" style="font-size:18px;"></span>',
         "light": True,
         "swatches": ["#f8fafc", "#ffffff", "#3b82f6", "#1e40af"],
         "vars": {
@@ -254,7 +254,7 @@ THEMES: dict[str, dict] = {
     },
     "parchment": {
         "label": "Parchment",
-        "emoji": '<i class="mdi mdi-file-outline"></i>',
+        "emoji": '<span class="mdi mdi-file-document-outline" style="font-size:18px;"></span>',
         "light": True,
         "swatches": ["#fdf8f0", "#ffffff", "#b45309", "#78350f"],
         "vars": {
@@ -281,7 +281,7 @@ THEMES: dict[str, dict] = {
     },
     "mint": {
         "label": "Mint Fresh",
-        "emoji": '<i class="mdi mdi-sprout"></i>',
+        "emoji": '<span class="mdi mdi-spa" style="font-size:18px;"></span>',
         "light": True,
         "swatches": ["#f0fdf4", "#ffffff", "#059669", "#065f46"],
         "vars": {
@@ -308,7 +308,7 @@ THEMES: dict[str, dict] = {
     },
     "blush": {
         "label": "Blush",
-        "emoji": '<i class="mdi mdi-flower-tulip"></i>',
+        "emoji": '<span class="mdi mdi-flower-outline" style="font-size:18px;"></span>',
         "light": True,
         "swatches": ["#fdf2f8", "#ffffff", "#db2777", "#831843"],
         "vars": {
@@ -335,7 +335,7 @@ THEMES: dict[str, dict] = {
     },
     "sky": {
         "label": "Sky",
-        "emoji": '<i class="mdi mdi-weather-partly-cloudy"></i>',
+        "emoji": '<span class="mdi mdi-weather-partly-cloudy" style="font-size:18px;"></span>',
         "light": True,
         "swatches": ["#f0f9ff", "#ffffff", "#0284c7", "#075985"],
         "vars": {
@@ -362,7 +362,7 @@ THEMES: dict[str, dict] = {
     },
     "lavender_light": {
         "label": "Lavender Mist",
-        "emoji": '<i class="mdi mdi-flower-outline"></i>',
+        "emoji": '<span class="mdi mdi-flower" style="font-size:18px;"></span>',
         "light": True,
         "swatches": ["#faf5ff", "#ffffff", "#7c3aed", "#4c1d95"],
         "vars": {
@@ -389,7 +389,7 @@ THEMES: dict[str, dict] = {
     },
     "sand": {
         "label": "Sand Dune",
-        "emoji": '<i class="mdi mdi-weather-sunny"></i>',
+        "emoji": '<span class="mdi mdi-white-balance-sunny" style="font-size:18px;"></span>',
         "light": True,
         "swatches": ["#fefce8", "#fffef5", "#ca8a04", "#713f12"],
         "vars": {
@@ -416,7 +416,7 @@ THEMES: dict[str, dict] = {
     },
     "sage": {
         "label": "Sage",
-        "emoji": '<i class="mdi mdi-barley"></i>',
+        "emoji": '<span class="mdi mdi-grass" style="font-size:18px;"></span>',
         "light": True,
         "swatches": ["#f7fee7", "#ffffff", "#4d7c0f", "#1a2e05"],
         "vars": {
@@ -445,7 +445,7 @@ THEMES: dict[str, dict] = {
     # ── Tactile Sanctuary — Material 3 Editorial Minimalism ────
     "tactile": {
         "label": "Tactile",
-        "emoji": '<i class="mdi mdi-diamond-stone"></i>',
+        "emoji": '<span class="mdi mdi-diamond-stone" style="font-size:18px;"></span>',
         "light": True,
         "swatches": ["#f8f9fa", "#ffffff", "#005bc1", "#fbbc05"],
         "vars": {
@@ -529,12 +529,27 @@ GOV_COLORS = {
 
 def inject_css():
     """Inject shared CSS with active theme variables. Call once per page render()."""
-    # Load MDI font + Plus Jakarta Sans + Material Symbols — @import inside <style>
+    # Load Plus Jakarta Sans + Material Symbols — @import inside <style>
     st.markdown(
         "<style>"
-        "@import url('https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css');"
+        "@font-face {"
+        "  font-family: 'Material Symbols Outlined';"
+        "  font-style: normal;"
+        "  font-weight: 100 700;"
+        "  font-display: block;"
+        "  src: url('/app/static/MaterialSymbolsOutlined.woff2') format('woff2');"
+        "}"
+        "@font-face {"
+        "  font-family: 'Material Symbols Rounded';"
+        "  font-style: normal;"
+        "  font-weight: 100 700;"
+        "  font-display: block;"
+        "  src: url('/app/static/MaterialSymbolsRounded.woff2') format('woff2');"
+        "}"
         "@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');"
-        "@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');"
+        "[data-testid='stExpanderToggleIcon']{display:none!important;}"
+        ".stExpander summary svg{display:none!important;}"
+        ".stExpander summary span[translate='no']{display:none!important;}"
         "</style>",
         unsafe_allow_html=True,
     )
@@ -646,6 +661,22 @@ def inject_css():
     # ── 2. Component styles (all use var(--gxp-*)) ───────────
     st.markdown("""
     <style>
+
+    /* ── Ripple effect ───────────────────────────── */
+    @keyframes gxp-ripple {
+        0%   { transform: scale(0); opacity: 0.35; }
+        100% { transform: scale(4); opacity: 0; }
+    }
+    .gxp-ripple {
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.5);
+        pointer-events: none;
+        animation: gxp-ripple 0.5s ease-out forwards;
+    }
+    .gxp-ripple-dark {
+        background: rgba(0,0,0,0.12);
+    }
 
     /* ── Status Badges ────────────────────────────── */
     .gxp-badge {
@@ -918,6 +949,54 @@ def inject_css():
         transition: box-shadow 0.15s ease, transform 0.15s ease;
     }
 
+    /* ── Reminder swipe-reveal cards ─────────────────────────────── */
+    .gxp-remind-swipe {
+        position: relative !important;
+        overflow: hidden !important;
+        border-radius: 10px !important;
+    }
+    .gxp-remind-actions {
+        position: absolute !important;
+        top: 0 !important; right: 0 !important; bottom: 0 !important;
+        width: 110px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        padding: 8px 6px !important;
+        border-radius: 0 10px 10px 0 !important;
+        z-index: 0 !important;
+    }
+    .gxp-remind-card-inner {
+        position: relative !important;
+        z-index: 1 !important;
+        transition: transform 0.25s cubic-bezier(.4,0,.2,1) !important;
+    }
+    .gxp-remind-swipe:hover .gxp-remind-card-inner {
+        transform: translateX(-110px) !important;
+    }
+    .gxp-remind-action-btn {
+        position: relative !important;
+        overflow: hidden !important;
+        border-radius: 8px !important;
+        padding: 6px 10px !important;
+        font-size: 10px !important;
+        font-weight: 700 !important;
+        cursor: pointer !important;
+        width: 90px !important;
+        text-align: center !important;
+        font-family: inherit !important;
+        transition: transform 0.12s, box-shadow 0.12s !important;
+    }
+    .gxp-remind-action-btn:hover {
+        transform: scale(1.05) !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+    }
+    .gxp-remind-action-btn:active {
+        transform: scale(0.97) !important;
+    }
+
     /* ── Reminder pills — stat-card pattern, guarded against col_alerts bleed ──
      *
      * PROBLEM: stHorizontalBlock:has(.gxp-remind-leave) matches BOTH the inner
@@ -931,89 +1010,36 @@ def inject_css():
      *   col_alerts     → has alert marker as descendant → EXCLUDED
      * ──────────────────────────────────────────────────────────────────────── */
 
-    /* Base: collapsed pill — only in reminder leaf columns, not in col_alerts */
-    [data-testid="stHorizontalBlock"]
-        > [data-testid="stColumn"]:has(.gxp-remind-leave, .gxp-remind-ot):not(:has(.gxp-alert-gov-marker))
-        [data-testid="stButton"] button {
-        height:        10px              !important;
-        min-height:    0                 !important;
-        padding:       0 8px            !important;
-        font-size:     0                 !important;
-        color:         rgba(255,255,255,0) !important;
-        border:        none              !important;
-        border-radius: 99px             !important;
-        background:    var(--gxp-border) !important;
-        box-shadow:    none              !important;
-        cursor:        pointer           !important;
-        overflow:      hidden            !important;
-        letter-spacing: 0.3px           !important;
-        font-weight:   600               !important;
-        transition:    background 0.2s ease,
-                       box-shadow 0.2s ease,
-                       height     0.18s ease,
-                       color      0.15s ease !important;
+    /* ── Reminder hidden buttons — fully invisible, used only as JS click targets ── */
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.gxp-remind-section)
+        [data-testid="stButton"] {
+        height:     0 !important;
+        min-height: 0 !important;
+        overflow:   hidden !important;
+        margin:     0 !important;
+        padding:    0 !important;
+        opacity:    0 !important;
+        pointer-events: none !important;
     }
-    /* col_l hover: leave pill — purple */
-    [data-testid="stHorizontalBlock"]
-        > [data-testid="stColumn"]:has(.gxp-remind-leave):not(:has(.gxp-alert-gov-marker)):hover
-        [data-testid="stButton"] button {
-        height:     26px  !important;
-        font-size:  9px   !important;
-        color:      rgba(255,255,255,0.90) !important;
-        background: #7c3aed !important;
-        box-shadow: 0 0 0 3px rgba(124,58,237,0.25),
-                    0 0 16px 5px rgba(124,58,237,0.45) !important;
-    }
-    /* col_r hover: OT pill — blue */
-    [data-testid="stHorizontalBlock"]
-        > [data-testid="stColumn"]:has(.gxp-remind-ot):not(:has(.gxp-alert-gov-marker)):hover
-        [data-testid="stButton"] button {
-        height:     26px  !important;
-        font-size:  9px   !important;
-        color:      rgba(255,255,255,0.90) !important;
-        background: #0284c7 !important;
-        box-shadow: 0 0 0 3px rgba(2,132,199,0.25),
-                    0 0 16px 5px rgba(2,132,199,0.45) !important;
-    }
-    /* Card lift on column hover */
-    [data-testid="stHorizontalBlock"]
-        > [data-testid="stColumn"]:has(.gxp-remind-leave):not(:has(.gxp-alert-gov-marker)):hover
+    /* Card lift on reminder container hover */
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.gxp-remind-section):hover
         .gxp-remind-leave,
-    [data-testid="stHorizontalBlock"]
-        > [data-testid="stColumn"]:has(.gxp-remind-ot):not(:has(.gxp-alert-gov-marker)):hover
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.gxp-remind-section):hover
         .gxp-remind-ot {
         box-shadow: 0 8px 24px rgba(0,0,0,0.10) !important;
         transform:  translateY(-4px) !important;
     }
 
-    /* ── Alert gov-reports pill — same pattern as reminder pills ── */
-    /* Base: collapsed, tinted red background at rest */
-    [data-testid="stColumn"]:has(.gxp-alert-gov-marker):not(:has(.gxp-remind-leave)):not(:has(.gxp-remind-ot))
-        [data-testid="stButton"] button {
-        height:        10px              !important;
-        min-height:    0                 !important;
-        padding:       0 8px            !important;
-        font-size:     0                 !important;
-        color:         rgba(255,255,255,0) !important;
-        border:        none              !important;
-        border-radius: 99px             !important;
-        background:    rgba(225,29,72,0.15) !important;
-        box-shadow:    none              !important;
-        cursor:        pointer           !important;
-        overflow:      hidden            !important;
-        letter-spacing: 0.3px           !important;
-        font-weight:   600               !important;
-        transition:    background 0.2s, box-shadow 0.2s, height 0.18s, color 0.15s !important;
-    }
-    /* Hover: red glow — fires when any part of the alerts column is hovered */
-    [data-testid="stColumn"]:has(.gxp-alert-gov-marker):not(:has(.gxp-remind-leave)):not(:has(.gxp-remind-ot)):hover
-        [data-testid="stButton"] button {
-        height:     26px  !important;
-        font-size:  9px   !important;
-        color:      rgba(255,255,255,0.90) !important;
-        background: #e11d48 !important;
-        box-shadow: 0 0 0 3px rgba(225,29,72,0.25),
-                    0 0 16px 5px rgba(225,29,72,0.45) !important;
+    /* ── Alert hidden buttons — fully invisible, used only as JS click targets ── */
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.gxp-alert-section)
+        [data-testid="stButton"] {
+        height:     0 !important;
+        min-height: 0 !important;
+        overflow:   hidden !important;
+        margin:     0 !important;
+        padding:    0 !important;
+        opacity:    0 !important;
+        pointer-events: none !important;
     }
 
     /* ── Stat card action button — slim glowing pill with label ───────────── */
@@ -1101,6 +1127,114 @@ def inject_css():
         .gxp-stat-card {
         box-shadow: 0 12px 32px rgba(0,0,0,0.13) !important;
         transform:  translateY(-7px) !important;
+    }
+
+    /* ── Bento hero row — align columns at top ───────────────────────── */
+    [data-testid="stHorizontalBlock"]:has(.gxp-bento-hero-card) {
+        align-items: flex-start !important;
+    }
+
+    /* ── Bento clickable cards ──────────────────────────────────────── */
+    /* Hide the pill button */
+    [data-testid="stHorizontalBlock"]:has(.gxp-bento-clickable)
+        > [data-testid="stColumn"]:has(.gxp-bento-clickable)
+        [data-testid="stButton"] {
+        height: 0 !important; overflow: hidden !important;
+        margin: 0 !important; padding: 0 !important;
+    }
+    /* Cursor + hover lift + tactile press on card */
+    .gxp-bento-clickable {
+        cursor: pointer !important;
+        position: relative !important;
+        overflow: hidden !important;
+        transition: box-shadow 0.18s ease,
+                    transform 0.18s cubic-bezier(.34,1.56,.64,1) !important;
+    }
+    .gxp-bento-clickable:hover {
+        box-shadow: 0 8px 28px rgba(0,0,0,0.12) !important;
+        transform:  translateY(-4px) !important;
+    }
+    .gxp-bento-clickable:active {
+        transform: scale(0.96) !important;
+        transition-duration: 0.08s !important;
+    }
+
+    /* ── Quick Action pill buttons ─────────────────────────────────────── */
+    [data-testid="stHorizontalBlock"]:has(.gxp-qa-card)
+        [data-testid="stColumn"]
+        [data-testid="stButton"] button {
+        height:        10px  !important;
+        min-height:    0     !important;
+        padding:       0 8px !important;
+        font-size:     0     !important;
+        color:         rgba(255,255,255,0) !important;
+        border:        none  !important;
+        border-radius: 99px  !important;
+        background:    var(--gxp-border) !important;
+        box-shadow:    none  !important;
+        cursor:        pointer !important;
+        margin-top:    4px   !important;
+        overflow:      hidden !important;
+        letter-spacing: 0.3px !important;
+        font-weight:   600   !important;
+        transition:    background  0.2s ease,
+                       box-shadow  0.2s ease,
+                       height      0.18s ease,
+                       color       0.15s ease !important;
+    }
+    /* QA col 1: indigo (Add Employee) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-qa-card)
+        [data-testid="stColumn"]:nth-child(1):hover
+        [data-testid="stButton"] button {
+        height:26px !important; font-size:9px !important;
+        color:rgba(255,255,255,.88) !important;
+        background:#4f46e5 !important;
+        box-shadow:0 0 0 3px rgba(79,70,229,.22), 0 0 14px 4px rgba(79,70,229,.40) !important;
+    }
+    /* QA col 2: blue (Run Payroll) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-qa-card)
+        [data-testid="stColumn"]:nth-child(2):hover
+        [data-testid="stButton"] button {
+        height:26px !important; font-size:9px !important;
+        color:rgba(255,255,255,.88) !important;
+        background:#005bc1 !important;
+        box-shadow:0 0 0 3px rgba(0,91,193,.22), 0 0 14px 4px rgba(0,91,193,.40) !important;
+    }
+    /* QA col 3: teal (Attendance) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-qa-card)
+        [data-testid="stColumn"]:nth-child(3):hover
+        [data-testid="stButton"] button {
+        height:26px !important; font-size:9px !important;
+        color:rgba(255,255,255,.88) !important;
+        background:#0d9488 !important;
+        box-shadow:0 0 0 3px rgba(13,148,136,.22), 0 0 14px 4px rgba(13,148,136,.40) !important;
+    }
+    /* QA col 4: amber (Gov. Reports) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-qa-card)
+        [data-testid="stColumn"]:nth-child(4):hover
+        [data-testid="stButton"] button {
+        height:26px !important; font-size:9px !important;
+        color:rgba(0,0,0,.75) !important;
+        background:#f59e0b !important;
+        box-shadow:0 0 0 3px rgba(245,158,11,.22), 0 0 14px 4px rgba(245,158,11,.40) !important;
+    }
+    /* QA col 5: rose (Calendar) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-qa-card)
+        [data-testid="stColumn"]:nth-child(5):hover
+        [data-testid="stButton"] button {
+        height:26px !important; font-size:9px !important;
+        color:rgba(255,255,255,.88) !important;
+        background:#e11d48 !important;
+        box-shadow:0 0 0 3px rgba(225,29,72,.22), 0 0 14px 4px rgba(225,29,72,.40) !important;
+    }
+    /* QA col 6: slate (Settings) */
+    [data-testid="stHorizontalBlock"]:has(.gxp-qa-card)
+        [data-testid="stColumn"]:nth-child(6):hover
+        [data-testid="stButton"] button {
+        height:26px !important; font-size:9px !important;
+        color:rgba(255,255,255,.88) !important;
+        background:#475569 !important;
+        box-shadow:0 0 0 3px rgba(71,85,105,.22), 0 0 14px 4px rgba(71,85,105,.40) !important;
     }
     .gxp-stat-icon {
         width: 38px; height: 38px;
@@ -1474,6 +1608,31 @@ def inject_css():
             filter: brightness(0.96) !important;
         }}
 
+        /* ── Hidden JS-only trigger buttons: no visual effects at all ── */
+        .st-key-remind_approvals_pill .stButton > button,
+        .st-key-alert_nav_gov .stButton > button,
+        .st-key-alert_nav_payroll .stButton > button {{
+            transform: none !important;
+            box-shadow: none !important;
+            filter: none !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            overflow: hidden !important;
+        }}
+        .st-key-remind_approvals_pill,
+        .st-key-alert_nav_gov,
+        .st-key-alert_nav_payroll {{
+            height: 0 !important;
+            overflow: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
+
         /* ── Ripple span ── */
         @keyframes gxp-ripple {{
             0%   {{ transform: scale(0);   opacity: 0.38; }}
@@ -1540,7 +1699,7 @@ def inject_css():
         st.markdown(
             f"""<style>
             /* ── Dark theme: ensure MDI icons inherit parent color ── */
-            i.mdi {{ color: inherit; }}
+            .mdi {{ color: inherit; }}
 
             /* ── Caption / small helper text ── */
             [data-testid="stCaptionContainer"] p,
@@ -1551,7 +1710,7 @@ def inject_css():
             .stExpander summary p,
             .stExpander summary span,
             [data-testid="stExpander"] summary p {{ color: {text} !important; }}
-            [data-testid="stExpanderToggleIcon"] svg {{ color: {text2} !important; }}
+            [data-testid="stExpanderToggleIcon"] {{ display: none !important; }}
 
             /* ── Select / multiselect dropdown items ── */
             [data-baseweb="menu"] li,
@@ -1630,12 +1789,9 @@ def inject_css():
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont,
                          'Segoe UI', sans-serif !important;
         }}
-        /* Restore Material Symbols for icon spans inside buttons */
-        [data-testid="stButton"] button span[class*="material"],
-        [data-testid="stButton"] button span[data-testid*="Icon"],
-        .material-symbols-outlined {{
-            font-family: 'Material Symbols Outlined' !important;
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        /* MDI icons inside buttons */
+        [data-testid="stButton"] button .mdi {{
+            line-height: 1;
         }}
 
         /* ── Pill-shaped Primary Buttons ── */
@@ -1770,11 +1926,29 @@ def inject_css():
             margin-bottom: 0.75rem !important;
         }}
         .stExpander summary {{
+            display: flex !important;
+            align-items: center !important;
             padding: 1rem 1.5rem !important;
             background: {surface} !important;
             border-radius: 1rem !important;
             font-size: 0.9375rem !important;
             font-weight: 600 !important;
+        }}
+        /* MDI funnel / filter icon (mask-image = theme-aware, no font needed) */
+        .stExpander summary::before {{
+            content: '' !important;
+            display: inline-block !important;
+            width: 18px !important;
+            height: 18px !important;
+            margin-right: 8px !important;
+            flex-shrink: 0 !important;
+            background-color: {text2} !important;
+            -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14 12v7.88c.04.3-.06.62-.29.83-.39.39-1.02.39-1.41 0l-2.01-2.01c-.23-.23-.33-.54-.29-.83V12h-.03L4.21 4.62c-.34-.43-.26-1.06.17-1.4C4.57 3.08 4.78 3 5 3h14c.22 0 .43.08.62.22.43.34.51.97.17 1.4L14.03 12H14z'/%3E%3C/svg%3E") !important;
+            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M14 12v7.88c.04.3-.06.62-.29.83-.39.39-1.02.39-1.41 0l-2.01-2.01c-.23-.23-.33-.54-.29-.83V12h-.03L4.21 4.62c-.34-.43-.26-1.06.17-1.4C4.57 3.08 4.78 3 5 3h14c.22 0 .43.08.62.22.43.34.51.97.17 1.4L14.03 12H14z'/%3E%3C/svg%3E") !important;
+            -webkit-mask-size: contain !important;
+            mask-size: contain !important;
+            -webkit-mask-repeat: no-repeat !important;
+            mask-repeat: no-repeat !important;
         }}
         .stExpander details[open] > summary {{
             border-radius: 1rem 1rem 0 0 !important;
@@ -1783,6 +1957,10 @@ def inject_css():
         .stExpander details > div[data-testid="stExpanderDetails"] {{
             background: {surface} !important;
             padding: 1.25rem 1.5rem 1.5rem !important;
+        }}
+        /* ── Hide broken Streamlit toggle icon — our ::before replaces it ── */
+        [data-testid="stExpanderToggleIcon"] {{
+            display: none !important;
         }}
 
         /* ── Metric cards ── */
@@ -1877,7 +2055,7 @@ def render_theme_picker():
             f'border:1px solid {swatch_border};"></span>'
             for c in theme["swatches"]
         )
-        check = '<i class="mdi mdi-check" style="color:'+accent+';margin-right:2px;"></i> ' if is_active else ""
+        check = '<span class="mdi mdi-check" style="color:'+accent+';margin-right:2px;font-size:18px;"></span> ' if is_active else ""
 
         st.markdown(
             f"""<div style="border:{border};border-radius:8px;padding:8px 10px;
@@ -1900,7 +2078,7 @@ def render_theme_picker():
         st.markdown(
             "<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
             "letter-spacing:0.8px;color:#94a3b8;margin-bottom:6px;'>"
-            "<i class='mdi mdi-weather-night'></i>&nbsp;Dark</div>",
+            "<span class='mdi mdi-weather-night' style='font-size:18px;'></span>&nbsp;Dark</div>",
             unsafe_allow_html=True,
         )
         for key, theme in dark_themes.items():
@@ -1909,7 +2087,7 @@ def render_theme_picker():
         st.markdown(
             "<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
             "letter-spacing:0.8px;color:#94a3b8;margin:10px 0 6px;'>"
-            "<i class='mdi mdi-weather-sunny'></i>&nbsp;Light</div>",
+            "<span class='mdi mdi-white-balance-sunny' style='font-size:18px;'></span>&nbsp;Light</div>",
             unsafe_allow_html=True,
         )
         for key, theme in light_themes.items():

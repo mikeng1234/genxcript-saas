@@ -421,6 +421,7 @@ def _render_employee_payroll(
     is_finalized: bool,
     entries: dict,
     period: dict | None = None,
+    daily_rate_divisor: int = 26,
 ):
     """Render earnings input and computation for one employee."""
     saved = entries.get(emp["id"], {})
@@ -725,6 +726,7 @@ def _render_employee_payroll(
                 entries[emp["id"]] = saved_entry
                 log_action("updated", "payroll_entries", period_id, f"Entry for {name}", {"net_pay": entry_data["net_pay"]})
                 st.success(f"Computed: {name} — Net Pay: {_fmt(entry_data['net_pay'])}")
+                st.rerun()
             except Exception as e:
                 st.error(f"Error saving: {e}")
 
@@ -981,6 +983,9 @@ def _render_payroll_processing():
 
         st.plotly_chart(fig, width="stretch")
 
+    company = _load_company()
+    daily_rate_divisor = int(company.get("daily_rate_divisor") or 26)
+
     employees = _load_employees()
     dept_map  = _load_departments_map()
     for emp in employees:
@@ -1103,7 +1108,7 @@ def _render_payroll_processing():
     )
 
     for emp in employees:
-        _render_employee_payroll(emp, period["id"], is_locked, entries, period)
+        _render_employee_payroll(emp, period["id"], is_locked, entries, period, daily_rate_divisor)
 
     # --- Period totals ---
     _render_period_totals(entries, employees)
@@ -1273,7 +1278,7 @@ def _render_payslips_tab():
             "Generate Selected Payslips",
             type="primary",
             use_container_width=True,
-            icon=":material/download:",
+            icon="⬇️",
             key="ps_gen_selected",
         )
     with col_gen_all:
@@ -1285,7 +1290,7 @@ def _render_payslips_tab():
                 file_name=f"payslips_{period['period_start']}_to_{period['period_end']}.pdf",
                 mime="application/pdf",
                 use_container_width=True,
-                icon=":material/picture_as_pdf:",
+                icon="📄",
                 key="ps_dl_all",
             )
 
@@ -1353,7 +1358,7 @@ def _render_payslips_tab():
                 mime="application/pdf",
                 key=f"ps_dl_{emp['id']}",
                 use_container_width=True,
-                icon=":material/download:",
+                icon="⬇️",
             )
             st.markdown("<hr style='border:none;border-top:1px solid var(--gxp-border);margin:4px 0;'>", unsafe_allow_html=True)
 

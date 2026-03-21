@@ -133,7 +133,7 @@ def _render_appearance():
                         f'border:1px solid {swatch_bdr};vertical-align:middle;"></span>'
                         for c in theme["swatches"]
                     )
-                    check_icon = '<i class="mdi mdi-check"></i> ' if is_active else ""
+                    check_icon = '<span class="mdi mdi-check" style="font-size:18px;"></span>' if is_active else ""
 
                     # Single-line HTML — avoids Streamlit markdown parser choking on newlines
                     card_html = (
@@ -167,7 +167,7 @@ def _render_appearance():
         st.markdown(
             "<div style='font-size:11px;font-weight:700;text-transform:uppercase;"
             "letter-spacing:0.8px;color:var(--gxp-text2);margin:0 0 8px;'>"
-            '<i class="mdi mdi-weather-sunny"></i> Light Themes</div>',
+            '<span class="mdi mdi-white-balance-sunny" style="font-size:18px;"></span> Light Themes</div>',
             unsafe_allow_html=True,
         )
         _draw_group(light_themes)
@@ -176,7 +176,7 @@ def _render_appearance():
         st.markdown(
             "<div style='font-size:11px;font-weight:700;text-transform:uppercase;"
             "letter-spacing:0.8px;color:var(--gxp-text2);margin:0 0 8px;'>"
-            '<i class="mdi mdi-weather-night"></i> Dark Themes</div>',
+            '<span class="mdi mdi-weather-night" style="font-size:18px;"></span> Dark Themes</div>',
             unsafe_allow_html=True,
         )
         _draw_group(dark_themes)
@@ -256,7 +256,7 @@ def _render_display():
             "Apply Density",
             key="pref_apply_density",
             type="primary",
-            icon=":material/check:",
+            icon="✅",
         ):
             if new_density != cur_density:
                 _set_pref("gxp_table_density", new_density)
@@ -320,11 +320,11 @@ def _render_notifications():
 
     st.markdown("#### Planned options")
     coming_soon = [
-        ('<i class="mdi mdi-email-outline"></i> Payroll deadline reminders', "Get an email X days before each pay date"),
-        ('<i class="mdi mdi-bank-outline"></i> Government remittance alerts', "SSS, PhilHealth, Pag-IBIG, BIR due-date notices"),
-        ('<i class="mdi mdi-clipboard-text-outline"></i> Leave request notifications', "Email when an employee submits a leave request"),
-        ('<i class="mdi mdi-cash"></i> Payslip availability', "Notify employees when their payslip is ready"),
-        ('<i class="mdi mdi-alert"></i> Compliance warnings', "Alert when statutory contributions are out of date"),
+        ('<span class="mdi mdi-email" style="font-size:18px;"></span> Payroll deadline reminders', "Get an email X days before each pay date"),
+        ('<span class="mdi mdi-bank" style="font-size:18px;"></span> Government remittance alerts', "SSS, PhilHealth, Pag-IBIG, BIR due-date notices"),
+        ('<span class="mdi mdi-clipboard-text" style="font-size:18px;"></span> Leave request notifications', "Email when an employee submits a leave request"),
+        ('<span class="mdi mdi-cash-multiple" style="font-size:18px;"></span> Payslip availability', "Notify employees when their payslip is ready"),
+        ('<span class="mdi mdi-alert" style="font-size:18px;"></span> Compliance warnings', "Alert when statutory contributions are out of date"),
     ]
     for title, desc in coming_soon:
         st.markdown(

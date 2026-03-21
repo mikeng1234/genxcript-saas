@@ -140,7 +140,7 @@ def render() -> None:
             st.info(
                 f"No approved overtime requests found for **{selected_year}**. "
                 "Patterns will appear here once OT requests are approved.",
-                icon=":material/info:"
+                icon="ℹ️"
             )
         else:
             df = pd.DataFrame(ot_data)
@@ -303,7 +303,7 @@ def render() -> None:
         late_rows = [r for r in logs_raw if (r.get("late_minutes") or 0) > 0]
 
         if not late_rows:
-            st.info(f"No late records found for **{selected_year}**.", icon=":material/info:")
+            st.info(f"No late records found for **{selected_year}**.", icon="ℹ️")
         else:
             df_late = pd.DataFrame(late_rows)
             df_late["late_minutes"] = pd.to_numeric(df_late["late_minutes"], errors="coerce").fillna(0)
@@ -351,7 +351,7 @@ def render() -> None:
                     )
                 with col_btn:
                     if st.button(
-                        "", key=f"late_cal_{eid}", icon=":material/calendar_month:",
+                        "", key=f"late_cal_{eid}", icon="📅",
                         help="Show 3-month late calendar",
                     ):
                         toggle_key = f"show_late_cal_{eid}"
@@ -409,7 +409,7 @@ def render() -> None:
         ut_rows = [r for r in logs_raw3 if (r.get("undertime_minutes") or 0) > 0]
 
         if not ut_rows:
-            st.info(f"No undertime records found for **{selected_year}**.", icon=":material/info:")
+            st.info(f"No undertime records found for **{selected_year}**.", icon="ℹ️")
         else:
             df_ut = pd.DataFrame(ut_rows)
             df_ut["undertime_minutes"] = pd.to_numeric(df_ut["undertime_minutes"], errors="coerce").fillna(0)
@@ -455,7 +455,7 @@ def render() -> None:
                     )
                 with col_btn:
                     if st.button(
-                        "", key=f"ut_cal_{eid}", icon=":material/calendar_month:",
+                        "", key=f"ut_cal_{eid}", icon="📅",
                         help="Show 3-month undertime calendar",
                     ):
                         toggle_key = f"show_ut_cal_{eid}"

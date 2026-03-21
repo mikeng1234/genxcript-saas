@@ -495,7 +495,7 @@ def render():
 
     with col_prev:
         st.write("")
-        if st.button("", width="stretch", icon=":material/chevron_left:", help="Previous month"):
+        if st.button("", width="stretch", icon="◀️", help="Previous month"):
             m, y = st.session_state.cal_month, st.session_state.cal_year
             if m == 1:
                 st.session_state.cal_month, st.session_state.cal_year = 12, y - 1
@@ -521,7 +521,7 @@ def render():
 
     with col_next:
         st.write("")
-        if st.button("", width="stretch", icon=":material/chevron_right:", help="Next month"):
+        if st.button("", width="stretch", icon="▶️", help="Next month"):
             m, y = st.session_state.cal_month, st.session_state.cal_year
             if m == 12:
                 st.session_state.cal_month, st.session_state.cal_year = 1, y + 1
@@ -558,16 +558,16 @@ def render():
     st.divider()
 
     # ── Holiday reference table ───────────────────────────────
-    with st.expander(f"Philippine Holidays — {year}", expanded=False):
-        # Allow switching year for the table (independent of the calendar month)
-        col_yr, _ = st.columns([1, 3])
-        with col_yr:
-            table_year = st.selectbox(
-                "Year",
-                options=[year - 1, year, year + 1],
-                index=1,
-                key="holiday_table_year",
-                label_visibility="collapsed",
-            )
-        table_holidays = _load_holidays(table_year) if table_year != year else holidays
-        _render_holiday_table(table_holidays)
+    st.markdown(f"#### Philippine Holidays — {year}")
+    # Allow switching year for the table (independent of the calendar month)
+    col_yr, _ = st.columns([1, 3])
+    with col_yr:
+        table_year = st.selectbox(
+            "Year",
+            options=[year - 1, year, year + 1],
+            index=1,
+            key="holiday_table_year",
+            label_visibility="collapsed",
+        )
+    table_holidays = _load_holidays(table_year) if table_year != year else holidays
+    _render_holiday_table(table_holidays)

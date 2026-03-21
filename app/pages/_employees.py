@@ -1078,12 +1078,12 @@ def _render_approvals_tab():
     total_pending = len(pending_lr) + len(pending_ot)
 
     if total_pending == 0:
-        st.success("All caught up — no pending leave or OT requests.", icon=":material/check_circle:")
+        st.success("All caught up — no pending leave or OT requests.", icon="✅")
     else:
         st.info(
             f"**{total_pending} pending request{'s' if total_pending != 1 else ''}** — "
             f"{len(pending_lr)} leave · {len(pending_ot)} overtime",
-            icon=":material/assignment:",
+            icon="📋",
         )
 
     lr_col, ot_col = st.columns(2)
@@ -1102,9 +1102,9 @@ def _render_approvals_tab():
                 if resolved_lr:
                     st.divider()
             if resolved_lr:
-                with st.expander(f"History ({len(resolved_lr)} resolved)", expanded=False):
-                    for req in resolved_lr[:50]:
-                        _render_leave_request_row(req)
+                st.caption(f"History ({len(resolved_lr)} resolved)")
+                for req in resolved_lr[:50]:
+                    _render_leave_request_row(req)
             if not pending_lr:
                 st.caption("No pending leave requests.")
 
@@ -1122,9 +1122,9 @@ def _render_approvals_tab():
                 if resolved_ot:
                     st.divider()
             if resolved_ot:
-                with st.expander(f"History ({len(resolved_ot)} resolved)", expanded=False):
-                    for req in resolved_ot[:50]:
-                        _render_ot_request_row(req)
+                st.caption(f"History ({len(resolved_ot)} resolved)")
+                for req in resolved_ot[:50]:
+                    _render_ot_request_row(req)
             if not pending_ot:
                 st.caption("No pending OT requests.")
 
@@ -1187,14 +1187,14 @@ def _render_leave_balances_tab():
     if _dept_names_structured:
         all_depts = _dept_names_structured
 
-    lb_s, lb_p, lb_d = st.columns([2, 1.5, 1.5])
-    with lb_s:
-        lb_search = st.text_input("Search", placeholder="Name or employee no…",
-                                  label_visibility="collapsed", key="lb_search")
-    with lb_p:
-        lb_sel_pos  = st.multiselect("Position",   all_positions, key="lb_f_pos",  placeholder="All positions")
-    with lb_d:
-        lb_sel_dept = st.multiselect("Department", all_depts,     key="lb_f_dept", placeholder="All departments")
+    # ── Collapsible filter bar ─────────────────────────────────────────────────
+    with st.expander("Filters", expanded=False):
+        fcol, _ = st.columns([2, 5])
+        with fcol:
+            lb_sel_dept = st.multiselect("Department", all_depts,     key="lb_f_dept", placeholder="All departments")
+            lb_sel_pos  = st.multiselect("Position",   all_positions, key="lb_f_pos",  placeholder="All positions")
+            lb_search   = st.text_input("Employee",    placeholder="Name or employee no…",
+                                        label_visibility="visible",   key="lb_search")
 
     # ── Build rows ─────────────────────────────────────────────────────────────
     rows = []
@@ -1406,7 +1406,7 @@ def _render_special_leaves_tab():
     st.divider()
 
     if not all_slr:
-        st.info("No special leave requests have been filed yet.", icon=":material/info:")
+        st.info("No special leave requests have been filed yet.", icon="ℹ️")
         return
 
     # ── Filter row ────────────────────────────────────────────────────────────
@@ -1451,12 +1451,12 @@ def _render_special_leaves_tab():
             st.divider()
 
     if f_resolved:
-        with st.expander(f"History — {len(f_resolved)} resolved", expanded=(not f_pending)):
-            for req in f_resolved[:80]:
-                _render_special_leave_row(req)
+        st.caption(f"History — {len(f_resolved)} resolved")
+        for req in f_resolved[:80]:
+            _render_special_leave_row(req)
 
     if not f_pending:
-        st.success("All special leave requests are resolved.", icon=":material/check_circle:")
+        st.success("All special leave requests are resolved.", icon="✅")
 
 
 # ============================================================
@@ -1978,17 +1978,15 @@ def _render_employees_tab(show_salary_toggle: bool = True):
     if st.session_state.get("editing_id"):
         _edit_employee_dialog(st.session_state["editing_id"])
 
-    # Row 1: add button (right-aligned) + flags
+    # Row 1: add button (right-aligned)
     _, col_add = st.columns([5, 1])
     with col_add:
         add_clicked = st.button("+ Add Employee", type="primary", width="stretch")
 
-    # Row 2: flags
-    chk1, chk2, _ = st.columns([1.5, 1.5, 4])
-    with chk1:
-        show_inactive = st.checkbox("Show inactive", key="emp_show_inactive")
-    with chk2:
-        show_incomplete_only = st.checkbox("Incomplete IDs only", key="emp_incomplete")
+    # Read filter flags from session state so employee load uses last-selected values
+    # (checkboxes live inside the expander below; session state keeps them across reruns)
+    show_inactive        = st.session_state.get("emp_show_inactive", False)
+    show_incomplete_only = st.session_state.get("emp_incomplete",    False)
 
     # --- Add Employee Form ---
     if add_clicked:
@@ -2032,17 +2030,18 @@ def _render_employees_tab(show_salary_toggle: bool = True):
     _dept_names_structured = _load_department_names()
     if _dept_names_structured:
         all_depts = _dept_names_structured
-    f1, f2 = st.columns(2)
-    with f1:
-        sel_pos  = st.multiselect("Position", all_positions,  key="emp_f_pos",  placeholder="All positions")
-    with f2:
-        sel_dept = st.multiselect("Department", all_depts, key="emp_f_dept", placeholder="All departments")
-
-    # Search bar — below the dropdowns
-    search = st.text_input(
-        "Search", placeholder="Name or employee number…",
-        label_visibility="collapsed", key="emp_search",
-    )
+    # ── Collapsible filter bar ─────────────────────────────────
+    with st.expander("Filters", expanded=False):
+        fcol, chkcol = st.columns([3, 2])
+        with fcol:
+            sel_dept = st.multiselect("Department", all_depts,     key="emp_f_dept", placeholder="All departments")
+            sel_pos  = st.multiselect("Position",   all_positions, key="emp_f_pos",  placeholder="All positions")
+            search   = st.text_input("Employee",    placeholder="Name or employee number…",
+                                     label_visibility="visible",   key="emp_search")
+        with chkcol:
+            st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)  # align with inputs
+            st.checkbox("Show inactive",      key="emp_show_inactive")
+            st.checkbox("Incomplete IDs only", key="emp_incomplete")
 
     # --- Onboarding summary banner ---
     if employees:
@@ -2094,7 +2093,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
             if st.button(
                 "Show Salary" if not salary_visible else "Hide Salary",
                 key="toggle_salary",
-                icon=":material/visibility:" if not salary_visible else ":material/visibility_off:",
+                icon="👁️" if not salary_visible else "🙈",
             ):
                 st.session_state.emp_salary_visible = not salary_visible
     else:
@@ -2210,7 +2209,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                 b1, b2, b3, b4, b5 = st.columns(5)
                 with b1:
                     if st.button("", key=f"edit_{emp['id']}", width="stretch",
-                                 type="primary", icon=":material/edit:", help="Edit employee"):
+                                 type="primary", icon="✏️", help="Edit employee"):
                         st.session_state.editing_id = emp["id"]
                         st.rerun()
                 with b2:
@@ -2222,18 +2221,18 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                         )
                     elif not emp.get("user_id"):
                         if st.button("", key=f"invite_{emp['id']}", width="stretch",
-                                     icon=":material/contact_mail:",
+                                     icon="📧",
                                      help=f"Send portal invite to {emp['email']}"):
                             st.session_state[f"invite_confirm_{emp['id']}"] = True
                     else:
                         if st.button("", key=f"invite_{emp['id']}", width="stretch",
-                                     icon=":material/sync:",
+                                     icon="🔄",
                                      help=f"Resend portal access to {emp['email']}"):
                             st.session_state[f"invite_confirm_{emp['id']}"] = True
                 with b3:
                     if emp.get("email") and emp.get("user_id"):
                         if st.button("", key=f"resetpwd_{emp['id']}", width="stretch",
-                                     icon=":material/lock_reset:",
+                                     icon="🔑",
                                      help=f"Send password reset to {emp['email']}"):
                             from app.auth import send_password_reset
                             ok, err = send_password_reset(emp["email"])
@@ -2251,17 +2250,17 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                 with b4:
                     if emp.get("is_active", True):
                         st.button("", key=f"deact_{emp['id']}", width="stretch",
-                                  icon=":material/radio_button_checked:",
+                                  icon="🟢",
                                   help="Deactivate this employee",
                                   on_click=_update_employee, args=(emp["id"], {"is_active": False}))
                     else:
                         st.button("", key=f"react_{emp['id']}", width="stretch",
-                                  icon=":material/radio_button_unchecked:",
+                                  icon="⚪",
                                   help="Reactivate this employee",
                                   on_click=_update_employee, args=(emp["id"], {"is_active": True}))
                 with b5:
                     if st.button("", key=f"print201_{emp['id']}", width="stretch",
-                                 icon=":material/print:", help="Print Employee 201 File"):
+                                 icon="🖨️", help="Print Employee 201 File"):
                         st.session_state["print201_id"] = emp["id"]
 
                 # ── Invite confirmation ────────────────────────────────────
@@ -2456,12 +2455,34 @@ def render():
             unsafe_allow_html=True,
         )
 
+    # ── Programmatic tab redirect (e.g. from Dashboard "Approvals" swipe) ──
+    _tab_redirect = st.session_state.pop("_emp_tab_redirect", None)
+
     tab_emp, tab_approvals, tab_balances, tab_special = st.tabs([
         "Employees",
         "Leave & OT Approvals",
         "Leave Balances",
         "Special Leaves",
     ])
+
+    if _tab_redirect:
+        import streamlit.components.v1 as _stc
+        _stc.html(f"""<script>
+        (function(){{
+          var pd=window.parent.document;
+          function clickTab(){{
+            var tabs=pd.querySelectorAll('button[data-baseweb="tab"]');
+            for(var i=0;i<tabs.length;i++){{
+              if(tabs[i].textContent.trim().indexOf('{_tab_redirect}')!==-1){{
+                tabs[i].click();
+                return;
+              }}
+            }}
+            setTimeout(clickTab,50);
+          }}
+          clickTab();
+        }})();
+        </script>""", height=0)
 
     with tab_emp:
         _render_employees_tab()

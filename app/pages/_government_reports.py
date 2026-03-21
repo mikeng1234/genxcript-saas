@@ -254,7 +254,7 @@ REPORTS = {
     "sss": {
         "title": "SSS R3 / R5",
         "subtitle": "Monthly Collection List",
-        "icon": '<i class="mdi mdi-bank-outline"></i>',
+        "icon": '<span class="mdi mdi-bank" style="font-size:18px;"></span>',
         "description": "Employee/employer SSS contributions with Monthly Salary Credit breakdown.",
         "generator": generate_sss_r3,
         "filename_prefix": "SSS_R3",
@@ -262,7 +262,7 @@ REPORTS = {
     "philhealth": {
         "title": "PhilHealth RF-1",
         "subtitle": "Monthly Remittance Report",
-        "icon": '<i class="mdi mdi-hospital-building"></i>',
+        "icon": '<span class="mdi mdi-hospital-box" style="font-size:18px;"></span>',
         "description": "Employee/employer PhilHealth premium contributions.",
         "generator": generate_philhealth_rf1,
         "filename_prefix": "PhilHealth_RF1",
@@ -270,7 +270,7 @@ REPORTS = {
     "pagibig": {
         "title": "Pag-IBIG MCRF",
         "subtitle": "Monthly Collection Remittance Form",
-        "icon": '<i class="mdi mdi-home-outline"></i>',
+        "icon": '<span class="mdi mdi-home" style="font-size:18px;"></span>',
         "description": "Employee/employer Pag-IBIG Fund contributions.",
         "generator": generate_pagibig_mcrf,
         "filename_prefix": "PagIBIG_MCRF",
@@ -278,7 +278,7 @@ REPORTS = {
     "bir": {
         "title": "BIR 1601-C",
         "subtitle": "Monthly Withholding Tax Remittance",
-        "icon": '<i class="mdi mdi-clipboard-text-outline"></i>',
+        "icon": '<span class="mdi mdi-clipboard-text" style="font-size:18px;"></span>',
         "description": "Withholding tax on compensation — gross, non-taxable, taxable income, and tax withheld.",
         "generator": generate_bir_1601c,
         "filename_prefix": "BIR_1601C",
@@ -823,14 +823,14 @@ def render(show_title: bool = True):
                         f'<span style="font-weight:700;font-size:14px;color:#1f2937">{agency}</span>'
                         f'<span style="font-size:11px;color:#6b7280">({form})</span>'
                         f'<span style="background:#dcfce7;color:#16a34a;font-size:10px;'
-                        f'font-weight:700;padding:2px 8px;border-radius:10px"><i class="mdi mdi-check"></i> Remitted</span>'
+                        f'font-weight:700;padding:2px 8px;border-radius:10px"><span class="mdi mdi-check" style="font-size:18px;"></span> Remitted</span>'
                         f'</div>'
                         f'<div style="display:flex;gap:24px;font-size:12px;color:#374151">'
-                        f'<span><i class="mdi mdi-calendar-month-outline"></i> <b>Date:</b> {date_display}</span>'
-                        f'<span><i class="mdi mdi-tag-outline"></i> <b>Ref No:</b> {ref_display}</span>'
-                        f'<span><i class="mdi mdi-cash"></i> <b>Amount:</b> {amt_display}</span>'
+                        f'<span><span class="mdi mdi-calendar-today" style="font-size:18px;"></span> <b>Date:</b> {date_display}</span>'
+                        f'<span><span class="mdi mdi-tag" style="font-size:18px;"></span> <b>Ref No:</b> {ref_display}</span>'
+                        f'<span><span class="mdi mdi-cash-multiple" style="font-size:18px;"></span> <b>Amount:</b> {amt_display}</span>'
                         f'</div>'
-                        + (f'<div style="font-size:11px;color:#6b7280;margin-top:4px"><i class="mdi mdi-note-text-outline"></i> {notes_display}</div>' if notes_display else '')
+                        + (f'<div style="font-size:11px;color:#6b7280;margin-top:4px"><span class="mdi mdi-note-text" style="font-size:18px;"></span> {notes_display}</div>' if notes_display else '')
                         + f'</div>',
                         unsafe_allow_html=True,
                     )

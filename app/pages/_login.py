@@ -115,11 +115,13 @@ footer,
     align-items: stretch !important;
 }
 
-/* ── Left column — gradient extends to fill ────────────────────── */
+/* ── Left column — gradient with rounded corners ───────────────── */
 [data-testid="stHorizontalBlock"]:has(.login-brand-panel)
   > [data-testid="stColumn"]:nth-child(1) {
-    background: linear-gradient(135deg, #005bc1 0%, #3d89ff 100%);
+    background: linear-gradient(160deg, #003d8a 0%, #005bc1 35%, #3d89ff 70%, #6aabff 100%);
     overflow: hidden;
+    border-radius: 0 2rem 2rem 0;
+    margin: 1.5rem 0;
 }
 [data-testid="stHorizontalBlock"]:has(.login-brand-panel)
   > [data-testid="stColumn"]:nth-child(1) > div {
@@ -190,10 +192,9 @@ footer,
     font-size: 0.95rem;
     margin-bottom: 1.25rem;
 }
-.login-features .material-symbols-outlined {
+.login-features .mdi {
     color: var(--login-green);
     font-size: 22px;
-    font-variation-settings: 'FILL' 1, 'wght' 400;
 }
 
 /* ── Right column — card styling on the column itself ──────────── */
@@ -370,20 +371,6 @@ _BRAND_PANEL_HTML = """
 <div class="login-brand-panel">
     <img src="app/static/genxcript_logo_dark.png" alt="GenXcript" class="login-brand-logo" />
     <p class="login-brand-subtitle">Payroll System</p>
-    <ul class="login-features">
-        <li>
-            <span class="material-symbols-outlined">check_circle</span>
-            Philippine-compliant
-        </li>
-        <li>
-            <span class="material-symbols-outlined">check_circle</span>
-            Multi-company
-        </li>
-        <li>
-            <span class="material-symbols-outlined">check_circle</span>
-            Real-time payroll
-        </li>
-    </ul>
 </div>
 """
 
@@ -479,12 +466,7 @@ def _render_signin():
         st.session_state.login_view = "forgot"
         st.rerun()
 
-    _gap(16)
-
-    # ── Footer ─────────────────────────────────────────────────────
-    st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
-    _gap(16)
-    st.markdown('<p class="login-footer-brand">GenXcript Payroll System</p>', unsafe_allow_html=True)
+    _gap(4)
 
 
 # ── Forgot-password view ──────────────────────────────────────────────────────
