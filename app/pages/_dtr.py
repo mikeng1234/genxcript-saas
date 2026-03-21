@@ -186,24 +186,22 @@ def _dtr_avatar(name: str, idx: int = 0, size: int = 34) -> str:
 
 def _status_html(status: str) -> str:
     mapping = {
-        "present":     ("check_circle", "#005320", "#89fa9b"),
-        "half_day":    ("adjust",       "#795900", "#ffdea0"),
-        "absent":      ("cancel",       "#5a6062", "#e7e8e9"),
-        "on_leave":    ("beach_access", "#004494", "#d8e2ff"),
-        "holiday":     ("celebration",  "#004494", "#d8e2ff"),
-        "rest_day":    ("bedtime",      "#424753", "#e1e3e4"),
-        "no_schedule": ("remove",       "#424753", "#e1e3e4"),
-        "late":        ("schedule",     "#795900", "#ffdea0"),
+        "present":     ("✓",  "#005320", "#89fa9b"),
+        "half_day":    ("½",  "#795900", "#ffdea0"),
+        "absent":      ("✗",  "#5a6062", "#e7e8e9"),
+        "on_leave":    ("🏖", "#004494", "#d8e2ff"),
+        "holiday":     ("🎉", "#004494", "#d8e2ff"),
+        "rest_day":    ("🛏", "#424753", "#e1e3e4"),
+        "no_schedule": ("—",  "#424753", "#e1e3e4"),
+        "late":        ("⏰", "#795900", "#ffdea0"),
     }
-    icon, color, bg = mapping.get(status, ("help", "#424753", "#e1e3e4"))
+    icon, color, bg = mapping.get(status, ("?", "#424753", "#e1e3e4"))
     label = status.replace("_", " ").title()
     return (
         f'<span style="background:{bg};color:{color};padding:3px 10px;'
         f'border-radius:9999px;font-size:11px;font-weight:700;'
         f'display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">'
-        f'<span class="material-symbols-outlined" style="font-size:13px;'
-        f'font-variation-settings:\'FILL\' 1,\'wght\' 600,\'opsz\' 20;">{icon}</span>'
-        f'{label}</span>'
+        f'{icon} {label}</span>'
     )
 
 
