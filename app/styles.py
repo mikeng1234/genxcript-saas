@@ -1145,6 +1145,46 @@ def inject_css():
         transform:  translateY(-7px) !important;
     }
 
+    /* ── Skeleton shimmer animation ────────────────────────────────── */
+    @keyframes gxp-shimmer {
+        0%   { background-position: -400px 0; }
+        100% { background-position: 400px 0; }
+    }
+    .gxp-skeleton {
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 800px 100%;
+        animation: gxp-shimmer 1.5s infinite ease-in-out;
+        border-radius: 12px;
+    }
+
+    /* ── Card entrance animation — fade-in + slide-up ─────────────── */
+    @keyframes gxp-card-in {
+        from { opacity: 0; transform: translateY(20px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .gxp-bento-hero-card,
+    .gxp-bento-clickable,
+    .gxp-count-stat,
+    .gxp-remind-swipe,
+    .gxp-qa-card {
+        animation: gxp-card-in 0.4s ease-out both;
+    }
+    /* Staggered delays per column position */
+    [data-testid="stColumn"]:nth-child(1) .gxp-bento-hero-card,
+    [data-testid="stColumn"]:nth-child(1) .gxp-bento-clickable,
+    [data-testid="stColumn"]:nth-child(1) .gxp-count-stat { animation-delay: 0s; }
+    [data-testid="stColumn"]:nth-child(2) .gxp-bento-hero-card,
+    [data-testid="stColumn"]:nth-child(2) .gxp-bento-clickable,
+    [data-testid="stColumn"]:nth-child(2) .gxp-count-stat { animation-delay: 0.08s; }
+    [data-testid="stColumn"]:nth-child(3) .gxp-bento-hero-card,
+    [data-testid="stColumn"]:nth-child(3) .gxp-bento-clickable,
+    [data-testid="stColumn"]:nth-child(3) .gxp-count-stat { animation-delay: 0.16s; }
+    [data-testid="stColumn"]:nth-child(4) .gxp-count-stat { animation-delay: 0.24s; }
+    [data-testid="stColumn"]:nth-child(5) .gxp-count-stat { animation-delay: 0.32s; }
+    [data-testid="stColumn"]:nth-child(6) .gxp-count-stat { animation-delay: 0.40s; }
+    /* Reminders + Alerts in sidebar column */
+    .gxp-remind-swipe { animation-delay: 0.12s; }
+
     /* ── Bento hero row — align columns at top ───────────────────────── */
     [data-testid="stHorizontalBlock"]:has(.gxp-bento-hero-card) {
         align-items: flex-start !important;
@@ -1649,6 +1689,17 @@ def inject_css():
             padding: 0 !important;
         }}
 
+        /* ── DTR selectable rows — hide trigger buttons visually but keep clickable ── */
+        [class*="st-key-dtr_sel_"] {{
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            overflow: hidden !important;
+        }}
+        /* DTR row styling handled by JS inline (highlight, hover lift, click) */
+
         /* ── Ripple span ── */
         @keyframes gxp-ripple {{
             0%   {{ transform: scale(0);   opacity: 0.38; }}
@@ -1852,13 +1903,17 @@ def inject_css():
         /* ── Rounded Input Fields ── */
         .stTextInput input,
         .stNumberInput input {{
-            border-radius: 9999px !important;
-            background: {t_vars.get("--gxp-surface2", "#f3f4f5")} !important;
-            border: 1.5px solid transparent !important;
-            padding: 0.65rem 1.25rem !important;
+            border-radius: 12px !important;
+            background: {surface} !important;
+            border: 1.5px solid {t_vars.get("--gxp-m3-outline-variant", "#c2c6d5")} !important;
+            padding: 0.7rem 1rem !important;
             font-size: 0.875rem !important;
             color: {text} !important;
-            transition: all 0.15s ease !important;
+            transition: all 0.18s ease !important;
+        }}
+        .stTextInput input:hover,
+        .stNumberInput input:hover {{
+            border-color: {text2} !important;
         }}
         .stTextInput input:focus,
         .stNumberInput input:focus {{
@@ -1866,24 +1921,92 @@ def inject_css():
             box-shadow: 0 0 0 3px {accent}1a !important;
             background: {surface} !important;
         }}
+        .stTextInput input::placeholder,
+        .stNumberInput input::placeholder {{
+            color: {t_vars.get("--gxp-m3-outline", "#727784")} !important;
+            opacity: 0.7 !important;
+        }}
+
+        /* ── Textarea ── */
+        .stTextArea textarea {{
+            border-radius: 12px !important;
+            background: {surface} !important;
+            border: 1.5px solid {t_vars.get("--gxp-m3-outline-variant", "#c2c6d5")} !important;
+            padding: 0.7rem 1rem !important;
+            font-size: 0.875rem !important;
+            color: {text} !important;
+            transition: all 0.18s ease !important;
+            line-height: 1.5 !important;
+        }}
+        .stTextArea textarea:hover {{
+            border-color: {text2} !important;
+        }}
+        .stTextArea textarea:focus {{
+            border-color: {accent} !important;
+            box-shadow: 0 0 0 3px {accent}1a !important;
+        }}
 
         /* ── Select / Dropdown ── */
         [data-baseweb="select"] > div {{
-            border-radius: 1rem !important;
-            background: {t_vars.get("--gxp-surface2", "#f3f4f5")} !important;
-            border: 1.5px solid transparent !important;
-            transition: all 0.15s ease !important;
+            border-radius: 12px !important;
+            background: {surface} !important;
+            border: 1.5px solid {t_vars.get("--gxp-m3-outline-variant", "#c2c6d5")} !important;
+            transition: all 0.18s ease !important;
         }}
         [data-baseweb="select"] > div:hover {{
-            border-color: {t_vars.get("--gxp-m3-outline-variant", border)} !important;
+            border-color: {text2} !important;
+        }}
+        [data-baseweb="select"]:focus-within > div {{
+            border-color: {accent} !important;
+            box-shadow: 0 0 0 3px {accent}1a !important;
         }}
 
         /* ── Date Input ── */
         .stDateInput input {{
-            border-radius: 1rem !important;
+            border-radius: 12px !important;
+            background: {surface} !important;
+            border: 1.5px solid {t_vars.get("--gxp-m3-outline-variant", "#c2c6d5")} !important;
+            padding: 0.7rem 1rem !important;
+            transition: all 0.18s ease !important;
+        }}
+        .stDateInput input:hover {{
+            border-color: {text2} !important;
+        }}
+        .stDateInput input:focus {{
+            border-color: {accent} !important;
+            box-shadow: 0 0 0 3px {accent}1a !important;
+        }}
+
+        /* ── Multiselect ── */
+        [data-baseweb="select"][aria-expanded] > div {{
+            border-radius: 12px !important;
+        }}
+
+        /* ── Checkbox + Radio ── */
+        .stCheckbox label span[data-testid="stCheckbox"],
+        .stRadio label span {{
+            color: {text} !important;
+        }}
+
+        /* ── Widget labels ── */
+        label[data-testid="stWidgetLabel"] {{
+            font-size: 0.8125rem !important;
+            font-weight: 600 !important;
+            color: {text2} !important;
+            letter-spacing: 0.01em !important;
+            margin-bottom: 2px !important;
+        }}
+
+        /* ── File uploader ── */
+        [data-testid="stFileUploader"] section {{
+            border-radius: 12px !important;
+            border: 1.5px dashed {t_vars.get("--gxp-m3-outline-variant", "#c2c6d5")} !important;
             background: {t_vars.get("--gxp-surface2", "#f3f4f5")} !important;
-            border: 1.5px solid transparent !important;
-            padding: 0.65rem 1rem !important;
+            transition: all 0.18s ease !important;
+        }}
+        [data-testid="stFileUploader"] section:hover {{
+            border-color: {accent} !important;
+            background: {surface} !important;
         }}
 
         /* ── Pill-Shaped Tab Switcher ── */
@@ -2008,6 +2131,16 @@ def inject_css():
         .stRadio input:checked + div {{
             background-color: {accent} !important;
             border-color: {accent} !important;
+        }}
+
+        /* ── Checkbox highlight fix ──
+           Streamlit Emotion class on stCheckbox wrapper applies a colored
+           background when checked. Override with transparent. */
+        [data-testid="stCheckbox"][class*="st-emotion-cache"],
+        [data-testid="stCheckbox"][class*="eczd22r"],
+        div.row-widget.stCheckbox {{
+            background: transparent !important;
+            background-color: transparent !important;
         }}
 
         /* ── Download button ── */

@@ -278,13 +278,14 @@ def _render_daily_entry():
     _dept_names_structured = _load_dept_names_from_table()
     if _dept_names_structured:
         all_depts = _dept_names_structured
-    # ── Filter bar (vertical) ─────────────────────────────────
-    fcol, _ = st.columns([2, 5])
-    with fcol:
-        de_sel_dept = st.multiselect("Department", all_depts,     key="de_f_dept", placeholder="All departments")
-        de_sel_pos  = st.multiselect("Position",   all_positions, key="de_f_pos",  placeholder="All positions")
-        de_search   = st.text_input("Employee",    placeholder="Name or employee no…",
-                                    label_visibility="visible", key="de_search")
+    # ── Collapsible filter bar ────────────────────────────────
+    with st.expander("Filters", expanded=False):
+        fcol, _ = st.columns([3, 2])
+        with fcol:
+            de_sel_dept = st.multiselect("Department", all_depts,     key="de_f_dept", placeholder="All departments")
+            de_sel_pos  = st.multiselect("Position",   all_positions, key="de_f_pos",  placeholder="All positions")
+            de_search   = st.text_input("Employee",    placeholder="Name or employee no…",
+                                        label_visibility="visible", key="de_search")
 
     def _de_match(emp):
         if de_search:
@@ -562,19 +563,13 @@ def _render_summary():
         a["ot_hours"]       += float(log.get("ot_hours")  or 0)
         a["nsd_hours"]      += float(log.get("nsd_hours") or 0)
 
-    # Render summary table
-    hdr_cols = [1, 1.8, 1.5, 1.5, 1, 1, 1, 1, 1.2, 1.2, 1.5]
-    hdr = st.columns(hdr_cols)
-    for c, lbl in zip(hdr, ["No.", "Name", "Position", "Dept", "Present", "Late", "Half Day", "Absent", "OT Hrs", "NSD Hrs", "Late Time"]):
-        c.markdown(f"**{lbl}**")
-
+    # Build filtered employee list for summary + detail
+    filtered_employees = []
     for emp in employees:
         eid = emp["id"]
         a = agg[eid]
         if a["days_logged"] == 0:
             continue
-
-        # Apply filters
         if sm_search:
             q = sm_search.lower()
             if q not in a["name"].lower() and q not in a["emp_no"].lower():
@@ -583,39 +578,163 @@ def _render_summary():
             continue
         if sm_sel_dept and (emp.get("department") or "") not in sm_sel_dept:
             continue
+        filtered_employees.append(emp)
 
-        row = st.columns(hdr_cols)
-        row[0].caption(a["emp_no"])
-        row[1].text(a["name"])
-        row[2].caption(a["position"])
-        row[3].caption(a["dept"])
-        row[4].text(str(a["present"]))
+    if not filtered_employees:
+        st.info("No attendance records found for the selected filters.")
+        return
 
-        # Color-code late count
-        late_color = "var(--gxp-warning)" if a["late"] > 0 else "var(--gxp-text)"
-        row[5].markdown(
-            f'<span style="color:{late_color};font-weight:600">{a["late"]}</span>',
-            unsafe_allow_html=True,
-        )
-        row[6].text(str(a["half_day"]))
+    # Employee selection for day-by-day detail
+    emp_options = {_employee_display_name(e): e["id"] for e in filtered_employees}
+    emp_names = list(emp_options.keys())
 
-        # Color-code absent count
-        abs_color = "var(--gxp-danger)" if a["absent"] > 3 else "var(--gxp-text)"
-        row[7].markdown(
-            f'<span style="color:{abs_color};font-weight:600">{a["absent"]}</span>',
-            unsafe_allow_html=True,
-        )
-        row[8].text(f"{a['ot_hours']:.1f}" if a["ot_hours"] else "—")
-        row[9].text(f"{a['nsd_hours']:.2f}" if a["nsd_hours"] else "—")
-        row[10].text(_fmt_mins(a["late_mins"]))
+    # Default to first employee
+    selected_name = st.session_state.get("dtr_detail_emp", emp_names[0])
+    if selected_name not in emp_options:
+        selected_name = emp_names[0]
 
-    # ── Expandable per-employee detail ────────────────────────
+    # Render summary table
+    hdr_cols = [1, 1.8, 1.5, 1.5, 1, 1, 1, 1, 1.2, 1.2, 1.5]
+    hdr = st.columns(hdr_cols)
+    for c, lbl in zip(hdr, ["No.", "Name", "Position", "Dept", "Present", "Late", "Half Day", "Absent", "OT Hrs", "NSD Hrs", "Late Time"]):
+        c.markdown(f"**{lbl}**")
+
+    for emp in filtered_employees:
+        eid = emp["id"]
+        a = agg[eid]
+        name = _employee_display_name(emp)
+        is_selected = (name == selected_name)
+
+        # Wrap each row in a container with a marker for JS click wiring
+        with st.container():
+            sel_marker = "gxp-dtr-row-selected" if is_selected else "gxp-dtr-row"
+            st.markdown(
+                f'<div class="{sel_marker}" data-emp-id="{eid}"'
+                f' style="height:0;overflow:hidden;margin:0;padding:0;"></div>',
+                unsafe_allow_html=True,
+            )
+
+            row = st.columns(hdr_cols)
+            row[0].caption(a["emp_no"])
+            row[1].markdown(
+                f'<span class="gxp-dtr-name" data-emp-id="{eid}"'
+                f' style="cursor:pointer;">{a["name"]}</span>',
+                unsafe_allow_html=True,
+            )
+            row[2].caption(a["position"])
+            row[3].caption(a["dept"])
+            row[4].text(str(a["present"]))
+
+            # Heatmap color: 0=green, 1=dark yellow, 2=orange, >2=red
+            def _heat(v):
+                if v == 0: return "#2e7d32"
+                if v == 1: return "#f9a825"
+                if v == 2: return "#ef6c00"
+                return "#c62828"
+
+            row[5].markdown(
+                f'<span style="color:{_heat(a["late"])};font-weight:600">{a["late"]}</span>',
+                unsafe_allow_html=True,
+            )
+            row[6].text(str(a["half_day"]))
+
+            row[7].markdown(
+                f'<span style="color:{_heat(a["absent"])};font-weight:600">{a["absent"]}</span>',
+                unsafe_allow_html=True,
+            )
+            row[8].text(f"{a['ot_hours']:.1f}" if a["ot_hours"] else "—")
+            row[9].text(f"{a['nsd_hours']:.2f}" if a["nsd_hours"] else "—")
+            row[10].text(_fmt_mins(a["late_mins"]))
+
+            # Hidden button for JS click wiring
+            if st.button("\u200b", key=f"dtr_sel_{eid}"):
+                st.session_state["dtr_detail_emp"] = name
+                st.rerun()
+
+    # JS: event delegation + CSS-based styling (no per-row attachment)
+    import streamlit.components.v1 as _stc
+
+    # Inject a <style> tag for row hover/selected (pure CSS, no JS timing issues)
+    _stc.html("""<script>
+    (function(){
+      var pd = window.parent.document;
+      var styleId = 'gxp-dtr-row-styles';
+      var old = pd.getElementById(styleId);
+      if(old) old.remove();
+      var s = pd.createElement('style');
+      s.id = styleId;
+      s.textContent = [
+        '[data-dtr-row]{ cursor:pointer; border-radius:8px;',
+        '  transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.18s ease, background 0.15s ease, outline 0.15s ease; }',
+        '[data-dtr-row]:hover{ background:rgba(0,0,0,0.03); transform:translateY(-2px); box-shadow:0 4px 16px rgba(0,0,0,0.08); }',
+        '[data-dtr-row="selected"]{ background:rgba(0,91,193,0.07)!important; outline:2px solid #005bc1; outline-offset:-1px; }',
+        '[data-dtr-row="selected"]:hover{ background:rgba(0,91,193,0.10)!important; }',
+      ].join('\\n');
+      pd.head.appendChild(s);
+
+      /* Tag row containers with data-dtr-row attribute */
+      function tagRows(){
+        /* Remove old tags */
+        pd.querySelectorAll('[data-dtr-row]').forEach(function(el){
+          el.removeAttribute('data-dtr-row');
+          delete el._dtrEid;
+        });
+        /* Strategy: find each hidden button, walk up to find the
+           container that also holds the marker with matching emp-id */
+        var btns = pd.querySelectorAll('[class*="st-key-dtr_sel_"]');
+        btns.forEach(function(btnWrap){
+          var cls = btnWrap.className || '';
+          var m = cls.match(/st-key-dtr_sel_([\w-]+)/);
+          if(!m) return;
+          var eid = m[1];
+          var el = btnWrap;
+          for(var i=0;i<15;i++){
+            el = el.parentElement;
+            if(!el) return;
+            var marker = el.querySelector('[data-emp-id="' + eid + '"]');
+            if(marker){
+              var isSel = marker.classList.contains('gxp-dtr-row-selected');
+              el.setAttribute('data-dtr-row', isSel ? 'selected' : eid);
+              el._dtrEid = eid;
+              break;
+            }
+          }
+        });
+      }
+
+      /* Single delegated click handler — always re-attach (remove old) */
+      if(pd.body._dtrHandler){
+        pd.body.removeEventListener('click', pd.body._dtrHandler);
+      }
+      pd.body._dtrHandler = function(e){
+        if(e.target.tagName==='BUTTON'||e.target.tagName==='INPUT') return;
+        var rowEl = e.target.closest('[data-dtr-row]');
+        if(!rowEl) return;
+        var eid = rowEl._dtrEid;
+        console.log('[DTR-CLICK] rowEl found, eid=', eid);
+        if(!eid) return;
+        var btn = pd.querySelector('[class*="st-key-dtr_sel_' + eid + '"] button');
+        console.log('[DTR-CLICK] btn=', btn);
+        if(!btn) return;
+        /* Instant visual update */
+        pd.querySelectorAll('[data-dtr-row]').forEach(function(el){
+          el.setAttribute('data-dtr-row', el._dtrEid || '');
+        });
+        rowEl.setAttribute('data-dtr-row', 'selected');
+        btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+      };
+      pd.body.addEventListener('click', pd.body._dtrHandler);
+
+      tagRows();
+      setTimeout(tagRows, 800);
+      setTimeout(tagRows, 2000);
+    })();
+    </script>""", height=0)
+
+    # ── Day-by-Day Detail — Visual Timeline ──
     st.divider()
-    st.subheader("Day-by-Day Detail")
-    emp_options = {_employee_display_name(e): e["id"] for e in employees}
-    selected_name = st.selectbox("Select employee", options=list(emp_options.keys()),
-                                  key="dtr_detail_emp")
     selected_id = emp_options[selected_name]
+    st.subheader(f"Day-by-Day Detail — {selected_name}")
 
     detail_logs = [l for l in logs if l["employee_id"] == selected_id]
     if not detail_logs:
@@ -623,23 +742,316 @@ def _render_summary():
         return
 
     detail_logs.sort(key=lambda l: l["work_date"])
-    d_cols = [1.5, 1.2, 1.3, 1.3, 1, 1, 1, 1, 1.5]
-    d_hdr = st.columns(d_cols)
-    for c, lbl in zip(d_hdr, ["Date", "Day", "Time In", "Time Out", "Late", "UT", "OT", "NSD", "Status"]):
-        c.markdown(f"**{lbl}**")
 
+    # Load schedule for this employee
+    schedules = _load_schedules()
+    sel_emp = next((e for e in filtered_employees if e["id"] == selected_id), None)
+
+    def _time_to_minutes(t_str):
+        """Parse HH:MM:SS or HH:MM string to minutes from midnight."""
+        if not t_str:
+            return None
+        parts = t_str.strip().split(":")
+        return int(parts[0]) * 60 + int(parts[1])
+
+    def _bar_pct(minutes):
+        """Convert minutes-from-midnight to % of 24h bar."""
+        return round((minutes / 1440) * 100, 2)
+
+    def _span(start_m, end_m):
+        """Return (left_pct, width_pct) handling overnight wrap-around."""
+        if end_m >= start_m:
+            return _bar_pct(start_m), _bar_pct(end_m - start_m)
+        else:
+            # Overnight: end < start → wraps past midnight
+            return _bar_pct(start_m), _bar_pct((1440 - start_m) + end_m)
+
+    # Determine if we're showing an overnight employee (needed before row loop)
+    any_overnight = False
+    shift_origin = 0
+    if sel_emp and detail_logs:
+        s0 = resolve_schedule_for_date(sel_emp, schedules, {}, date.fromisoformat(detail_logs[0]["work_date"]))
+        if s0 and s0.get("is_overnight"):
+            any_overnight = True
+            shift_origin = _time_to_minutes(s0.get("start_time")) or 0
+
+    # Vertical grid lines HTML (injected into each row's timeline bar)
+    grid_lines = ""
+    for i in range(24):
+        left_pct = round((i * 60 / 1440) * 100, 2)
+        if i % 3 == 0:
+            # Major grid line every 3 hours
+            grid_lines += (
+                f'<div style="position:absolute;left:{left_pct}%;top:0;bottom:0;'
+                f'width:1.5px;background:rgba(0,0,0,0.22);pointer-events:none;z-index:0;"></div>'
+            )
+        else:
+            # Minor grid line every hour
+            grid_lines += (
+                f'<div style="position:absolute;left:{left_pct}%;top:0;bottom:0;'
+                f'width:1px;background:rgba(0,0,0,0.12);pointer-events:none;z-index:0;"></div>'
+            )
+
+    # Build HTML timeline
+    rows_html = []
     for l in detail_logs:
         d = date.fromisoformat(l["work_date"])
-        d_row = st.columns(d_cols)
-        d_row[0].text(d.strftime("%m/%d/%y"))
-        d_row[1].text(d.strftime("%a"))
-        d_row[2].text(_fmt_time(l.get("time_in")))
-        d_row[3].text(_fmt_time(l.get("time_out")))
-        d_row[4].text(_fmt_mins(l.get("late_minutes") or 0))
-        d_row[5].text(_fmt_mins(l.get("undertime_minutes") or 0))
-        d_row[6].text(f"{float(l['ot_hours']):.1f}h" if l.get("ot_hours") else "—")
-        d_row[7].text(f"{float(l['nsd_hours']):.2f}h" if l.get("nsd_hours") else "—")
-        d_row[8].markdown(_status_html(l.get("status", "absent")), unsafe_allow_html=True)
+        day_label = d.strftime("%b %d")
+        day_name = d.strftime("%a")
+
+        # Schedule info
+        sched = None
+        if sel_emp:
+            sched = resolve_schedule_for_date(sel_emp, schedules, {}, d)
+        sched_name = sched.get("name", "—") if sched else "—"
+        sched_start = _time_to_minutes(sched.get("start_time")) if sched and sched.get("start_time") else None
+        sched_end = _time_to_minutes(sched.get("end_time")) if sched and sched.get("end_time") else None
+        is_overnight = bool(sched.get("is_overnight", False)) if sched else False
+        break_mins_allowed = sched.get("break_minutes", 60) if sched else 60
+
+        # Time values
+        t_in = _time_to_minutes(l.get("time_in"))
+        t_out = _time_to_minutes(l.get("time_out"))
+        b_out = _time_to_minutes(l.get("break_out"))
+        b_in = _time_to_minutes(l.get("break_in"))
+
+        # For overnight shifts, normalize times relative to shift start
+        # so the bar renders correctly across midnight
+        if is_overnight and t_in is not None and t_out is not None:
+            # If t_out < t_in, it's the next day — add 24h
+            if t_out < t_in:
+                t_out += 1440
+            if b_out is not None and b_out < t_in:
+                b_out += 1440
+            if b_in is not None and b_in < t_in:
+                b_in += 1440
+            if sched_end is not None and sched_end < sched_start:
+                sched_end += 1440
+
+        # Metrics
+        late_m = l.get("late_minutes") or 0
+        ut_m = l.get("undertime_minutes") or 0
+        ot_h = float(l.get("ot_hours") or 0)
+        nsd_h = float(l.get("nsd_hours") or 0)
+        status = l.get("status", "absent")
+        actual_break = l.get("actual_break_minutes") or 0
+        overbreak = actual_break > break_mins_allowed if b_out and b_in else False
+
+        # Status colors
+        status_colors = {
+            "present": ("#2e7d32", "Present"),
+            "late":    ("#ef6c00", "Late"),
+            "absent":  ("#c62828", "Absent"),
+            "half_day": ("#795900", "Half Day"),
+            "rest_day": ("#424753", "Rest Day"),
+            "no_schedule": ("#424753", "—"),
+        }
+        s_color, s_label = status_colors.get(status, ("#424753", status.title()))
+
+        # For overnight bars, compute using a shifted 24h window
+        # starting at shift_start instead of midnight
+        if is_overnight and sched_start is not None:
+            # Shift origin: sched_start becomes 0, everything offset
+            origin = sched_start
+
+            def _ov_pct(m):
+                """Minutes relative to shift origin → % of 24h bar."""
+                return round(((m - origin) / 1440) * 100, 2)
+        else:
+            origin = 0
+            _ov_pct = _bar_pct
+
+        # Build bar segments
+        segments_html = ""
+
+        # NSD window band (10PM–6AM) for overnight shifts
+        if is_overnight:
+            nsd_start = 22 * 60  # 10PM
+            nsd_end = 6 * 60 + 1440  # 6AM next day (normalized)
+            nsd_left = _ov_pct(nsd_start)
+            nsd_width = _ov_pct(nsd_end) - _ov_pct(nsd_start)
+            segments_html += (
+                f'<div style="position:absolute;left:{nsd_left}%;'
+                f'width:{nsd_width}%;'
+                f'top:0;bottom:0;background:rgba(13,71,161,0.06);'
+                f'border-left:1px solid rgba(13,71,161,0.15);'
+                f'border-right:1px solid rgba(13,71,161,0.15);" '
+                f'title="NSD Window 10PM–6AM"></div>'
+            )
+
+        if t_in is not None and t_out is not None:
+            # Schedule background (ghost bar)
+            if sched_start is not None and sched_end is not None:
+                g_left = _ov_pct(sched_start)
+                g_width = _ov_pct(sched_end) - _ov_pct(sched_start)
+                segments_html += (
+                    f'<div style="position:absolute;left:{g_left}%;'
+                    f'width:{g_width}%;'
+                    f'top:2px;bottom:2px;background:rgba(0,91,193,0.08);'
+                    f'border-radius:4px;border:1px dashed rgba(0,91,193,0.2);"></div>'
+                )
+
+            # Work segment 1: time_in → break_out (or time_out if no break)
+            seg1_end = b_out if b_out else t_out
+            work_color = "#005bc1" if status == "present" else "#ef6c00" if status == "late" else "#795900"
+            segments_html += (
+                f'<div style="position:absolute;left:{_ov_pct(t_in)}%;'
+                f'width:{_ov_pct(seg1_end) - _ov_pct(t_in)}%;'
+                f'top:4px;bottom:4px;background:{work_color};'
+                f'border-radius:4px 0 0 4px;opacity:0.85;" '
+                f'title="In: {l.get("time_in","")[:5]}"></div>'
+            )
+
+            # Break segment
+            if b_out and b_in:
+                brk_color = "#c62828" if overbreak else "#9e9e9e"
+                segments_html += (
+                    f'<div style="position:absolute;left:{_ov_pct(b_out)}%;'
+                    f'width:{_ov_pct(b_in) - _ov_pct(b_out)}%;'
+                    f'top:4px;bottom:4px;background:{brk_color};'
+                    f'border-radius:0;opacity:0.45;" '
+                    f'title="Break: {actual_break}m{" (OVER)" if overbreak else ""}"></div>'
+                )
+                # Work segment 2: break_in → time_out
+                segments_html += (
+                    f'<div style="position:absolute;left:{_ov_pct(b_in)}%;'
+                    f'width:{_ov_pct(t_out) - _ov_pct(b_in)}%;'
+                    f'top:4px;bottom:4px;background:{work_color};'
+                    f'border-radius:0 4px 4px 0;opacity:0.85;" '
+                    f'title="Out: {l.get("time_out","")[:5]}"></div>'
+                )
+            else:
+                # No break data — round right edge
+                segments_html = segments_html.rsplit("</div>", 1)[0].replace(
+                    "border-radius:4px 0 0 4px", "border-radius:4px"
+                ) + "</div>"
+
+            # OT indicator (past schedule end)
+            if ot_h > 0 and sched_end and t_out > sched_end:
+                segments_html += (
+                    f'<div style="position:absolute;left:{_ov_pct(sched_end)}%;'
+                    f'width:{_ov_pct(t_out) - _ov_pct(sched_end)}%;'
+                    f'top:4px;bottom:4px;background:#7b1fa2;'
+                    f'border-radius:0 4px 4px 0;opacity:0.7;" '
+                    f'title="OT: {ot_h:.1f}h"></div>'
+                )
+
+        # Absent — red dashed in schedule slot
+        elif status == "absent" and sched_start is not None and sched_end is not None:
+            g_left = _ov_pct(sched_start)
+            g_width = _ov_pct(sched_end) - _ov_pct(sched_start)
+            segments_html += (
+                f'<div style="position:absolute;left:{g_left}%;'
+                f'width:{g_width}%;'
+                f'top:4px;bottom:4px;background:repeating-linear-gradient('
+                f'45deg,transparent,transparent 3px,rgba(198,40,40,0.15) 3px,rgba(198,40,40,0.15) 6px);'
+                f'border:1px dashed #c62828;border-radius:4px;opacity:0.6;"></div>'
+            )
+
+        # Heatmap helper
+        def _hv(v):
+            if v == 0: return "#2e7d32"
+            if v <= 5: return "#f9a825"
+            if v <= 15: return "#ef6c00"
+            return "#c62828"
+
+        row_html = f'''
+        <div style="display:grid;grid-template-columns:70px 40px 80px minmax(200px,1fr) 42px 42px 42px 42px 70px;
+                    align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid rgba(0,0,0,0.06);
+                    font-size:13px;font-family:'Plus Jakarta Sans',sans-serif;">
+          <div style="font-weight:600;color:#191c1d;">{day_label}</div>
+          <div style="color:#5a6062;font-size:11px;">{day_name}</div>
+          <div style="color:#5a6062;font-size:11px;white-space:nowrap;">{sched_name}</div>
+          <div style="position:relative;height:22px;background:#f4f5f6;border-radius:4px;overflow:hidden;">
+            {grid_lines}{segments_html}
+          </div>
+          <div style="text-align:center;font-weight:600;color:{_hv(late_m)};">{_fmt_mins(late_m) if late_m else "—"}</div>
+          <div style="text-align:center;font-weight:600;color:{_hv(ut_m)};">{_fmt_mins(ut_m) if ut_m else "—"}</div>
+          <div style="text-align:center;color:#7b1fa2;font-weight:600;">{f"{ot_h:.1f}" if ot_h else "—"}</div>
+          <div style="text-align:center;color:#0d47a1;font-weight:600;">{f"{nsd_h:.1f}" if nsd_h else "—"}</div>
+          <div style="text-align:center;">
+            <span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:10px;
+                         font-weight:700;color:{s_color};background:{s_color}18;
+                         text-transform:uppercase;letter-spacing:0.04em;">{s_label}</span>
+          </div>
+        </div>'''
+        rows_html.append(row_html)
+
+    # Hour markers for the timeline header — label every 3h, tick every 1h
+    hour_markers = ""
+    for i in range(24):
+        m = (shift_origin + i * 60) % 1440
+        left_pct = round((i * 60 / 1440) * 100, 2)
+        if i % 3 == 0:
+            h = m // 60
+            ampm = "a" if h < 12 else "p"
+            h12 = h % 12 or 12
+            lbl = f"{h12}{ampm}"
+            hour_markers += (
+                f'<div style="position:absolute;left:{left_pct}%;font-size:9px;'
+                f'color:#7a7a7a;transform:translateX(-50%);top:-1px;font-weight:600;">{lbl}</div>'
+            )
+        else:
+            hour_markers += (
+                f'<div style="position:absolute;left:{left_pct}%;top:10px;'
+                f'width:1px;height:6px;background:rgba(0,0,0,0.12);"></div>'
+            )
+
+    # Legend
+    legend_items = [
+        ("#005bc1", 0.85, "Work"),
+        ("#ef6c00", 0.85, "Late"),
+        ("#9e9e9e", 0.45, "Break"),
+        ("#c62828", 0.45, "Overbreak"),
+        ("#7b1fa2", 0.7, "OT"),
+    ]
+    legend_html = '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 4px;font-size:11px;color:#5a6062;">'
+    for color, opacity, label in legend_items:
+        legend_html += (
+            f'<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;'
+            f'background:{color};opacity:{opacity};margin-right:3px;vertical-align:middle;"></span>{label}</span>'
+        )
+    # Scheduled (dashed border, special)
+    legend_html += (
+        '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;'
+        'background:rgba(0,91,193,0.08);border:1px dashed rgba(0,91,193,0.3);margin-right:3px;'
+        'vertical-align:middle;"></span>Scheduled</span>'
+    )
+    if any_overnight:
+        legend_html += (
+            '<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;'
+            'background:rgba(13,71,161,0.08);border:1px solid rgba(13,71,161,0.2);margin-right:3px;'
+            'vertical-align:middle;"></span>NSD Window</span>'
+        )
+    legend_html += '</div>'
+
+    full_html = f'''
+    <div style="background:white;border-radius:12px;padding:12px 16px;
+                box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+      {legend_html}
+      <div style="display:grid;grid-template-columns:70px 40px 80px minmax(200px,1fr) 42px 42px 42px 42px 70px;
+                  align-items:center;gap:4px;padding:6px 8px;border-bottom:2px solid rgba(0,0,0,0.1);
+                  font-size:11px;font-weight:700;color:#5a6062;text-transform:uppercase;letter-spacing:0.06em;">
+        <div>Date</div>
+        <div>Day</div>
+        <div>Shift</div>
+        <div style="position:relative;height:16px;border-bottom:1px solid rgba(0,0,0,0.08);">
+          {hour_markers}
+        </div>
+        <div style="text-align:center;">Late</div>
+        <div style="text-align:center;">UT</div>
+        <div style="text-align:center;">OT</div>
+        <div style="text-align:center;">NSD</div>
+        <div style="text-align:center;">Status</div>
+      </div>
+      {"".join(rows_html)}
+    </div>'''
+
+    # Use components.html to avoid st.markdown sanitizer truncating large HTML
+    import streamlit.components.v1 as _stc
+    row_count = len(detail_logs)
+    timeline_height = 80 + row_count * 38  # legend ~50px + header ~30px + rows
+    _stc.html(full_html, height=timeline_height, scrolling=True)
 
 
 # ============================================================

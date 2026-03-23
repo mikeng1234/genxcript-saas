@@ -213,6 +213,22 @@ def _load_single_employee(emp_id: str) -> dict:
     return result.data or {}
 
 
+def _load_all_photo_urls() -> dict[str, str]:
+    """Return {employee_id: photo_url} for all employees with a photo."""
+    try:
+        rows = (
+            get_db().table("employee_profiles")
+            .select("employee_id, photo_url")
+            .eq("company_id", get_company_id())
+            .not_.is_("photo_url", "null")
+            .execute()
+            .data or []
+        )
+        return {r["employee_id"]: r["photo_url"] for r in rows if r.get("photo_url")}
+    except Exception:
+        return {}
+
+
 def _clear_dialog_state(emp_id: str) -> None:
     """Remove all edit-dialog session state keys for a given employee ID."""
     prefix_keys = [
@@ -258,6 +274,46 @@ def _centavos_to_pesos(centavos: int) -> float:
 
 def _pesos_to_centavos(pesos: float) -> int:
     return int(round(pesos * 100))
+
+
+def _compress_employee_photo(img_bytes: bytes, max_px: int = 200, quality: int = 80) -> bytes:
+    """Compress and resize an employee photo to a small square thumbnail."""
+    from PIL import Image, ExifTags
+    import io
+
+    img = Image.open(io.BytesIO(img_bytes))
+
+    # Auto-orient based on EXIF
+    try:
+        for orientation in ExifTags.TAGS:
+            if ExifTags.TAGS[orientation] == "Orientation":
+                break
+        exif = img._getexif()
+        if exif and orientation in exif:
+            rot = exif[orientation]
+            if rot == 3:
+                img = img.rotate(180, expand=True)
+            elif rot == 6:
+                img = img.rotate(270, expand=True)
+            elif rot == 8:
+                img = img.rotate(90, expand=True)
+    except Exception:
+        pass
+
+    # Crop to square center
+    w, h = img.size
+    side = min(w, h)
+    left = (w - side) // 2
+    top  = (h - side) // 2
+    img = img.crop((left, top, left + side, top + side))
+
+    # Resize
+    img = img.resize((max_px, max_px), Image.LANCZOS)
+    img = img.convert("RGB")
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality, optimize=True)
+    return buf.getvalue()
 
 
 def _load_all_employee_nos() -> list[str]:
@@ -386,6 +442,21 @@ def _template_label(tmpl: dict) -> str:
         f"{tmpl['name']}  ({svc}) "
         f"· {tmpl['vl_days']} VL / {tmpl['sl_days']} SL / {tmpl['cl_days']} CL"
     )
+
+
+def _load_all_employees_for_reports_to(exclude_id=None) -> list[dict]:
+    """Load active employees for the 'Reports To' dropdown, excluding self."""
+    rows = (
+        get_db().table("employees")
+        .select("id, first_name, last_name, position, employee_no")
+        .eq("company_id", get_company_id())
+        .eq("is_active", True)
+        .order("last_name")
+        .execute()
+    ).data or []
+    if exclude_id:
+        rows = [r for r in rows if r["id"] != exclude_id]
+    return rows
 
 
 def _load_schedules_for_form() -> list[dict]:
@@ -625,6 +696,26 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
             )
             selected_sched_id = defaults.get("schedule_id")
 
+        # --- Row 3c: Reports To (supervisor) ---
+        all_emps = _load_all_employees_for_reports_to(defaults.get("id"))
+        reports_to_ids    = [None] + [e["id"] for e in all_emps]
+        reports_to_labels = ["— None (top of org chart) —"] + [
+            f'{e["last_name"]}, {e["first_name"]} · {e["position"]}'
+            for e in all_emps
+        ]
+        current_reports_to = defaults.get("reports_to")
+        try:
+            rt_idx = reports_to_ids.index(current_reports_to)
+        except ValueError:
+            rt_idx = 0
+        selected_rt_label = st.selectbox(
+            "Reports To",
+            options=reports_to_labels,
+            index=rt_idx,
+            help="Direct supervisor/manager. Determines position in the org chart.",
+        )
+        selected_reports_to = reports_to_ids[reports_to_labels.index(selected_rt_label)]
+
         # --- Row 4: Salary ---
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -741,6 +832,7 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
                 "email":              email.strip() or None,
                 "leave_template_id":  selected_tmpl_id,
                 "schedule_id":        selected_sched_id,
+                "reports_to":         selected_reports_to,
             }
 
     return None
@@ -1510,6 +1602,53 @@ def _edit_employee_dialog(emp_id: str):
             st.session_state[dep_key]  = _NEW_DEPT_SENTINEL
             st.session_state[depn_key] = emp.get("department", "")
 
+    # ── Photo upload (top of dialog) ─────────────────────────────────────────
+    _photo_col_left, _photo_col_right = st.columns([1, 4])
+    with _photo_col_left:
+        current_photo = p.get("photo_url") or ""
+        initials = ((emp.get("first_name") or "?")[0] + (emp.get("last_name") or "?")[0]).upper()
+        if current_photo:
+            st.markdown(
+                f'<div style="width:80px;height:80px;border-radius:50%;overflow:hidden;'
+                f'border:2px solid #e7e8e9;margin:0 auto;">'
+                f'<img src="{current_photo}" style="width:100%;height:100%;object-fit:cover;" '
+                f'onerror="this.style.display=\'none\';this.parentElement.innerHTML='
+                f'\'<div style=&quot;width:100%;height:100%;display:flex;align-items:center;'
+                f'justify-content:center;background:#005bc1;color:#fff;font-size:24px;'
+                f'font-weight:700;&quot;>{initials}</div>\';"></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f'<div style="width:80px;height:80px;border-radius:50%;'
+                f'background:#005bc1;color:#fff;font-size:24px;font-weight:700;'
+                f'display:flex;align-items:center;justify-content:center;'
+                f'margin:0 auto;border:2px solid #e7e8e9;">{initials}</div>',
+                unsafe_allow_html=True,
+            )
+    with _photo_col_right:
+        uploaded_photo = st.file_uploader(
+            "Upload Photo",
+            type=["jpg", "jpeg", "png"],
+            key=f"d_photo_{emp_id}",
+            help="Max 5 MB. JPEG or PNG. Will be compressed to 200px for display.",
+        )
+        if current_photo:
+            if st.button("Remove Photo", key=f"d_photo_rm_{emp_id}", type="tertiary"):
+                try:
+                    # Delete from storage
+                    old_path = current_photo.split("/employee-photos/")[-1] if "/employee-photos/" in current_photo else ""
+                    if old_path:
+                        get_db().storage.from_("employee-photos").remove([old_path])
+                    # Clear from profile
+                    get_db().table("employee_profiles").update(
+                        {"photo_url": None}
+                    ).eq("employee_id", emp_id).execute()
+                    st.success("Photo removed.")
+                    st.rerun()
+                except Exception as ex:
+                    st.error(f"Failed to remove photo: {ex}")
+
     # ── Tabs ──────────────────────────────────────────────────────────────────
     tab_emp, tab_profile_tab = st.tabs(["📋 Employment Details", "👤 Personal Profile"])
 
@@ -1588,6 +1727,18 @@ def _edit_employee_dialog(emp_id: str):
             sched_ids    = [None]
             sched_labels = ["—"]
             st.info("No schedules configured. Go to **Company Setup → Schedules**.", icon="ℹ️")
+
+        # Reports To (supervisor)
+        rt_emps = _load_all_employees_for_reports_to(emp_id)
+        rt_ids    = [None] + [e["id"] for e in rt_emps]
+        rt_labels = ["— None (top of org chart) —"] + [
+            f'{e["last_name"]}, {e["first_name"]} · {e["position"]}'
+            for e in rt_emps
+        ]
+        current_rt = emp.get("reports_to")
+        rt_idx = rt_ids.index(current_rt) if current_rt in rt_ids else 0
+        st.selectbox("Reports To", rt_labels, index=rt_idx, key=f"d_rt_{emp_id}",
+                     help="Direct supervisor/manager. Determines position in the org chart.")
 
         st.markdown("**Compensation**")
         c1, c2, c3 = st.columns(3)
@@ -1718,27 +1869,63 @@ def _edit_employee_dialog(emp_id: str):
         st.markdown("#### Permanent Address")
         perm_same_val = bool(p.get("perm_address_same", True))
         st.checkbox("Same as present address", value=perm_same_val, key=f"d_psame_{emp_id}")
-        if not st.session_state.get(f"d_psame_{emp_id}", True):
+        _perm_disabled = st.session_state.get(f"d_psame_{emp_id}", True)
+        _sfx = "_dis" if _perm_disabled else "_en"
+
+        if _perm_disabled:
+            # Show present address values as read-only
+            c1, c2 = st.columns(2)
+            with c1:
+                st.text_input("House No. / Street / Subdivision",
+                              value=st.session_state.get(f"d_pstr_{emp_id}", "") or "",
+                              key=f"d_rmstr_{emp_id}{_sfx}", disabled=True)
+            with c2:
+                st.text_input("Barangay",
+                              value=st.session_state.get(f"d_pbrgy_{emp_id}", "") or "",
+                              key=f"d_rmbrgy_{emp_id}{_sfx}", disabled=True)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.text_input("City / Municipality",
+                              value=st.session_state.get(f"d_pcity_{emp_id}", "") or "",
+                              key=f"d_rmcity_{emp_id}{_sfx}", disabled=True)
+            with c2:
+                rprov_idx = (
+                    PROVINCES.index(st.session_state.get(f"d_pprov_{emp_id}", PROVINCES[0]))
+                    if st.session_state.get(f"d_pprov_{emp_id}") in PROVINCES else 0
+                )
+                st.selectbox("Province", PROVINCES, index=rprov_idx,
+                             key=f"d_rmprov_{emp_id}{_sfx}", disabled=True)
+            with c3:
+                st.text_input("ZIP Code",
+                              value=st.session_state.get(f"d_pzip_{emp_id}", "") or "",
+                              key=f"d_rmzip_{emp_id}{_sfx}", disabled=True)
+        else:
+            # Editable permanent address
             c1, c2 = st.columns(2)
             with c1:
                 st.text_input("House No. / Street / Subdivision",
                               value=p.get("perm_address_street", "") or "",
-                              key=f"d_rmstr_{emp_id}")
+                              key=f"d_rmstr_{emp_id}{_sfx}")
             with c2:
-                st.text_input("Barangay", value=p.get("perm_address_barangay", "") or "", key=f"d_rmbrgy_{emp_id}")
+                st.text_input("Barangay",
+                              value=p.get("perm_address_barangay", "") or "",
+                              key=f"d_rmbrgy_{emp_id}{_sfx}")
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.text_input("City / Municipality",
                               value=p.get("perm_address_city", "") or "",
-                              key=f"d_rmcity_{emp_id}")
+                              key=f"d_rmcity_{emp_id}{_sfx}")
             with c2:
                 rprov_idx = (
                     PROVINCES.index(p["perm_address_province"])
                     if p.get("perm_address_province") in PROVINCES else 0
                 )
-                st.selectbox("Province", PROVINCES, index=rprov_idx, key=f"d_rmprov_{emp_id}")
+                st.selectbox("Province", PROVINCES, index=rprov_idx,
+                             key=f"d_rmprov_{emp_id}{_sfx}")
             with c3:
-                st.text_input("ZIP Code", value=p.get("perm_address_zip", "") or "", key=f"d_rmzip_{emp_id}")
+                st.text_input("ZIP Code",
+                              value=p.get("perm_address_zip", "") or "",
+                              key=f"d_rmzip_{emp_id}{_sfx}")
 
         st.markdown("#### Emergency Contact")
         c1, c2, c3 = st.columns(3)
@@ -1864,6 +2051,14 @@ def _edit_employee_dialog(emp_id: str):
             else emp.get("schedule_id")
         )
 
+        # Resolve reports_to
+        rt_label = ss.get(f"d_rt_{emp_id}")
+        resolved_reports_to = (
+            rt_ids[rt_labels.index(rt_label)]
+            if rt_label and rt_label in rt_labels
+            else emp.get("reports_to")
+        )
+
         # ── Build employees table payload ──────────────────────────────────────
         sep_date = ss.get(f"d_sd_{emp_id}")
         dh_val   = ss.get(f"d_dh_{emp_id}", date.today())
@@ -1886,6 +2081,7 @@ def _edit_employee_dialog(emp_id: str):
             "email":           (ss.get(f"d_em_{emp_id}") or "").strip() or None,
             "leave_template_id": resolved_tmpl_id,
             "schedule_id":     resolved_sched_id,
+            "reports_to":      resolved_reports_to,
         }
 
         # ── Build employee_profiles table payload ──────────────────────────────
@@ -1915,11 +2111,11 @@ def _edit_employee_dialog(emp_id: str):
             "present_address_province": ss.get(f"d_pprov_{emp_id}", PROVINCES[0]),
             "present_address_zip":      (ss.get(f"d_pzip_{emp_id}") or "").strip() or None,
             "perm_address_same":        perm_same,
-            "perm_address_street":      (ss.get(f"d_rmstr_{emp_id}") or "").strip() or None if not perm_same else None,
-            "perm_address_barangay":    (ss.get(f"d_rmbrgy_{emp_id}") or "").strip() or None if not perm_same else None,
-            "perm_address_city":        (ss.get(f"d_rmcity_{emp_id}") or "").strip() or None if not perm_same else None,
-            "perm_address_province":    ss.get(f"d_rmprov_{emp_id}") if not perm_same else None,
-            "perm_address_zip":         (ss.get(f"d_rmzip_{emp_id}") or "").strip() or None if not perm_same else None,
+            "perm_address_street":      (ss.get(f"d_rmstr_{emp_id}_en") or "").strip() or None if not perm_same else None,
+            "perm_address_barangay":    (ss.get(f"d_rmbrgy_{emp_id}_en") or "").strip() or None if not perm_same else None,
+            "perm_address_city":        (ss.get(f"d_rmcity_{emp_id}_en") or "").strip() or None if not perm_same else None,
+            "perm_address_province":    ss.get(f"d_rmprov_{emp_id}_en") if not perm_same else None,
+            "perm_address_zip":         (ss.get(f"d_rmzip_{emp_id}_en") or "").strip() or None if not perm_same else None,
             "emergency_name":           (ss.get(f"d_ecn_{emp_id}") or "").strip() or None,
             "emergency_relationship":   (ss.get(f"d_ecr_{emp_id}") or "").strip() or None,
             "emergency_phone":          (ss.get(f"d_ecp_{emp_id}") or "").strip() or None,
@@ -1937,6 +2133,50 @@ def _edit_employee_dialog(emp_id: str):
             "facebook":                 (ss.get(f"d_fb_{emp_id}") or "").strip() or None,
             "linkedin":                 (ss.get(f"d_li_{emp_id}") or "").strip() or None,
         }
+
+        # ── Handle photo upload ────────────────────────────────────────────────
+        _photo_file = ss.get(f"d_photo_{emp_id}")
+        if _photo_file is not None:
+            try:
+                _photo_bytes = _photo_file.getvalue()
+                if len(_photo_bytes) > 5 * 1024 * 1024:
+                    st.error("Photo must be under 5 MB.")
+                    return
+                _photo_bytes = _compress_employee_photo(_photo_bytes)
+                _photo_ext = "jpg"
+                _photo_path = f"{get_company_id()}/{emp_id}.{_photo_ext}"
+                # Remove old file if exists
+                try:
+                    get_db().storage.from_("employee-photos").remove([_photo_path])
+                except Exception:
+                    pass
+                get_db().storage.from_("employee-photos").upload(
+                    _photo_path, _photo_bytes,
+                    file_options={"content-type": "image/jpeg", "upsert": "true"},
+                )
+                _photo_url = get_db().storage.from_("employee-photos").get_public_url(_photo_path)
+                # Bust browser cache with timestamp
+                _photo_url += f"?v={int(__import__('time').time())}"
+                profile_data["photo_url"] = _photo_url
+            except Exception as _pex:
+                st.warning(f"Photo upload failed: {_pex}. Other data will still save.")
+
+        # ── Handle email change — unlink old auth user ─────────────────────────
+        old_email = (emp.get("email") or "").strip().lower()
+        new_email = (emp_data.get("email") or "").strip().lower()
+        old_user_id = emp.get("user_id")
+        if old_email and old_user_id and old_email != new_email:
+            # Email changed or cleared — unlink the old auth user
+            try:
+                db = get_db()
+                # Remove user_company_access for old auth user + this company
+                db.table("user_company_access").delete().eq(
+                    "user_id", old_user_id
+                ).eq("company_id", get_company_id()).execute()
+                # Clear user_id on employee record
+                emp_data["user_id"] = None
+            except Exception as _unlink_ex:
+                st.warning(f"Could not unlink old portal access: {_unlink_ex}")
 
         try:
             changes = _employee_diff(
@@ -2084,6 +2324,92 @@ def _render_employees_tab(show_salary_toggle: bool = True):
             st.info("No employees found. Click '+ Add Employee' to get started.")
         return
 
+    # ── Animated summary stats ─────────────────────────────────────────────
+    _total     = len(filtered)
+    _active    = sum(1 for e in filtered if e.get("is_active", True))
+    _inactive  = _total - _active
+    _regular   = sum(1 for e in filtered if (e.get("employment_type") or "") == "regular")
+    _probi     = sum(1 for e in filtered if (e.get("employment_type") or "") == "probationary")
+    _depts     = len({(e.get("department") or "Unassigned") for e in filtered})
+    _incomplete_ids = sum(1 for e in filtered if _onboarding_status(e)[0] < len(ONBOARDING_FIELDS))
+
+    _stat_id = f"emp-stats-{_total}-{_active}-{_depts}"
+    st.markdown(
+        f'<div style="display:flex;gap:12px;flex-wrap:wrap;margin:0 0 12px;">'
+        f'<div class="gxp-count-stat" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;'
+        f'padding:12px 18px;flex:1;min-width:120px;">'
+        f'<div style="font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;'
+        f'letter-spacing:0.06em;">Total</div>'
+        f'<div class="gxp-count" data-to="{_total}" style="font-size:28px;font-weight:800;'
+        f'color:#005bc1;line-height:1.2;">0</div></div>'
+        f'<div class="gxp-count-stat" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;'
+        f'padding:12px 18px;flex:1;min-width:120px;">'
+        f'<div style="font-size:10px;font-weight:700;color:#166534;text-transform:uppercase;'
+        f'letter-spacing:0.06em;">Active</div>'
+        f'<div class="gxp-count" data-to="{_active}" style="font-size:28px;font-weight:800;'
+        f'color:#16a34a;line-height:1.2;">0</div></div>'
+        f'<div class="gxp-count-stat" style="background:#fefce8;border:1px solid #fde68a;border-radius:12px;'
+        f'padding:12px 18px;flex:1;min-width:120px;">'
+        f'<div style="font-size:10px;font-weight:700;color:#854d0e;text-transform:uppercase;'
+        f'letter-spacing:0.06em;">Regular</div>'
+        f'<div class="gxp-count" data-to="{_regular}" style="font-size:28px;font-weight:800;'
+        f'color:#ca8a04;line-height:1.2;">0</div></div>'
+        f'<div class="gxp-count-stat" style="background:#fdf4ff;border:1px solid #e9d5ff;border-radius:12px;'
+        f'padding:12px 18px;flex:1;min-width:120px;">'
+        f'<div style="font-size:10px;font-weight:700;color:#6b21a8;text-transform:uppercase;'
+        f'letter-spacing:0.06em;">Probationary</div>'
+        f'<div class="gxp-count" data-to="{_probi}" style="font-size:28px;font-weight:800;'
+        f'color:#9333ea;line-height:1.2;">0</div></div>'
+        f'<div class="gxp-count-stat" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;'
+        f'padding:12px 18px;flex:1;min-width:120px;">'
+        f'<div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;'
+        f'letter-spacing:0.06em;">Departments</div>'
+        f'<div class="gxp-count" data-to="{_depts}" style="font-size:28px;font-weight:800;'
+        f'color:#334155;line-height:1.2;">0</div></div>'
+        + (
+            f'<div class="gxp-count-stat" style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;'
+            f'padding:12px 18px;flex:1;min-width:120px;">'
+            f'<div style="font-size:10px;font-weight:700;color:#991b1b;text-transform:uppercase;'
+            f'letter-spacing:0.06em;">Incomplete IDs</div>'
+            f'<div class="gxp-count" data-to="{_incomplete_ids}" style="font-size:28px;font-weight:800;'
+            f'color:#dc2626;line-height:1.2;">0</div></div>'
+            if _incomplete_ids > 0 else ''
+        )
+        + '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # JS: animate counting numbers
+    import streamlit.components.v1 as _stc_count
+    _stc_count.html("""<script>
+    (function(){
+      var pd = window.parent.document;
+      function animateCounts(){
+        var els = pd.querySelectorAll('.gxp-count[data-to]');
+        els.forEach(function(el){
+          if(el._counted) return;
+          el._counted = true;
+          var target = parseInt(el.getAttribute('data-to')) || 0;
+          if(target === 0){ el.textContent = '0'; return; }
+          var duration = 800;
+          var start = performance.now();
+          function step(now){
+            var t = Math.min((now - start) / duration, 1);
+            // ease-out cubic
+            var ease = 1 - Math.pow(1 - t, 3);
+            var val = Math.round(ease * target);
+            el.textContent = val.toLocaleString();
+            if(t < 1) requestAnimationFrame(step);
+          }
+          requestAnimationFrame(step);
+        });
+      }
+      animateCounts();
+      setTimeout(animateCounts, 300);
+      setTimeout(animateCounts, 800);
+    })();
+    </script>""", height=0)
+
     # ── Salary toggle ───────────────────────────────────────────────────────
     if show_salary_toggle:
         salary_visible = st.session_state.get("emp_salary_visible", False)
@@ -2099,6 +2425,9 @@ def _render_employees_tab(show_salary_toggle: bool = True):
     else:
         salary_visible = False
         st.caption(f"Showing {len(filtered)} employee{'s' if len(filtered) != 1 else ''}")
+
+    # Load photo URLs for all employees
+    photo_urls = _load_all_photo_urls()
 
     # Avatar palette (cycles through 8 colors)
     _AV_PAL = [
@@ -2172,16 +2501,33 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                     for lbl, fld in _GOV_FIELDS
                 )
 
+                # Avatar — photo or initials
+                _photo = photo_urls.get(emp["id"])
+                if _photo:
+                    avatar_html = (
+                        f"<div style='width:52px;height:52px;border-radius:12px;overflow:hidden;"
+                        f"flex-shrink:0;border:1.5px solid #e7e8e9;'>"
+                        f"<img src='{_photo}' style='width:100%;height:100%;object-fit:cover;' "
+                        f"onerror=\"this.parentElement.innerHTML="
+                        f"'<div style=&quot;width:100%;height:100%;display:flex;align-items:center;"
+                        f"justify-content:center;background:{av_bg};color:{av_fg};"
+                        f"font-size:17px;font-weight:800;&quot;>{initials}</div>';\"></div>"
+                    )
+                else:
+                    avatar_html = (
+                        f"<div style='width:52px;height:52px;border-radius:12px;background:{av_bg};"
+                        f"display:flex;align-items:center;justify-content:center;"
+                        f"font-size:17px;font-weight:800;color:{av_fg};"
+                        f"font-family:\"Plus Jakarta Sans\",system-ui,sans-serif;'>{initials}</div>"
+                    )
+
                 st.markdown(
                     f"<div style='opacity:{opacity};background:#ffffff;border-radius:16px;"
                     f"padding:22px 22px 14px;margin-bottom:4px;"
                     f"box-shadow:0px 20px 40px rgba(45,51,53,0.06);"
                     f"display:flex;flex-direction:column;gap:13px;'>"
                     f"<div style='display:flex;justify-content:space-between;align-items:flex-start;'>"
-                    f"<div style='width:52px;height:52px;border-radius:12px;background:{av_bg};"
-                    f"display:flex;align-items:center;justify-content:center;"
-                    f"font-size:17px;font-weight:800;color:{av_fg};"
-                    f"font-family:\"Plus Jakarta Sans\",system-ui,sans-serif;'>{initials}</div>"
+                    f"{avatar_html}"
                     f"<div style='background:#ebeef0;padding:3px 10px;border-radius:9999px;"
                     f"font-size:10px;font-weight:700;text-transform:uppercase;"
                     f"letter-spacing:0.07em;color:#424753;max-width:120px;"

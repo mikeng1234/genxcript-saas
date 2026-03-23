@@ -193,20 +193,104 @@ st.sidebar.divider()
 
 # ---- Employee portal (limited view) ----
 if is_employee_role():
-    PAGES = ["My Portal"]
+    # ── Hide Streamlit sidebar + header for employee portal ──────────────
+    _emp_user_email = st.session_state.get("user_email", "")
+    _emp_display = _emp_user_email.split("@")[0].title() if _emp_user_email else "Employee"
+    _emp_company = st.session_state.get("company_name", "")
 
-    if "nav_page" not in st.session_state:
-        st.session_state.nav_page = "My Portal"
+    # Hidden sidebar button for sign-out (JS will click it)
+    with st.sidebar:
+        if st.button("Sign Out", key="emp_signout_btn"):
+            logout()
+            components.html('<script>window.parent.location.reload(true);</script>', height=0)
+            st.stop()
 
-    page = st.sidebar.radio("Navigate", options=PAGES, key="nav_page")
+    # Inject CSS to hide sidebar + header, and add topbar
+    components.html(f"""<script>
+    (function(){{
+      var d = window.parent.document;
 
-    st.sidebar.divider()
-    st.sidebar.caption("GenXcript Payroll SaaS v0.1.0")
+      /* Hide sidebar + header */
+      var styleId = 'gxp-emp-portal-css';
+      if(!d.getElementById(styleId)){{
+        var s = d.createElement('style');
+        s.id = styleId;
+        s.textContent = [
+          '[data-testid="stSidebar"]{{',
+          '  position:fixed!important;left:-9999px!important;',
+          '  width:1px!important;height:1px!important;',
+          '  overflow:hidden!important;pointer-events:none!important;',
+          '  opacity:0!important;z-index:-1!important;',
+          '}}',
+          '[data-testid="stSidebarCollapseButton"],',
+          '[data-testid="collapsedControl"]{{display:none!important;}}',
+          '[data-testid="stHeader"]{{display:none!important;}}',
+          '[data-testid="stDecoration"]{{display:none!important;}}',
+          '[data-testid="stAppViewContainer"]{{padding-left:0!important;}}',
+          'section[data-testid="stMain"]{{margin-left:0!important;padding-left:0!important;}}',
+          /* Push content down for topbar */
+          'section[data-testid="stMain"] .stMainBlockContainer{{padding-top:56px!important;}}',
+        ].join('');
+        d.head.appendChild(s);
+      }}
 
-    if st.sidebar.button("Sign Out", width="stretch"):
-        logout()
-        components.html('<script>window.parent.location.reload(true);</script>', height=0)
-        st.stop()
+      /* Build topbar */
+      var topbarId = 'gxp-emp-topbar';
+      var existing = d.getElementById(topbarId);
+      if(existing) existing.remove();
+
+      var bar = d.createElement('div');
+      bar.id = topbarId;
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:48px;'
+        +'background:#ffffff;border-bottom:1px solid #e7e8e9;z-index:999;'
+        +'display:flex;align-items:center;justify-content:space-between;'
+        +'padding:0 20px;font-family:Plus Jakarta Sans,system-ui,sans-serif;'
+        +'box-shadow:0 1px 4px rgba(0,0,0,0.04);';
+
+      /* Left: company name */
+      var left = d.createElement('div');
+      left.style.cssText = 'display:flex;align-items:center;gap:8px;';
+      left.innerHTML = '<span style="font-size:14px;font-weight:800;color:#191c1d;">'
+        + '{_emp_company}'.replace(/</g,'&lt;') + '</span>'
+        + '<span style="font-size:10px;font-weight:600;color:#727784;'
+        + 'background:#f3f4f5;padding:2px 8px;border-radius:9999px;">Employee Portal</span>';
+
+      /* Right: user chip + sign out */
+      var right = d.createElement('div');
+      right.style.cssText = 'display:flex;align-items:center;gap:10px;';
+
+      var chip = d.createElement('span');
+      chip.style.cssText = 'font-size:12px;font-weight:600;color:#005bc1;'
+        +'background:#d8e2ff;padding:4px 12px;border-radius:9999px;';
+      chip.textContent = '{_emp_display}'.replace(/</g,'&lt;');
+
+      var signout = d.createElement('button');
+      signout.style.cssText = 'font-size:11px;font-weight:600;color:#727784;'
+        +'background:none;border:1px solid #e7e8e9;border-radius:9999px;'
+        +'padding:4px 12px;cursor:pointer;transition:all 0.15s;'
+        +'font-family:Plus Jakarta Sans,system-ui,sans-serif;';
+      signout.textContent = 'Sign Out';
+      signout.onmouseenter = function(){{ this.style.color='#dc2626';this.style.borderColor='#fca5a5';this.style.background='#fef2f2'; }};
+      signout.onmouseleave = function(){{ this.style.color='#727784';this.style.borderColor='#e7e8e9';this.style.background='none'; }};
+      signout.onclick = function(){{
+        var btns = d.querySelectorAll('[data-testid="stSidebar"] [data-testid="stButton"] button');
+        for(var i=0;i<btns.length;i++){{
+          if(btns[i].textContent.indexOf('Sign Out')!==-1){{ btns[i].click(); return; }}
+        }}
+      }};
+
+      right.appendChild(chip);
+      right.appendChild(signout);
+      bar.appendChild(left);
+      bar.appendChild(right);
+
+      var appView = d.querySelector('[data-testid="stAppViewContainer"]');
+      if(appView) appView.parentElement.insertBefore(bar, appView);
+      else d.body.appendChild(bar);
+
+      /* Checkbox highlight fix handled by CSS in styles.py */
+    }})();
+    </script>""", height=0)
 
     from app.pages._employee_portal import render as render_portal
     render_portal()
@@ -306,7 +390,7 @@ PAGES = [
     "Employees",
     "Payroll Run",
     "Payroll Comparison",
-    "OT Analytics",
+    "Workforce Analytics",
     "Attendance",
     "Government Reports",
     "Calendar",
@@ -367,7 +451,7 @@ _NAV_ICONS = {
     "Employees":          "account-group",
     "Payroll Run":        "cash-multiple",
     "Payroll Comparison": "chart-box-outline",
-    "OT Analytics":       "fire",
+    "Workforce Analytics": "chart-bar",
     "Attendance":         "clock-outline",
     "Government Reports": "bank",
     "Calendar":           "calendar-month",
@@ -377,7 +461,7 @@ _NAV_ICONS = {
 _NAV_GROUPS = [
     ("Overview",    ["Dashboard"]),
     ("People",      ["Employees", "Attendance", "Calendar"]),
-    ("Payroll",     ["Payroll Run", "Payroll Comparison", "OT Analytics"]),
+    ("Payroll",     ["Payroll Run", "Payroll Comparison", "Workforce Analytics"]),
     ("Compliance",  ["Government Reports"]),
     ("Settings",    ["Company Setup", "Preferences"]),
 ]
@@ -736,6 +820,15 @@ components.html(f"""
         'transition:opacity 0.18s,max-width 0.18s;'+
         (isC?'opacity:0;max-width:0;':'opacity:1;max-width:140px;');
       coName.textContent=curCoName||'Select Company';
+      if(CUR_CO_ID===defaultCoId){{
+        var defBadge=d.createElement('span');
+        defBadge.style.cssText=
+          'font-size:8px;font-weight:700;background:#fef3c7;color:#92400e;'+
+          'padding:1px 5px;border-radius:9999px;margin-left:4px;'+
+          'text-transform:uppercase;letter-spacing:0.04em;vertical-align:middle;';
+        defBadge.textContent='DEFAULT';
+        coName.appendChild(defBadge);
+      }}
 
       var coArrow=d.createElement('span');
       coArrow.className='ln-lbl';
@@ -760,9 +853,13 @@ components.html(f"""
         'box-shadow:0 -4px 24px rgba(45,51,53,0.12);'+
         'overflow:hidden;z-index:999999;';
 
+      var LS_DEFAULT_CO='gxp-default-co';
+      var defaultCoId=localStorage.getItem(LS_DEFAULT_CO)||'';
+
       CO_LIST.forEach(function(co){{
         var row=d.createElement('button');
         var isActive=co.id===CUR_CO_ID;
+        var isDefault=co.id===defaultCoId;
         row.style.cssText=
           'display:flex;align-items:center;gap:8px;width:100%;'+
           'padding:9px 12px;background:'+(isActive?ab:'transparent')+';'+
@@ -779,7 +876,45 @@ components.html(f"""
         rName.style.cssText='flex:1;overflow:hidden;text-overflow:ellipsis;';
         rName.textContent=co.name;
 
-        row.appendChild(rIcon); row.appendChild(rName);
+        /* ── Default star button ── */
+        var star=d.createElement('span');
+        star.className='mdi '+(isDefault?'mdi-star':'mdi-star-outline');
+        star.title=isDefault?'Default company':'Set as default';
+        star.style.cssText=
+          'font-size:16px;flex-shrink:0;cursor:pointer;'+
+          'color:'+(isDefault?'#f59e0b':'#9ca3af')+';'+
+          'transition:color 0.15s,transform 0.15s;';
+        star.onmouseenter=function(){{this.style.transform='scale(1.2)';this.style.color='#f59e0b';}};
+        star.onmouseleave=function(){{
+          var def=localStorage.getItem(LS_DEFAULT_CO)||'';
+          this.style.transform='';
+          this.style.color=(co.id===def)?'#f59e0b':'#9ca3af';
+        }};
+        star.onclick=function(e){{
+          e.stopPropagation();
+          var cur=localStorage.getItem(LS_DEFAULT_CO)||'';
+          if(cur===co.id){{
+            /* Unset default */
+            localStorage.removeItem(LS_DEFAULT_CO);
+            this.className='mdi mdi-star-outline';
+            this.style.color='#9ca3af';
+            this.title='Set as default';
+          }} else {{
+            /* Set as default — update all stars */
+            localStorage.setItem(LS_DEFAULT_CO,co.id);
+            var allStars=coPanel.querySelectorAll('.mdi-star,.mdi-star-outline');
+            allStars.forEach(function(s){{
+              s.className='mdi mdi-star-outline';
+              s.style.color='#9ca3af';
+              s.title='Set as default';
+            }});
+            this.className='mdi mdi-star';
+            this.style.color='#f59e0b';
+            this.title='Default company';
+          }}
+        }};
+
+        row.appendChild(rIcon); row.appendChild(rName); row.appendChild(star);
         if(!isActive){{
           row.onmouseenter=function(){{this.style.background=sf2;}};
           row.onmouseleave=function(){{this.style.background='transparent';}};
@@ -813,6 +948,19 @@ components.html(f"""
       coWrap.appendChild(coTrig);
       coWrap.appendChild(coPanel);
       foot.appendChild(coWrap);
+
+      /* ── Auto-switch to default company on first load ── */
+      if(defaultCoId && defaultCoId!==CUR_CO_ID){{
+        var autoSwitchKey='gxp-auto-switched';
+        if(!sessionStorage.getItem(autoSwitchKey)){{
+          /* Only auto-switch once per browser session to avoid loops */
+          var hasDefault=CO_LIST.some(function(c){{return c.id===defaultCoId;}});
+          if(hasDefault){{
+            sessionStorage.setItem(autoSwitchKey,'1');
+            setTimeout(function(){{clickNav(COSW_PFX+defaultCoId);}},600);
+          }}
+        }}
+      }}
     }}
 
     // My Account + Sign Out moved to topbar — no footer buttons here
@@ -836,21 +984,8 @@ components.html(f"""
   // "row-widget stCheckbox" classes on the wrapper div cause a blue highlight
   // when checked. The element is identified by data-testid, not its class,
   // so removing the class attribute entirely is safe and kills the highlight.
-  function fixCheckboxes(){{
-    var boxes=d.querySelectorAll('[data-testid="stCheckbox"]');
-    for(var i=0;i<boxes.length;i++){{
-      boxes[i].removeAttribute('class');
-    }}
-  }}
-  function attachCheckboxFix(){{
-    fixCheckboxes();
-    // Re-run whenever Streamlit rerenders (new nodes added to body)
-    new MutationObserver(function(ml){{
-      for(var i=0;i<ml.length;i++){{
-        if(ml[i].addedNodes.length) {{ fixCheckboxes(); break; }}
-      }}
-    }}).observe(d.body,{{childList:true,subtree:true}});
-  }}
+  /* Checkbox highlight fix handled by CSS in styles.py */
+  function attachCheckboxFix(){{}}
 
   // ── Topbar ────────────────────────────────────────────────────────────────
   function buildTopbar(){{
@@ -1078,7 +1213,7 @@ def _render_page(page: str) -> None:
         from app.pages._payroll_comparison import render as render_comparison
         render_comparison()
 
-    elif page == "OT Analytics":
+    elif page == "Workforce Analytics":
         from app.pages._ot_heatmap import render as render_ot
         render_ot()
 

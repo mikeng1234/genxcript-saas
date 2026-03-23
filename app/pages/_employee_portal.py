@@ -68,9 +68,17 @@ def _p(centavos: int) -> float:
 # ============================================================
 
 def _load_company() -> dict:
-    db = get_db()
-    result = db.table("companies").select("*").eq("id", get_company_id()).execute()
-    return result.data[0] if result.data else {}
+    import time
+    for attempt in range(3):
+        try:
+            db = get_db()
+            result = db.table("companies").select("*").eq("id", get_company_id()).execute()
+            return result.data[0] if result.data else {}
+        except Exception:
+            if attempt < 2:
+                time.sleep(1)
+            else:
+                raise
 
 
 _ANNUAL_FIELDS = [
@@ -566,38 +574,49 @@ def _render_profile_form(emp: dict, profile: dict | None):
 
         # --- Permanent Address ---
         st.markdown("#### Permanent Address")
-        perm_same = st.checkbox("Same as present address", value=p.get("perm_address_same", True))
+        if "perm_copy_cb" not in st.session_state:
+            st.session_state["perm_copy_cb"] = bool(p.get("perm_address_same", False))
+        perm_same = st.checkbox("Copy from present address", key="perm_copy_cb")
 
-        perm_street = perm_barangay = perm_city = perm_province = perm_zip = ""
-        if not perm_same:
-            col1, col2 = st.columns(2)
-            with col1:
-                perm_street = st.text_input(
-                    "House No. / Street / Subdivision",
-                    value=p.get("perm_address_street", "") or "",
-                    key="perm_str",
-                )
-            with col2:
-                perm_barangay = st.text_input(
-                    "Barangay",
-                    value=p.get("perm_address_barangay", "") or "",
-                    key="perm_brgy",
-                )
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                perm_city = st.text_input(
-                    "City / Municipality",
-                    value=p.get("perm_address_city", "") or "",
-                    key="perm_city",
-                )
-            with col2:
-                perm_prov_idx = (
-                    PROVINCES.index(p["perm_address_province"])
-                    if p.get("perm_address_province") in PROVINCES else 0
-                )
-                perm_province = st.selectbox("Province", PROVINCES, index=perm_prov_idx, key="prov_perm")
-            with col3:
-                perm_zip = st.text_input("ZIP Code", value=p.get("perm_address_zip", "") or "", key="perm_zip")
+        # When checked, pre-fill with present address values; user can still edit
+        _pv_street = present_street if perm_same else (p.get("perm_address_street", "") or "")
+        _pv_brgy   = present_barangay if perm_same else (p.get("perm_address_barangay", "") or "")
+        _pv_city   = present_city if perm_same else (p.get("perm_address_city", "") or "")
+        _pv_zip    = present_zip if perm_same else (p.get("perm_address_zip", "") or "")
+        if perm_same:
+            _pv_prov_idx = PROVINCES.index(present_province) if present_province in PROVINCES else 0
+        else:
+            _pv_prov_idx = (
+                PROVINCES.index(p["perm_address_province"])
+                if p.get("perm_address_province") in PROVINCES else 0
+            )
+
+        # Use different keys when checkbox toggles so values refresh properly
+        _pk = "_cp" if perm_same else "_ed"
+        col1, col2 = st.columns(2)
+        with col1:
+            perm_street = st.text_input(
+                "House No. / Street / Subdivision",
+                value=_pv_street,
+                key=f"perm_str{_pk}",
+            )
+        with col2:
+            perm_barangay = st.text_input(
+                "Barangay",
+                value=_pv_brgy,
+                key=f"perm_brgy{_pk}",
+            )
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            perm_city = st.text_input(
+                "City / Municipality",
+                value=_pv_city,
+                key=f"perm_city{_pk}",
+            )
+        with col2:
+            perm_province = st.selectbox("Province", PROVINCES, index=_pv_prov_idx, key=f"prov_perm{_pk}")
+        with col3:
+            perm_zip = st.text_input("ZIP Code", value=_pv_zip, key=f"perm_zip{_pk}")
 
         # --- Emergency Contact ---
         st.markdown("#### Emergency Contact *")
@@ -1578,6 +1597,7 @@ def _render_clock_widget(
 
     # ── Location section: EXIF GPS → auto-detect → fallback to manual pick ─
     st.markdown("**Step 2 — Verify your location**")
+    company_locations = locations  # office locations for map display
 
     # Session keys
     _geo_retry_key  = f"{key_prefix}_geo_retry_{action}"
@@ -1593,12 +1613,7 @@ def _render_clock_widget(
             f"**Location from photo** — GPS embedded in the image "
             f"({_lat:.6f}, {_lng:.6f})"
         )
-        import pandas as _pd
-        st.map(
-            _pd.DataFrame({"lat": [_lat], "lon": [_lng]}),
-            zoom=15,
-            use_container_width=True,
-        )
+        _render_clockin_map(_lat, _lng, company_locations)
         st.caption(
             "Your phone's camera embedded GPS in this photo. "
             "If the pin looks wrong, remove the photo and upload a fresh one taken on-site."
@@ -1618,12 +1633,7 @@ def _render_clock_widget(
             _lat, _lng = loc_data["lat"], loc_data["lng"]
             _acc = loc_data.get("accuracy") or 0
             st.success(f"Location captured automatically — accuracy ±{_acc:.0f} m")
-            import pandas as _pd
-            st.map(
-                _pd.DataFrame({"lat": [_lat], "lon": [_lng]}),
-                zoom=15,
-                use_container_width=True,
-            )
+            _render_clockin_map(_lat, _lng, company_locations)
             st.session_state.pop(_manual_loc_key, None)
 
         else:
@@ -1969,6 +1979,123 @@ def _load_own_time_logs(employee_id: str, start: date, end: date) -> list[dict]:
     ).data or []
 
 
+def _render_clockin_map(emp_lat: float, emp_lng: float, office_locations: list[dict]):
+    """Render Leaflet map showing employee position + office geofences."""
+    import json
+    import streamlit.components.v1 as _stc_map
+
+    offices_json = json.dumps([
+        {
+            "name": loc["name"],
+            "lat": float(loc["latitude"]),
+            "lng": float(loc["longitude"]),
+            "radius": int(loc.get("radius_m", 100)),
+        }
+        for loc in office_locations
+    ])
+
+    # Check if employee is within any geofence
+    nearest = None
+    min_dist = float("inf")
+    for loc in office_locations:
+        d = haversine_distance_m(emp_lat, emp_lng, float(loc["latitude"]), float(loc["longitude"]))
+        if d < min_dist:
+            min_dist = d
+            nearest = loc
+
+    in_range = min_dist <= int(nearest.get("radius_m", 100)) if nearest else False
+    status_color = "#16a34a" if in_range else "#dc2626"
+    status_text = "Inside geofence" if in_range else f"Outside — {min_dist:.0f}m from nearest office"
+
+    _stc_map.html(f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body {{ margin:0; padding:0; font-family:'Plus Jakarta Sans',system-ui,sans-serif; }}
+  #map {{ width:100%; height:100%; border-radius:12px; }}
+  .status-badge {{
+    position:absolute; bottom:10px; left:10px; z-index:999;
+    background:white; padding:6px 12px; border-radius:9999px;
+    font-size:11px; font-weight:700; box-shadow:0 2px 8px rgba(0,0,0,0.15);
+    display:flex; align-items:center; gap:6px;
+  }}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+var empLat = {emp_lat}, empLng = {emp_lng};
+var offices = {offices_json};
+var inRange = {'true' if in_range else 'false'};
+
+var map = L.map('map', {{
+  center: [empLat, empLng],
+  zoom: 16,
+  zoomControl: true,
+}});
+
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+  attribution: '&copy; OSM',
+  maxZoom: 19,
+}}).addTo(map);
+
+// Employee position — pulsing blue dot
+var empIcon = L.divIcon({{
+  className: '',
+  html: '<div style="width:16px;height:16px;border-radius:50%;background:#005bc1;'
+    +'border:3px solid white;box-shadow:0 0 0 3px rgba(0,91,193,0.3),0 0 12px rgba(0,91,193,0.4);'
+    +'animation:pulse 2s infinite;"></div>'
+    +'<style>@keyframes pulse{{0%,100%{{box-shadow:0 0 0 3px rgba(0,91,193,0.3)}}50%{{box-shadow:0 0 0 8px rgba(0,91,193,0.1)}}}}</style>',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+}});
+L.marker([empLat, empLng], {{ icon: empIcon }}).addTo(map)
+  .bindPopup('<b>Your Location</b><br>' + empLat.toFixed(6) + ', ' + empLng.toFixed(6));
+
+// Office locations + geofence circles
+var bounds = [[empLat, empLng]];
+offices.forEach(function(loc) {{
+  L.circle([loc.lat, loc.lng], {{
+    radius: loc.radius,
+    color: '#005bc1',
+    fillColor: '#005bc1',
+    fillOpacity: 0.08,
+    weight: 2,
+  }}).addTo(map);
+
+  var officeIcon = L.divIcon({{
+    className: '',
+    html: '<div style="width:10px;height:10px;border-radius:50%;background:#005bc1;'
+      +'border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  }});
+  L.marker([loc.lat, loc.lng], {{ icon: officeIcon }}).addTo(map)
+    .bindPopup('<b>' + loc.name + '</b><br>Radius: ' + loc.radius + 'm');
+
+  bounds.push([loc.lat, loc.lng]);
+}});
+
+if(bounds.length > 1) map.fitBounds(bounds, {{ padding: [30, 30], maxZoom: 17 }});
+
+// Status badge
+var badge = L.control({{ position: 'bottomleft' }});
+badge.onAdd = function() {{
+  var div = L.DomUtil.create('div', 'status-badge');
+  var dotColor = inRange ? '#16a34a' : '#dc2626';
+  div.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';display:inline-block;"></span>'
+    + '<span style="color:' + dotColor + ';">{status_text}</span>';
+  return div;
+}};
+badge.addTo(map);
+</script>
+</body>
+</html>""", height=250, scrolling=False)
+
+
 def _load_active_locations() -> list[dict]:
     return (
         get_db().table("company_locations")
@@ -2283,6 +2410,306 @@ def _render_employee_dtr(emp: dict, company: dict):
 # Section 5: Documents Tab
 # ============================================================
 
+def _render_people_search(emp: dict, company: dict):
+    """Employee-facing people directory — search coworkers by name, position, or department."""
+    from app.db_helper import get_db, get_company_id
+
+    st.markdown("##### People Directory")
+    st.caption("Find colleagues by name, position, or department.")
+
+    db  = get_db()
+    cid = get_company_id()
+
+    # Load active employees (includes reports_to for org chart)
+    try:
+        coworkers = (
+            db.table("employees")
+            .select("id, employee_no, first_name, last_name, position, email, reports_to")
+            .eq("company_id", cid)
+            .eq("is_active", True)
+            .order("last_name")
+            .execute()
+            .data or []
+        )
+        # Load profiles for department + photo
+        profiles = (
+            db.table("employee_profiles")
+            .select("employee_id, department, department_id, photo_url, mobile_no, work_phone")
+            .eq("company_id", cid)
+            .execute()
+            .data or []
+        )
+        prof_map = {p["employee_id"]: p for p in profiles}
+
+        # Load departments (name + color)
+        depts = (
+            db.table("departments")
+            .select("id, name, color")
+            .eq("company_id", cid)
+            .execute()
+            .data or []
+        )
+        dept_name_map = {d["id"]: d["name"] for d in depts}
+        dept_color_map = {d["id"]: (d.get("color") or "#6366f1") for d in depts}
+    except Exception as ex:
+        st.error(f"Could not load directory: {ex}")
+        return
+
+    if not coworkers:
+        st.info("No colleagues found.", icon="\u2139\ufe0f")
+        return
+
+    # Enrich employees
+    import json as _json
+    import streamlit.components.v1 as _stc_people
+
+    emp_ids_set = {cw["id"] for cw in coworkers}
+    org_nodes = []
+    for cw in coworkers:
+        prof = prof_map.get(cw["id"], {})
+        dept_id = prof.get("department_id")
+        dept = dept_name_map.get(dept_id, "") if dept_id else (prof.get("department") or "")
+        color = dept_color_map.get(dept_id, "#6366f1") if dept_id else "#6366f1"
+        parent = cw.get("reports_to")
+        if parent and parent not in emp_ids_set:
+            parent = None
+        name = f"{cw['first_name']} {cw['last_name']}"
+        initials_v = ((cw["first_name"] or "?")[0] + (cw["last_name"] or "?")[0]).upper()
+        org_nodes.append({
+            "id": cw["id"],
+            "parentId": parent or "",
+            "name": name,
+            "position": cw.get("position") or "",
+            "empNo": cw.get("employee_no") or "",
+            "color": color,
+            "dept": dept,
+            "initials": initials_v,
+            "photo": prof.get("photo_url") or "",
+            "email": cw.get("email") or "",
+            "phone": prof.get("work_phone") or prof.get("mobile_no") or "",
+            "isMe": cw["id"] == emp["id"],
+        })
+
+    org_data_json = _json.dumps(org_nodes)
+    org_height = max(500, min(700, len(coworkers) * 24 + 160))
+
+    # Single iframe with org chart + built-in search (instant, no Streamlit rerun)
+    _stc_people.html(f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-org-chart@3.1.1/build/d3-org-chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-flextree@2.1.2/build/d3-flextree.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+html,body{{
+  background:#f8f9fa;font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+  width:100%;height:{org_height}px;margin:0;padding:0;overflow:hidden;
+}}
+#search-bar{{
+  position:absolute;top:8px;left:8px;z-index:10;
+  display:flex;gap:6px;align-items:center;
+}}
+#search-input{{
+  font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+  font-size:12px;padding:7px 14px;
+  border:1.5px solid #c2c6d5;border-radius:9999px;
+  outline:none;width:220px;
+  background:#fff;color:#191c1d;
+  transition:border-color 0.15s;
+}}
+#search-input:focus{{ border-color:#005bc1; }}
+#search-input::placeholder{{ color:#727784; }}
+#search-results{{
+  position:absolute;top:38px;left:8px;z-index:11;
+  background:#fff;border:1px solid #e7e8e9;border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.12);
+  max-height:220px;overflow-y:auto;
+  display:none;min-width:280px;
+}}
+.sr-item{{
+  padding:10px 14px;cursor:pointer;font-size:12px;
+  border-bottom:1px solid #f3f4f5;
+  transition:background 0.1s;
+  display:flex;align-items:center;gap:10px;
+}}
+.sr-item:hover{{ background:rgba(0,91,193,0.06); }}
+.sr-item:last-child{{ border-bottom:none; }}
+.sr-av{{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:10px;font-weight:700;flex-shrink:0;
+}}
+.sr-info{{ flex:1;min-width:0; }}
+.sr-name{{ font-weight:700;color:#191c1d;font-size:12px; }}
+.sr-pos{{ font-size:10px;color:#727784;margin-top:1px; }}
+.sr-me{{
+  font-size:8px;font-weight:700;color:#005bc1;
+  background:#d8e2ff;padding:1px 5px;border-radius:9999px;
+  margin-left:4px;vertical-align:middle;
+}}
+/* Detail card shown below search when node is clicked */
+#detail-card{{
+  position:absolute;top:8px;right:8px;z-index:10;
+  background:#fff;border:1px solid #e7e8e9;border-radius:12px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.08);
+  padding:14px 16px;min-width:220px;max-width:280px;
+  display:none;font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+}}
+#chart{{width:100%;height:{org_height}px;}}
+.link path{{ stroke-width:2px !important; }}
+</style>
+</head>
+<body>
+<div id="search-bar">
+  <input id="search-input" type="text" placeholder="Search people..." autocomplete="off">
+</div>
+<div id="search-results"></div>
+<div id="detail-card"></div>
+<div id="chart"></div>
+<script>
+try {{
+var DATA = {org_data_json};
+var colorMap = {{}};
+var nodeMap = {{}};
+DATA.forEach(function(d){{ colorMap[d.id] = d.color; nodeMap[d.id] = d; }});
+
+var chartEl = document.getElementById('chart');
+chartEl.style.width = '100%';
+chartEl.style.height = '{org_height}px';
+
+var chart = new d3.OrgChart()
+  .container('#chart')
+  .data(DATA)
+  .svgHeight({org_height - 10})
+  .svgWidth(chartEl.offsetWidth || 800)
+  .nodeWidth(function(d){{ return 200; }})
+  .nodeHeight(function(d){{ return 94; }})
+  .compactMarginBetween(function(d){{ return 30; }})
+  .compactMarginPair(function(d){{ return 25; }})
+  .neighbourMargin(function(a,b){{ return 25; }})
+  .siblingsMargin(function(d){{ return 20; }})
+  .childrenMargin(function(d){{ return 40; }})
+  .linkUpdate(function(d,i,arr){{
+    var c = colorMap[d.data.id] || '#c2c6d5';
+    d3.select(this).attr('stroke', c).attr('stroke-width', 2).attr('stroke-opacity', 0.6);
+  }})
+  .nodeContent(function(d,i,arr,state){{
+    var n = d.data;
+    var c = n.color || '#6366f1';
+    var borderTint = c + '30';
+    var bgTint = c + '0d';
+    var meBadge = n.isMe ? '<span style="font-size:7px;font-weight:700;color:#005bc1;background:#d8e2ff;padding:1px 4px;border-radius:9999px;margin-left:3px;">YOU</span>' : '';
+    var avHtml = n.photo
+      ? '<div style="width:36px;height:36px;border-radius:50%;overflow:hidden;flex-shrink:0;border:1.5px solid '+borderTint+';">'
+        +'<img src="'+n.photo+'" style="width:100%;height:100%;object-fit:cover;" '
+        +'onerror="this.parentElement.innerHTML=\\'<div style=&quot;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:'+c+';color:#fff;font-size:12px;font-weight:700;&quot;>'+n.initials+'</div>\\'"></div>'
+      : '<div style="width:36px;height:36px;border-radius:50%;background:'+c+';display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0;">'+n.initials+'</div>';
+    return '<div style="font-family:Plus Jakarta Sans,system-ui,sans-serif;background:#fff;border:1.5px solid '+borderTint+';border-top:3px solid '+c+';border-radius:10px;padding:10px;width:'+d.width+'px;height:'+d.height+'px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.06);cursor:pointer;">'
+      +avHtml
+      +'<div style="flex:1;min-width:0;overflow:hidden;">'
+      +'<div style="font-size:11px;font-weight:700;color:#191c1d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+n.name+meBadge+'</div>'
+      +'<div style="font-size:9px;color:#424753;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+n.position+'</div>'
+      +'<div style="display:flex;gap:4px;align-items:center;margin-top:3px;">'
+      +(n.dept ? '<span style="font-size:7px;font-weight:700;color:'+c+';background:'+bgTint+';padding:1px 5px;border-radius:9999px;text-transform:uppercase;letter-spacing:0.03em;">'+n.dept+'</span>' : '')
+      +'<span style="font-size:8px;color:#727784;">'+n.empNo+'</span>'
+      +'</div>'
+      +'</div></div>';
+  }})
+  .onNodeClick(function(nodeId){{
+    var n = nodeMap[nodeId];
+    if(!n) return;
+    showDetail(n);
+  }})
+  .render()
+  .fit();
+
+/* ── Detail card on node click ─────────────────────────────── */
+var detailCard = document.getElementById('detail-card');
+function showDetail(n){{
+  var c = n.color || '#6366f1';
+  var meBadge = n.isMe ? ' <span style="font-size:8px;font-weight:700;color:#005bc1;background:#d8e2ff;padding:1px 5px;border-radius:9999px;">YOU</span>' : '';
+  var avHtml = n.photo
+    ? '<img src="'+n.photo+'" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid '+c+'30;" onerror="this.outerHTML=\\'<div style=&quot;width:48px;height:48px;border-radius:50%;background:'+c+';display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:700;&quot;>'+n.initials+'</div>\\'">'
+    : '<div style="width:48px;height:48px;border-radius:50%;background:'+c+';display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:700;">'+n.initials+'</div>';
+  var contactHtml = '';
+  if(n.email) contactHtml += '<div style="font-size:10px;color:#005bc1;background:#dbeafe;padding:2px 8px;border-radius:9999px;font-weight:600;display:inline-block;">'+n.email+'</div> ';
+  if(n.phone) contactHtml += '<div style="font-size:10px;color:#059669;background:#d1fae5;padding:2px 8px;border-radius:9999px;font-weight:600;display:inline-block;">'+n.phone+'</div>';
+
+  detailCard.innerHTML =
+    '<div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">'
+    +avHtml
+    +'<div>'
+    +'<div style="font-size:14px;font-weight:700;color:#191c1d;">'+n.name+meBadge+'</div>'
+    +'<div style="font-size:11px;color:#424753;">'+n.position+'</div>'
+    +'</div></div>'
+    +'<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">'
+    +'<span style="font-size:9px;font-weight:700;color:'+c+';background:'+c+'0d;padding:2px 8px;border-radius:9999px;text-transform:uppercase;">'+n.dept+'</span>'
+    +'<span style="font-size:10px;color:#727784;">'+n.empNo+'</span>'
+    +'</div>'
+    +(contactHtml ? '<div style="display:flex;gap:4px;flex-wrap:wrap;">'+contactHtml+'</div>' : '');
+  detailCard.style.display = 'block';
+}}
+/* Close detail card when clicking chart background */
+chartEl.addEventListener('click', function(e){{
+  if(e.target === chartEl || e.target.tagName === 'svg') detailCard.style.display = 'none';
+}});
+
+/* ── Search functionality ─────────────────────────────────── */
+var searchInput = document.getElementById('search-input');
+var searchResults = document.getElementById('search-results');
+
+searchInput.addEventListener('input', function(){{
+  var q = this.value.trim().toLowerCase();
+  searchResults.innerHTML = '';
+  if(q.length < 1){{ searchResults.style.display='none'; return; }}
+
+  var matches = DATA.filter(function(d){{
+    return d.name.toLowerCase().indexOf(q) !== -1
+        || d.position.toLowerCase().indexOf(q) !== -1
+        || d.dept.toLowerCase().indexOf(q) !== -1
+        || d.empNo.toLowerCase().indexOf(q) !== -1;
+  }}).slice(0, 10);
+
+  if(!matches.length){{ searchResults.style.display='none'; return; }}
+
+  matches.forEach(function(m){{
+    var div = document.createElement('div');
+    div.className = 'sr-item';
+    var meBadge = m.isMe ? '<span class="sr-me">YOU</span>' : '';
+    div.innerHTML =
+      '<div class="sr-av" style="background:'+m.color+';">'+m.initials+'</div>'
+      +'<div class="sr-info">'
+      +'<div class="sr-name">'+m.name+meBadge+'</div>'
+      +'<div class="sr-pos">'+m.position+' &middot; '+m.dept+' &middot; '+m.empNo+'</div>'
+      +'</div>';
+    div.onclick = function(){{
+      chart.setCentered(m.id).render();
+      setTimeout(function(){{
+        chart.setHighlighted(m.id).render();
+        setTimeout(function(){{ chart.clearHighlighting(); }}, 5000);
+      }}, 400);
+      searchResults.style.display='none';
+      searchInput.value = m.name;
+      showDetail(m);
+    }};
+    searchResults.appendChild(div);
+  }});
+  searchResults.style.display='block';
+}});
+
+document.addEventListener('click', function(e){{
+  if(!searchInput.contains(e.target) && !searchResults.contains(e.target)){{
+    searchResults.style.display='none';
+  }}
+}});
+
+}} catch(e) {{ console.error('People OrgChart error:', e); }}
+</script>
+</body></html>
+""", height=org_height, scrolling=True)
+
+
 def _render_documents(emp: dict, company: dict):
     st.markdown("##### Available Documents")
     st.caption(
@@ -2400,8 +2827,8 @@ def render():
     _render_hero(emp, company)
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    tab_dash, tab_profile, tab_payslips, tab_leave, tab_docs, tab_prefs = st.tabs([
-        "Dashboard", "My Profile", "My Payslips", "My Time & Leave", "My Documents", "Preferences",
+    tab_dash, tab_profile, tab_payslips, tab_leave, tab_docs, tab_people, tab_prefs = st.tabs([
+        "Dashboard", "My Profile", "My Payslips", "My Time & Leave", "My Documents", "People", "Preferences",
     ])
 
     with tab_dash:
@@ -2419,6 +2846,9 @@ def render():
 
     with tab_docs:
         _render_documents(emp, company)
+
+    with tab_people:
+        _render_people_search(emp, company)
 
     with tab_prefs:
         from app.pages._preferences import render as render_preferences

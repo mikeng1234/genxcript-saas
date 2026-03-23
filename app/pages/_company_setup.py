@@ -1183,6 +1183,108 @@ def _render_schedules_tab():
         st.divider()
 
 
+def _render_locations_map(locations: list[dict]):
+    """Render a Leaflet.js map showing all office locations with geofence circles."""
+    import json
+
+    active_locs = [loc for loc in locations if loc.get("is_active", True)]
+    all_locs = locations
+
+    if not all_locs:
+        return
+
+    # Center map on the average of all locations
+    avg_lat = sum(float(loc["latitude"]) for loc in all_locs) / len(all_locs)
+    avg_lng = sum(float(loc["longitude"]) for loc in all_locs) / len(all_locs)
+
+    markers_json = json.dumps([
+        {
+            "name": loc["name"],
+            "lat": float(loc["latitude"]),
+            "lng": float(loc["longitude"]),
+            "radius": int(loc.get("radius_m", 100)),
+            "address": loc.get("address") or "",
+            "active": bool(loc.get("is_active", True)),
+        }
+        for loc in all_locs
+    ])
+
+    components.html(f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body {{ margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+    font-family:'Plus Jakarta Sans',system-ui,sans-serif; }}
+  #map {{ width:100%; height:100%; border-radius:12px; }}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+var locations = {markers_json};
+var map = L.map('map', {{
+  center: [{avg_lat}, {avg_lng}],
+  zoom: locations.length === 1 ? 16 : 13,
+  zoomControl: true,
+  attributionControl: true,
+}});
+
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+  attribution: '&copy; OpenStreetMap contributors',
+  maxZoom: 19,
+}}).addTo(map);
+
+var bounds = [];
+locations.forEach(function(loc) {{
+  var color = loc.active ? '#005bc1' : '#9ca3af';
+  var fillColor = loc.active ? '#005bc1' : '#d1d5db';
+
+  // Geofence circle
+  L.circle([loc.lat, loc.lng], {{
+    radius: loc.radius,
+    color: color,
+    fillColor: fillColor,
+    fillOpacity: 0.12,
+    weight: 2,
+    dashArray: loc.active ? null : '5,5',
+  }}).addTo(map);
+
+  // Marker
+  var marker = L.circleMarker([loc.lat, loc.lng], {{
+    radius: 8,
+    color: '#fff',
+    fillColor: color,
+    fillOpacity: 1,
+    weight: 2,
+  }}).addTo(map);
+
+  // Popup
+  var popup = '<div style="font-family:Plus Jakarta Sans,system-ui,sans-serif;min-width:160px;">'
+    + '<div style="font-size:13px;font-weight:700;color:#191c1d;">' + loc.name + '</div>'
+    + (loc.address ? '<div style="font-size:11px;color:#727784;margin-top:2px;">' + loc.address + '</div>' : '')
+    + '<div style="font-size:10px;color:#424753;margin-top:6px;">'
+    + '<b>Radius:</b> ' + loc.radius + 'm &nbsp; '
+    + '<b>Status:</b> <span style="color:' + (loc.active ? '#16a34a' : '#dc2626') + ';">'
+    + (loc.active ? 'Active' : 'Inactive') + '</span></div>'
+    + '<div style="font-size:9px;color:#9ca3af;margin-top:4px;">'
+    + loc.lat.toFixed(6) + ', ' + loc.lng.toFixed(6) + '</div>'
+    + '</div>';
+  marker.bindPopup(popup);
+
+  bounds.push([loc.lat, loc.lng]);
+}});
+
+if(bounds.length > 1) {{
+  map.fitBounds(bounds, {{ padding: [40, 40] }});
+}}
+</script>
+</body>
+</html>""", height=350, scrolling=False)
+
+
 def _render_locations_tab():
     st.subheader("Office Locations & Geofencing")
     st.caption(
@@ -1223,6 +1325,11 @@ def _render_locations_tab():
             "active location is configured."
         )
         return
+
+    # ── Leaflet Map showing all locations ─────────────────────────────────
+    _render_locations_map(locations)
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
     hdr = st.columns([2.5, 3, 1.2, 1.2, 1.2, 1.8])
     for col, lbl in zip(hdr, ["Name", "Address", "Latitude", "Longitude", "Radius", "Actions"]):
@@ -1371,7 +1478,7 @@ def _build_dept_tree(departments: list[dict]) -> list[dict]:
 # ============================================================
 
 def _render_org_tree_component(departments: list[dict]) -> None:
-    """Render a top-down org chart based on employee manager_id relationships."""
+    """Render an interactive org chart using bumbeishvili/d3-org-chart."""
     import json
 
     # ── Load employees ───────────────────────────────────────
@@ -1381,303 +1488,305 @@ def _render_org_tree_component(departments: list[dict]) -> None:
 
         emps = (
             db.table("employees")
-            .select("id, employee_no, first_name, last_name, position, manager_id")
+            .select("id, employee_no, first_name, last_name, position, reports_to")
             .eq("company_id", cid)
             .eq("is_active", True)
             .execute()
             .data or []
         )
 
+        if not emps:
+            st.info("No active employees found.", icon="\u2139\ufe0f")
+            return
+
         profiles = (
             db.table("employee_profiles")
-            .select("employee_id, department_id")
+            .select("employee_id, department_id, photo_url, mobile_no")
             .in_("employee_id", [e["id"] for e in emps])
             .execute()
             .data or []
         )
         dept_by_emp = {p["employee_id"]: p.get("department_id") for p in profiles}
+        photo_by_emp = {p["employee_id"]: p.get("photo_url") for p in profiles if p.get("photo_url")}
+        phone_by_emp = {p["employee_id"]: p.get("mobile_no") for p in profiles if p.get("mobile_no")}
 
+        dept_map = {d["id"]: d for d in departments}
         dept_colors = {d["id"]: (d.get("color") or "#6366f1") for d in departments}
+        dept_names  = {d["id"]: d.get("name", "Unknown") for d in departments}
 
         emp_ids = {e["id"] for e in emps}
-        emp_map = {e["id"]: e for e in emps}
 
     except Exception:
-        st.info("Could not load employee data for org chart.", icon="⚠️")
+        st.info("Could not load employee data for org chart.", icon="\u26a0\ufe0f")
         return
 
-    # ── Build tree ───────────────────────────────────────────
-    def build_node(emp_id: str) -> dict:
-        e = emp_map[emp_id]
-        children_ids = sorted(
-            [x["id"] for x in emps if x.get("manager_id") == emp_id],
-            key=lambda i: emp_map[i]["last_name"]
-        )
-        return {
-            "id":    emp_id,
-            "name":  f"{e['first_name']} {e['last_name']}",
-            "pos":   e.get("position") or "—",
-            "no":    e.get("employee_no") or "",
-            "color": dept_colors.get(dept_by_emp.get(emp_id), "#6366f1"),
-            "children": [build_node(cid2) for cid2 in children_ids],
+    # ── Build flat data array for d3-org-chart ────────────────
+    # Format: [{id, parentId, name, position, empNo, color, dept, initials}, ...]
+    nodes = []
+    for e in emps:
+        eid = e["id"]
+        parent = e.get("reports_to")
+        # If reports_to points to an inactive/missing employee, treat as root
+        if parent and parent not in emp_ids:
+            parent = None
+
+        dept_id = dept_by_emp.get(eid)
+        color   = dept_colors.get(dept_id, "#6366f1")
+        dept    = dept_names.get(dept_id, "")
+        name    = f"{e['first_name']} {e['last_name']}"
+        initials = "".join(w[0] for w in name.split()[:2]).upper()
+
+        nodes.append({
+            "id":       eid,
+            "parentId": parent or "",
+            "name":     name,
+            "position": e.get("position") or "",
+            "empNo":    e.get("employee_no") or "",
+            "color":    color,
+            "dept":     dept,
+            "initials": initials,
+            "photo":    photo_by_emp.get(eid, ""),
+            "email":    e.get("email") or "",
+            "phone":    phone_by_emp.get(eid, ""),
+        })
+
+    # d3-org-chart needs exactly ONE root (parentId="").
+    # If multiple roots exist, create a virtual company node as parent.
+    roots = [n for n in nodes if n["parentId"] == ""]
+    if len(roots) > 1:
+        company_name = st.session_state.get("company_name", "Company")
+        virtual_root = {
+            "id":       "__company_root__",
+            "parentId": "",
+            "name":     company_name,
+            "position": "Organization",
+            "empNo":    "",
+            "color":    "#005bc1",
+            "dept":     "",
+            "initials": company_name[:2].upper() if company_name else "CO",
+            "photo":    "",
         }
+        for n in nodes:
+            if n["parentId"] == "":
+                n["parentId"] = "__company_root__"
+        nodes.insert(0, virtual_root)
 
-    roots = sorted(
-        [e["id"] for e in emps
-         if not e.get("manager_id") or e.get("manager_id") not in emp_ids],
-        key=lambda i: emp_map[i]["last_name"]
-    )
-    tree_json = json.dumps([build_node(r) for r in roots])
-
-    # Height estimate
-    height = max(500, min(1400, len(emps) * 55 + 120))
+    data_json = json.dumps(nodes)
+    height = max(420, min(700, len(emps) * 28 + 150))
 
     components.html(f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-org-chart@3.1.1/build/d3-org-chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-flextree@2.1.2/build/d3-flextree.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 html,body{{
-  background:transparent;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  font-size:13px;color:#e2e8f0;
-  overflow-x:auto;overflow-y:auto;
-  padding:16px 24px 32px;
-  min-width:max-content;
+  background:#f8f9fa;
+  font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+  width:100%;height:{height}px;
+  margin:0;padding:0;
+  overflow:hidden;
 }}
-
-/* ── Org chart layout ── */
-.org-tree{{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
+#search-bar{{
+  position:absolute;top:8px;left:8px;z-index:10;
+  display:flex;gap:6px;align-items:center;
 }}
-
-/* Each subtree: card on top, optional children below */
-.org-subtree{{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  /* horizontal padding creates the "gap" between siblings
-     and is what the ::before horizontal line spans */
-  padding:0 10px;
-  position:relative;
+#search-input{{
+  font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+  font-size:12px;padding:6px 12px;
+  border:1.5px solid #c2c6d5;border-radius:9999px;
+  outline:none;width:200px;
+  background:#fff;color:#191c1d;
+  transition:border-color 0.15s;
 }}
-
-/* Horizontal line segment — spans full width of subtree including padding */
-.org-child-row > .org-subtree::before{{
-  content:'';
-  position:absolute;
-  top:0;left:0;right:0;
-  height:2px;
-  background:#334155;
+#search-input:focus{{ border-color:#005bc1; }}
+#search-input::placeholder{{ color:#727784; }}
+#search-results{{
+  position:absolute;top:36px;left:8px;z-index:11;
+  background:#fff;border:1px solid #e7e8e9;border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.12);
+  max-height:180px;overflow-y:auto;
+  display:none;min-width:240px;
 }}
-/* First child: only draw the right half of horizontal line */
-.org-child-row > .org-subtree:first-child::before{{ left:50%; }}
-/* Last child: only draw the left half */
-.org-child-row > .org-subtree:last-child::before{{ right:50%; }}
-/* Only child: no horizontal line */
-.org-child-row > .org-subtree:only-child::before{{ display:none; }}
-
-/* Vertical line from horizontal bar DOWN to card */
-.org-child-row > .org-subtree::after{{
-  content:'';
-  position:absolute;
-  top:0;left:50%;
-  width:2px;height:20px;
-  background:#334155;
-  margin-left:-1px;
+.sr-item{{
+  padding:8px 14px;cursor:pointer;font-size:12px;
+  border-bottom:1px solid #f3f4f5;
+  transition:background 0.1s;
 }}
-
-/* Wrapper for the children section */
-.org-children-wrap{{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-}}
-/* Vertical line FROM card down to horizontal bar */
-.org-down{{
-  width:2px;height:20px;
-  background:#334155;
-  flex-shrink:0;
-}}
-/* Row of child subtrees */
-.org-child-row{{
-  display:flex;
-  align-items:flex-start;
-  padding-top:20px;   /* space for horizontal line + vertical drops */
-}}
-
-/* ── Card ── */
-.org-card{{
-  background:#1e2530;
-  border:1px solid #2d3748;
-  border-radius:10px;
-  padding:10px 14px;
-  min-width:130px;
-  max-width:170px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:7px;
-  cursor:pointer;
-  transition:transform 0.14s,box-shadow 0.14s,border-color 0.14s;
-  user-select:none;
-  position:relative;
-}}
-.org-card:hover{{
-  transform:translateY(-2px);
-  box-shadow:0 6px 20px rgba(0,0,0,0.35);
-  border-color:#475569;
-}}
-.org-card.collapsed{{
-  opacity:0.75;
-}}
-
-/* Colored top border accent */
-.org-card-accent{{
-  position:absolute;
-  top:0;left:0;right:0;
-  height:3px;
-  border-radius:10px 10px 0 0;
-}}
-
-/* Avatar circle */
-.org-av{{
-  width:36px;height:36px;
-  border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  font-size:12px;font-weight:700;
-  color:#fff;flex-shrink:0;
-  opacity:0.9;
-  margin-top:4px;
-}}
-
-/* Name + position */
-.org-name{{
-  font-size:12px;font-weight:600;
-  color:#e2e8f0;
-  text-align:center;
-  line-height:1.3;
-  word-break:break-word;
-}}
-.org-pos{{
-  font-size:10.5px;color:#94a3b8;
-  text-align:center;line-height:1.3;
-  word-break:break-word;
-}}
-.org-no{{
-  font-size:9.5px;color:#475569;
-  font-family:monospace;
-}}
-
-/* Collapse indicator */
-.org-toggle{{
-  font-size:9px;color:#64748b;
-  margin-top:2px;
-}}
-
-/* Collapsed children hidden */
-.org-children-wrap.hidden{{
-  display:none;
+.sr-item:hover{{ background:rgba(0,91,193,0.06); }}
+.sr-item:last-child{{ border-bottom:none; }}
+.sr-name{{ font-weight:700;color:#191c1d; }}
+.sr-pos{{ font-size:10px;color:#727784;margin-top:1px; }}
+#chart{{width:100%;height:{height}px;}}
+.link path{{
+  stroke-width:2px !important;
 }}
 </style>
 </head>
 <body>
-<div id="root" class="org-tree"></div>
+<div id="search-bar">
+  <input id="search-input" type="text" placeholder="Search employee..." autocomplete="off">
+</div>
+<div id="search-results"></div>
+<div id="chart"></div>
+<div id="err" style="color:#dc2626;font-size:13px;padding:16px;display:none;"></div>
 <script>
-var DATA = {tree_json};
+try {{
+var DATA = {data_json};
 
-function initials(name){{
-  return (name||'?').trim().split(/\\s+/).slice(0,2)
-    .map(function(w){{return w[0]||'';}}).join('').toUpperCase();
+if(!DATA || DATA.length === 0) {{
+  document.getElementById('err').style.display='block';
+  document.getElementById('err').textContent='No employee data to display.';
+  throw new Error('No data');
 }}
 
-function buildSubtree(node, isRoot){{
-  var wrap = document.createElement('div');
-  wrap.className = 'org-subtree';
+// Build a color lookup by id
+var colorMap = {{}};
+DATA.forEach(function(d){{ colorMap[d.id] = d.color; }});
 
-  // ── Card ──
-  var card = document.createElement('div');
-  card.className = 'org-card';
+var chartEl = document.getElementById('chart');
+chartEl.style.width = '100%';
+chartEl.style.height = '{height}px';
 
-  var accent = document.createElement('div');
-  accent.className = 'org-card-accent';
-  accent.style.background = node.color;
+var chart = new d3.OrgChart()
+  .container('#chart')
+  .data(DATA)
+  .svgHeight({height - 20})
+  .svgWidth(chartEl.offsetWidth || 800)
+  .nodeWidth(function(d){{ return 220; }})
+  .nodeHeight(function(d){{ return 140; }})
+  .compactMarginBetween(function(d){{ return 35; }})
+  .compactMarginPair(function(d){{ return 30; }})
+  .neighbourMargin(function(a,b){{ return 30; }})
+  .siblingsMargin(function(d){{ return 25; }})
+  .childrenMargin(function(d){{ return 50; }})
+  .linkUpdate(function(d,i,arr){{
+    // Color each link by the child node's department color
+    var childData = d.data;
+    var c = colorMap[childData.id] || '#c2c6d5';
+    d3.select(this)
+      .attr('stroke', c)
+      .attr('stroke-width', 2)
+      .attr('stroke-opacity', 0.6);
+  }})
+  .nodeContent(function(d,i,arr,state){{
+    var n = d.data;
+    var c = n.color || '#6366f1';
+    // Lighten color for background tint
+    var bgTint = c + '0d'; // 5% opacity
+    var borderTint = c + '30'; // 19% opacity
 
-  var av = document.createElement('div');
-  av.className = 'org-av';
-  av.style.background = node.color;
-  av.textContent = initials(node.name);
+    return '<div style="'+
+      'font-family:Plus Jakarta Sans,system-ui,sans-serif;'+
+      'background:#fff;'+
+      'border:1.5px solid '+borderTint+';'+
+      'border-top:3px solid '+c+';'+
+      'border-radius:12px;'+
+      'padding:14px 12px 10px;'+
+      'width:'+d.width+'px;'+
+      'height:'+d.height+'px;'+
+      'display:flex;flex-direction:column;align-items:center;'+
+      'gap:4px;'+
+      'box-shadow:0 2px 8px rgba(0,0,0,0.06);'+
+      'transition:box-shadow 0.18s ease,transform 0.18s ease;'+
+      'cursor:pointer;'+
+    '">'+
+      (n.photo ?
+        '<div style="width:40px;height:40px;border-radius:50%;overflow:hidden;flex-shrink:0;border:2px solid '+borderTint+';">'+
+          '<img src="'+n.photo+'" style="width:100%;height:100%;object-fit:cover;"></div>'
+        :
+        '<div style="width:40px;height:40px;border-radius:50%;background:'+c+';'+
+          'display:flex;align-items:center;justify-content:center;'+
+          'color:#fff;font-size:13px;font-weight:700;flex-shrink:0;">'+n.initials+'</div>'
+      )+
+      '<div style="font-size:12px;font-weight:700;color:#191c1d;'+
+        'text-align:center;line-height:1.25;margin-top:2px;'+
+      '">'+n.name+'</div>'+
+      '<div style="font-size:10px;font-weight:500;color:#424753;'+
+        'text-align:center;line-height:1.2;'+
+      '">'+n.position+'</div>'+
+      (n.email ?
+        '<div style="font-size:9px;color:#005bc1;text-align:center;'+
+          'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;'+
+        '">'+n.email+'</div>' : ''
+      )+
+      (n.phone ?
+        '<div style="font-size:9px;color:#727784;text-align:center;">'+n.phone+'</div>' : ''
+      )+
+      '<div style="display:flex;gap:6px;align-items:center;margin-top:auto;">'+
+        '<span style="font-size:9px;color:#727784;font-family:monospace;">'+n.empNo+'</span>'+
+        (n.dept ?
+          '<span style="font-size:8px;font-weight:700;color:'+c+';'+
+            'background:'+bgTint+';padding:1px 6px;border-radius:9999px;'+
+            'text-transform:uppercase;letter-spacing:0.04em;'+
+          '">'+n.dept+'</span>'
+          : ''
+        )+
+      '</div>'+
+    '</div>';
+  }})
+  .render()
+  .fit();
 
-  var nm = document.createElement('div');
-  nm.className = 'org-name';
-  nm.textContent = node.name;
+  /* ── Search functionality ─────────────────────────────────── */
+  var searchInput = document.getElementById('search-input');
+  var searchResults = document.getElementById('search-results');
 
-  var pos = document.createElement('div');
-  pos.className = 'org-pos';
-  pos.textContent = node.pos;
+  searchInput.addEventListener('input', function() {{
+    var q = this.value.trim().toLowerCase();
+    searchResults.innerHTML = '';
+    if(q.length < 1) {{ searchResults.style.display='none'; return; }}
 
-  var no = document.createElement('div');
-  no.className = 'org-no';
-  no.textContent = node.no;
+    var matches = DATA.filter(function(d) {{
+      return d.name.toLowerCase().indexOf(q) !== -1
+          || d.position.toLowerCase().indexOf(q) !== -1
+          || d.empNo.toLowerCase().indexOf(q) !== -1;
+    }}).slice(0, 8);
 
-  card.appendChild(accent);
-  card.appendChild(av);
-  card.appendChild(nm);
-  card.appendChild(pos);
-  card.appendChild(no);
+    if(!matches.length) {{
+      searchResults.style.display='none';
+      return;
+    }}
 
-  wrap.appendChild(card);
-
-  // ── Children ──
-  if(node.children && node.children.length > 0){{
-    var toggle = document.createElement('div');
-    toggle.className = 'org-toggle';
-    toggle.textContent = '▾ ' + node.children.length + ' direct report' + (node.children.length > 1 ? 's':'');
-    card.appendChild(toggle);
-
-    var childWrap = document.createElement('div');
-    childWrap.className = 'org-children-wrap';
-
-    var down = document.createElement('div');
-    down.className = 'org-down';
-
-    var row = document.createElement('div');
-    row.className = 'org-child-row';
-
-    node.children.forEach(function(child){{
-      row.appendChild(buildSubtree(child, false));
+    matches.forEach(function(m) {{
+      var div = document.createElement('div');
+      div.className = 'sr-item';
+      div.innerHTML = '<div class="sr-name">' + m.name + '</div>'
+        + '<div class="sr-pos">' + m.position + ' &middot; ' + m.empNo + '</div>';
+      div.onclick = function() {{
+        chart.setCentered(m.id).render();
+        // Briefly highlight the node
+        setTimeout(function() {{
+          chart.setHighlighted(m.id).render();
+          setTimeout(function() {{ chart.clearHighlighting(); }}, 5000);
+        }}, 400);
+        searchResults.style.display='none';
+        searchInput.value = m.name;
+      }};
+      searchResults.appendChild(div);
     }});
+    searchResults.style.display='block';
+  }});
 
-    childWrap.appendChild(down);
-    childWrap.appendChild(row);
-    wrap.appendChild(childWrap);
+  /* Close dropdown when clicking outside */
+  document.addEventListener('click', function(e) {{
+    if(!searchInput.contains(e.target) && !searchResults.contains(e.target)) {{
+      searchResults.style.display='none';
+    }}
+  }});
 
-    // Toggle expand/collapse on card click
-    var collapsed = false;
-    card.onclick = function(e){{
-      collapsed = !collapsed;
-      if(collapsed){{
-        childWrap.classList.add('hidden');
-        card.classList.add('collapsed');
-        toggle.textContent = '▸ ' + node.children.length + ' direct report' + (node.children.length > 1 ? 's':'');
-      }} else {{
-        childWrap.classList.remove('hidden');
-        card.classList.remove('collapsed');
-        toggle.textContent = '▾ ' + node.children.length + ' direct report' + (node.children.length > 1 ? 's':'');
-      }}
-    }};
+}} catch(e) {{
+  var errEl = document.getElementById('err');
+  if(errEl) {{
+    errEl.style.display='block';
+    errEl.textContent='Org chart error: ' + e.message;
   }}
-
-  return wrap;
+  console.error('OrgChart error:', e);
 }}
-
-var root = document.getElementById('root');
-DATA.forEach(function(node){{
-  root.appendChild(buildSubtree(node, true));
-}});
 </script>
 </body>
 </html>
@@ -1876,14 +1985,22 @@ def _render_org_tab():
         ep_rows = (
             get_db()
             .table("employee_profiles")
-            .select("department_id")
-            .in_("department_id", [d["id"] for d in departments])
+            .select("department_id, department")
+            .eq("company_id", get_company_id())
             .execute()
             .data or []
         )
         emp_count_by_dept = {}
+        # Build a name→id map for fallback matching
+        dept_name_to_id = {}
+        for d in departments:
+            dept_name_to_id[d["name"].strip().upper()] = d["id"]
         for r in ep_rows:
             did = r.get("department_id")
+            # If no department_id, try matching by text department name
+            if not did:
+                txt = (r.get("department") or "").strip().upper()
+                did = dept_name_to_id.get(txt)
             if did:
                 emp_count_by_dept[did] = emp_count_by_dept.get(did, 0) + 1
     except Exception:
@@ -1989,6 +2106,7 @@ def _render_org_tab():
 def render():
     inject_css()
     st.title("Company Setup")
+    st.caption("Manage company profile, payroll policies, leave templates, schedules, and locations.")
 
     # Show confirmation after save
     if st.session_state.pop("company_saved", False):
@@ -2001,8 +2119,8 @@ def render():
         return
 
     tab_settings, tab_templates, tab_holidays, tab_schedules, tab_locations, tab_org, tab_log = st.tabs([
-        "Company Settings",
-        "Leaves",
+        "General",
+        "Leave Templates",
         "Holidays",
         "Schedules",
         "Locations",
@@ -2011,7 +2129,7 @@ def render():
     ])
 
     with tab_settings:
-        st.caption("Configure your company details. These appear on payslips and government reports.")
+        st.caption("Company details, government numbers, and payroll policy. These appear on payslips and government reports.")
 
         # ── Main company settings form ──────────────────────────────────────
         with st.form("company_setup_form"):

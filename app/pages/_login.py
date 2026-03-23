@@ -106,65 +106,41 @@ footer,
     padding-bottom: 0 !important;
     max-width: 100% !important;
 }
+/* Prevent scrolling — fit everything in viewport */
+section[data-testid="stMain"] {
+    overflow: hidden !important;
+    max-height: 100vh !important;
+}
+[data-testid="stAppViewContainer"] {
+    overflow: hidden !important;
+}
 
 /* ── Split column container ────────────────────────────────────── */
-/* Target the HorizontalBlock that contains .login-brand-panel */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel) {
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker) {
     min-height: 100vh;
     gap: 0 !important;
     align-items: stretch !important;
 }
 
-/* ── Left column — gradient with rounded corners ───────────────── */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+/* ── Left column — logo as full background ─────────────────────── */
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(1) {
-    background: linear-gradient(160deg, #003d8a 0%, #005bc1 35%, #3d89ff 70%, #6aabff 100%);
+    background-size: cover;
+    background-position: 55% center;
+    background-repeat: no-repeat;
     overflow: hidden;
     border-radius: 0 2rem 2rem 0;
     margin: 1.5rem 0;
+    min-height: 100vh;
 }
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(1) > div {
     height: 100%;
 }
-
-/* ── Branded left panel ────────────────────────────────────────── */
-.login-brand-panel {
-    min-height: 100vh;
-    padding: 4rem 3rem;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    position: relative;
-    overflow: hidden;
-}
-.login-brand-panel::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at top right, rgba(255,255,255,0.15), transparent 60%);
-    pointer-events: none;
-}
-.login-brand-panel::after {
-    content: '';
-    position: absolute;
-    bottom: -6rem;
-    left: -6rem;
-    width: 16rem;
-    height: 16rem;
-    background: rgba(255,255,255,0.08);
-    border-radius: 50%;
-    filter: blur(48px);
-    pointer-events: none;
-}
-.login-brand-logo {
-    width: 260px;
-    max-width: 80%;
-    height: auto;
-    margin: 0 0 0.5rem;
-    position: relative;
-    z-index: 1;
-    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.15));
+/* Hide all content inside left column (only background matters) */
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
+  > [data-testid="stColumn"]:nth-child(1) .stMarkdown {
+    display: none !important;
 }
 .login-brand-subtitle {
     font-size: 0.7rem;
@@ -197,17 +173,15 @@ footer,
     font-size: 22px;
 }
 
-/* ── Right column — card styling on the column itself ──────────── */
-/* Alias: RC = right column */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+/* ── Right column — card styling ───────────────────────────────── */
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) {
     background: var(--login-bg);
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
 }
-/* The inner div wrapper of the right column gets card styling */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2)
   > div:first-child {
     background: var(--login-surface);
@@ -219,9 +193,8 @@ footer,
     margin: 2rem;
 }
 
-/* ── Typography inside right column ────────────────────────────── */
-/* Alias: RC = [data-testid="stHorizontalBlock"]:has(.login-brand-panel) > [data-testid="stColumn"]:nth-child(2) */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+/* ── Typography ────────────────────────────────────────────────── */
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) h2 {
     font-family: 'Plus Jakarta Sans', sans-serif !important;
     font-size: 1.75rem !important;
@@ -237,8 +210,8 @@ footer,
     margin: 0 0 1.5rem;
 }
 
-/* ── Pill inputs inside right column ───────────────────────────── */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+/* ── Pill inputs ──────────────────────────────────────────────── */
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stTextInput"] label {
     font-size: 0.6875rem !important;
     font-weight: 700 !important;
@@ -247,7 +220,7 @@ footer,
     color: var(--login-text2) !important;
     padding-left: 1rem !important;
 }
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stTextInput"] input {
     background: var(--login-surface2) !important;
     border: none !important;
@@ -258,18 +231,18 @@ footer,
     font-family: 'Plus Jakarta Sans', sans-serif !important;
     transition: box-shadow 0.2s ease !important;
 }
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stTextInput"] input:focus {
     box-shadow: 0 0 0 3px rgba(0,91,193,0.15) !important;
     outline: none !important;
 }
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stTextInput"] input::placeholder {
     color: #9ca3af !important;
 }
 
 /* ── Checkbox ──────────────────────────────────────────────────── */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stCheckbox"] label span {
     font-size: 0.8rem !important;
     font-weight: 500 !important;
@@ -277,7 +250,7 @@ footer,
 }
 
 /* ── Primary button (Sign In) — pill gradient ──────────────────── */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stButton"] button[kind="primary"] {
     background: linear-gradient(135deg, var(--login-accent) 0%, var(--login-accent-end) 100%) !important;
     color: #ffffff !important;
@@ -291,17 +264,17 @@ footer,
     transition: opacity 0.2s, transform 0.1s !important;
     letter-spacing: 0.01em !important;
 }
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stButton"] button[kind="primary"]:hover {
     opacity: 0.92 !important;
 }
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stButton"] button[kind="primary"]:active {
     transform: scale(0.98) !important;
 }
 
 /* ── Secondary button (Forgot password / Back) — text style ──── */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stButton"] button[kind="secondary"] {
     background: transparent !important;
     color: var(--login-accent) !important;
@@ -313,7 +286,7 @@ footer,
     box-shadow: none !important;
     transition: opacity 0.2s !important;
 }
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stButton"] button[kind="secondary"]:hover {
     background: rgba(0,91,193,0.06) !important;
 }
@@ -337,7 +310,7 @@ footer,
 }
 
 /* ── Alert overrides ───────────────────────────────────────────── */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stAlert"] {
     border-radius: 0.75rem !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
@@ -345,18 +318,18 @@ footer,
 }
 
 /* ── Spinner ───────────────────────────────────────────────────── */
-[data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+[data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stSpinner"] {
     font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
 
-/* ── Responsive: hide brand panel on small screens ─────────────── */
+/* ── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 768px) {
-    [data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+    [data-testid="stHorizontalBlock"]:has(.login-brand-marker)
       > [data-testid="stColumn"]:nth-child(1) {
         display: none !important;
     }
-    [data-testid="stHorizontalBlock"]:has(.login-brand-panel)
+    [data-testid="stHorizontalBlock"]:has(.login-brand-marker)
       > [data-testid="stColumn"]:nth-child(2)
       > div:first-child {
         margin: 1rem;
@@ -365,15 +338,6 @@ footer,
 }
 </style>
 """
-
-# ── Branded left panel HTML ────────────────────────────────────────────────────
-_BRAND_PANEL_HTML = """
-<div class="login-brand-panel">
-    <img src="app/static/genxcript_logo_dark.png" alt="GenXcript" class="login-brand-logo" />
-    <p class="login-brand-subtitle">Payroll System</p>
-</div>
-"""
-
 
 # ── Page entry ─────────────────────────────────────────────────────────────────
 def render():
@@ -384,18 +348,33 @@ def render():
     col_brand, col_form = st.columns([2, 3], gap="small")
 
     with col_brand:
+        # Tiny marker so CSS :has() selectors can find the login layout
+        st.markdown('<div class="login-brand-marker"></div>', unsafe_allow_html=True)
+
+        # Set background-image on the left column via JS
         import base64, os as _os
-        _logo_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "static", "genxcript_logo_dark.png")
+        import streamlit.components.v1 as _stc
+        _logo_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "static", "logo.jpeg")
         try:
             with open(_logo_path, "rb") as _f:
                 _logo_b64 = base64.b64encode(_f.read()).decode()
-            _logo_src = f"data:image/png;base64,{_logo_b64}"
+            _logo_src = f"data:image/jpeg;base64,{_logo_b64}"
         except Exception:
-            _logo_src = "app/static/genxcript_logo_dark.png"
-        st.markdown(
-            _BRAND_PANEL_HTML.replace('src="app/static/genxcript_logo_dark.png"', f'src="{_logo_src}"'),
-            unsafe_allow_html=True,
-        )
+            _logo_src = "app/static/logo.jpeg"
+
+        _stc.html(f"""<script>
+        (function(){{
+          var pd = window.parent.document;
+          var marker = pd.querySelector('.login-brand-marker');
+          if(!marker) return;
+          var col = marker.closest('[data-testid="stColumn"]');
+          if(!col) return;
+          col.style.backgroundImage = 'url("{_logo_src}")';
+          col.style.backgroundPosition = '0% center';
+          col.style.backgroundSize = 'cover';
+          col.style.backgroundRepeat = 'no-repeat';
+        }})();
+        </script>""", height=0)
 
     with col_form:
         view = st.session_state.get("login_view", "signin")
@@ -440,12 +419,36 @@ def _render_signin():
     _gap(8)
 
     # ── Primary CTA ────────────────────────────────────────────────
-    if st.button("Sign In", type="primary", use_container_width=True):
+    signin_clicked = st.button("Sign In", type="primary", use_container_width=True, key="signin_btn")
+
+    if signin_clicked:
         if not identifier.strip() or not password:
             st.error("Please fill in both fields.")
         else:
-            with st.spinner("Signing in…"):
-                success, error = login(identifier.strip(), password)
+            # JS: change button text to dot-dot-dot loading animation
+            import streamlit.components.v1 as _stc_login
+            _stc_login.html("""<script>
+            (function(){
+              var pd = window.parent.document;
+              var btn = pd.querySelector('.st-key-signin_btn button[kind="primary"]');
+              if(!btn) return;
+              btn.disabled = true;
+              btn.style.opacity = '0.7';
+              btn.style.pointerEvents = 'none';
+              var span = btn.querySelector('span span') || btn.querySelector('div span') || btn;
+              if(span.querySelector('p')) span = span.querySelector('p');
+              span.textContent = '';
+              var dots = 0;
+              var iv = setInterval(function(){
+                dots = (dots % 3) + 1;
+                span.textContent = 'Signing in' + '.'.repeat(dots);
+              }, 400);
+              // Auto-clear after 10s safety
+              setTimeout(function(){ clearInterval(iv); }, 10000);
+            })();
+            </script>""", height=0)
+
+            success, error = login(identifier.strip(), password)
             if success:
                 if remember_me:
                     _set_cookie(_REMEMBER_ID_KEY, identifier.strip())
@@ -504,4 +507,4 @@ def _render_forgot_password():
 
     st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
     _gap(16)
-    st.markdown('<p class="login-footer-brand">GenXcript Payroll System</p>', unsafe_allow_html=True)
+    st.markdown('<p class="login-footer-brand">GenXcript</p>', unsafe_allow_html=True)

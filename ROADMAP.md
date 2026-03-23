@@ -19,10 +19,16 @@
 - [x] **Phase E — Employees** — Table replaced with 3-column M3 card grid: initials avatar (8-color palette), department pill, name/position/emp no, salary toggle, employment type badge, SSS/PH/PI/TIN gov ID dots; editorial heading; all action buttons retained
 - [x] **Phase F — Payroll Run** — M3 redesign: 3-column grid summary (Earnings / Deductions / Employer), accent Net Pay, danger-colored tax + absent rows, improved employee mini-header with avatar + inline badge + Net Pay; filter bar repositioned; emoji tab labels
 - [x] **Phase G — Attendance** — Editorial heading; 3 MTD KPI cards (attendance rate / late incidents / NSD hours); status pills upgraded to Material Symbols FILL icons + rounded-full M3 style; daily entry table: avatar+name col, shift pill, colored late/UT/OT values; corrections: M3 card layout with Original→Requested comparison box
-- [ ] **Phase H — Workforce Analytics** — Stitch ref: `fromstitch/08_ot_analytics.html`
-- [ ] **Phase I — Government Reports** — Stitch ref: `fromstitch/09_government_reports.html`; fix duplicate heading
-- [ ] **Phase J — Calendar** — Stitch ref: `fromstitch/10_calendar.html`
-- [ ] **Phase K — Company Setup** — Stitch ref: `fromstitch/11_company_setup.html`
+- [x] **UX: Login button loading** — Animated dot-dot-dot loading state on Sign In button via JS (disables button, cycles "Signing in." text); logo.jpeg as full left-column background; overflow:hidden to prevent scroll
+- [ ] **UX: Default company shortcut** — Add "Set as Default" button on company selection in sidebar; swipe-reveal style matching reminder/alert card pattern; default company auto-selected on login
+- [x] **Phase H — Workforce Analytics** — M3 metric cards; Spotfire-style linked charts: department bar → employee bar → bubble calendar with cross-highlighting and opacity control; sidebar renamed from "OT Analytics"
+- [x] **Phase I — Government Reports** — Basic Salary column added to all 4 preview tables (SSS R3, PhilHealth RF-1, Pag-IBIG MCRF, BIR 1601-C)
+- [x] **Phase J — Calendar** — CSS Grid calendar (7-col, rounded cells, hover scale); two-column layout [7,3] with Upcoming Events sidebar (countdown badges, colored left borders per type); M3 legend; holiday table in collapsible expander
+- [x] **Phase K — Company Setup** — d3-org-chart (bumbeishvili) with search + pulse; Leaflet.js maps for office locations with geofence circles; reports_to hierarchy (migration 025); email/phone on org chart nodes; photo support; department employee count fix
+- [x] **Employee Photo Upload** — migration 026 (photo_url); Supabase "employee-photos" bucket; auto-compress 200px JPEG; displayed in employee cards + org chart + edit dialog
+- [x] **Employee Portal UX** — custom topbar; checkbox highlight fix; permanent address redesign; People Search with org chart; Leaflet clock-in map (pulsing dot + geofence + Inside/Outside badge)
+- [x] **Dashboard Performance** — N+1 → batch query; @st.cache_data(ttl=120); skeleton shimmer loading; counting number animations; card entrance animations (fade-in + staggered slide-up)
+- [x] **RLS Hardening** — user_preferences + audit_logs RLS enabled (migrations 023, 024)
 
 ---
 
@@ -93,7 +99,10 @@
 - [ ] Leave deductions in payroll — unpaid absences auto-deduct from gross pay *(deferred: requires Phase 4B DTR first)*
 - [x] Leave summary report — admin "📊 Leave Balances" tab: all employees, VL/SL/CL used/remaining with progress bars, year selector, dept filter *(employees.py)*
 
-### 3D — User Roles & Access Control *(prerequisite for multi-user companies and 2-level approvals)*
+### 3D — Company Policy Extraction *(prerequisite for correct payroll configuration)*
+- [ ] **Mind Joggler Presentation** — interactive questionnaire / guided wizard that walks a new client through every company policy the system needs: pay frequency, daily rate divisor, OT rules, leave entitlements, holiday pay policy, break rules, NSD policy, 13th month computation method, loan deduction rules, government contribution employer share policy, cut-off dates, probationary period, separation pay rules; outputs a structured policy document that seeds Company Setup
+
+### 3E — User Roles & Access Control *(prerequisite for multi-user companies and 2-level approvals)*
 - [ ] Role definitions — Admin, HR Manager, Payroll Processor, Supervisor, Employee (read-only portal)
 - [ ] Role-based page access — HR Manager cannot touch Company Setup; Payroll Processor cannot modify employee records; Supervisor sees only their team
 - [ ] Supervisor assignment — each employee can be assigned a reporting supervisor; used for 2-level approval chain in Phase 4C
@@ -235,7 +244,117 @@
 
 ---
 
-## Phase 8: Scale
+## Phase 8: Demo Simulator Script ("Day-by-Day HR Playback")
+> A scripted simulation tool that replays realistic HR operations day-by-day, populating a company from scratch. Useful for demos, testing, and training. The script drives the actual UI/API — not raw SQL — so it validates the full user flow.
+
+### Data Roster (pre-built database)
+- [ ] **Name pool** — 70 unique Filipino names (first + last), randomized but deterministic per run
+- [ ] **Salary bands** — 15 salary levels (₱12k–₱120k monthly) mapped to position tiers
+- [ ] **Shift profiles** — 3 shifts (Warehouse 7–4, Standard 8–5, Executive 9–6)
+- [ ] **Department list** — 5 departments (Operations, Sales, Finance, Admin, Executive)
+- [ ] **Position library** — 30 unique positions with org-ladder rank (CEO → VP → Manager → Supervisor → Staff)
+- [ ] **Gov ID templates** — SSS/PhilHealth/Pag-IBIG/TIN number patterns per employee
+
+### Phase A — Hiring Phase (Days 1–35)
+> HR hires one employee per day, filling the org chart from the top down.
+- [ ] Day 1: Create company profile + settings (pay frequency, daily rate divisor, etc.)
+- [ ] Day 2–6: Hire Executive tier (GM, 3 VPs, Executive Assistant)
+- [ ] Day 7–11: Hire Department Managers (Operations Mgr, Area Sales Mgr, Finance Mgr, Admin & HR Mgr, + 1 Supervisor)
+- [ ] Day 12–20: Hire Supervisors and Senior Staff (Warehouse Supervisor, Logistics Supervisor, Sales Supervisors, Senior Accountant, Account Executives)
+- [ ] Day 21–35: Hire Rank & File (Warehouse Staff, Drivers, Sales Reps, Clerks, Cashier, Receptionist, IT Support)
+- [ ] Each day: pick from roster → fill employee form → assign department/position/salary/schedule/leave template/gov IDs
+
+### Phase B — Attendance & DTR Phase (Days 36–65)
+> Simulate 30 days of clock-ins/outs with realistic patterns.
+- [ ] Generate time logs per employee per day (varying late arrivals, early departures, absences, OT)
+- [ ] Inject break records (some employees with overbreak)
+- [ ] Add NSD hours for warehouse shift employees
+- [ ] File 3–5 leave requests (VL/SL) + approve them
+- [ ] File 2–3 OT requests + approve them
+- [ ] Submit 1–2 DTR correction requests + approve/reject
+
+### Phase C — First Payroll Phase (Days 66–70)
+> Run the first full payroll cycle.
+- [ ] Create pay period (semi-monthly or monthly based on company setting)
+- [ ] Compute & Save each employee (earnings, deductions, DTR suggestions auto-applied)
+- [ ] Submit for Review → Approve & Finalize
+- [ ] Generate payslips (PDF)
+- [ ] Record government remittances (SSS, PhilHealth, Pag-IBIG, BIR)
+
+### Phase D — Ongoing Operations (Days 71–100)
+> Simulate normal HR operations over 1 month.
+- [ ] 1 employee resignation (separation, deactivation)
+- [ ] 1 new hire (probationary)
+- [ ] 1 salary adjustment (promotion)
+- [ ] Continue attendance logging
+- [ ] Run 2nd payroll cycle
+- [ ] Generate government reports (SSS R3, PhilHealth RF-1, Pag-IBIG MCRF, BIR 1601-C)
+
+### Phase E — Year-End (Days 101–110)
+> Year-end compliance.
+- [ ] 13th Month Pay computation + DOLE compliance report
+- [ ] BIR 2316 annual certificates
+- [ ] BIR 1604-C alphalist
+- [ ] Leave carry-over / cash conversion
+
+### Simulator UI
+- [ ] **"Next Day" button** — advances to the next scripted action, executes it, shows summary of what was done
+- [ ] **"Previous Day" button** — undoes the last action (deletes the employee/record that was just created)
+- [ ] **Day counter + progress bar** — "Day 14 of 110 — Hiring Phase (40%)"
+- [ ] **Action log panel** — scrollable list of all actions taken so far
+- [ ] **Phase indicator** — shows current phase (Hiring / Attendance / Payroll / Operations / Year-End)
+- [ ] **Speed mode** — "Run All" button that fast-forwards through remaining days in current phase
+
+---
+
+## Phase 8B: Government Compliance Auditor Script
+> An automated auditor that reads the generated government forms (PDF / data) and validates them against agency rules, rate tables, and computation logic. Catches errors before actual filing — acts as a virtual BIR / SSS / PhilHealth / Pag-IBIG examiner.
+
+### Common Framework
+- [ ] **Form reader** — parse generated PDFs (SSS R3, PhilHealth RF-1, Pag-IBIG MCRF, BIR 1601-C, BIR 2316, BIR 1604-C, DOLE 13th Month) via reportlab reverse-parse or direct data access from DB
+- [ ] **Rate table loader** — load the current year's contribution tables (SSS Circular 2024-006, PhilHealth CY2025, HDMF 2025, BIR TRAIN Law brackets) as the source of truth
+- [ ] **Audit result model** — per-employee and per-form findings: `PASS`, `WARNING`, `ERROR`, with field reference, expected vs actual values, and citation (e.g., "SSS Circular 2024-006 §3.1")
+- [ ] **Audit report output** — summary dashboard (total checks / passed / warnings / errors), drill-down per agency, exportable PDF audit trail
+
+### SSS Auditor
+- [ ] **MSC bracket validation** — verify each employee's Monthly Salary Credit matches their basic salary per the 2025 MSC table (₱5,000–₱35,000 range, 44 brackets)
+- [ ] **Contribution split** — confirm EE share (5%) and ER share (10%) computed correctly per MSC; total = 15%
+- [ ] **EC contribution** — verify ₱10 if MSC ≤ ₱15,000, ₱30 if MSC > ₱15,000
+- [ ] **R3 form totals** — cross-check sum of individual contributions matches the R3 summary row; verify employee count matches active headcount for the period
+- [ ] **Late filing detection** — flag if remittance date is after the 10th of the following month
+
+### PhilHealth Auditor
+- [ ] **Premium rate** — verify 5% of basic salary (2.5% EE + 2.5% ER), floor ₱10,000, ceiling ₱100,000
+- [ ] **RF-1 form validation** — cross-check individual premiums sum to form total; verify PhilHealth numbers match employee records
+- [ ] **Minimum/maximum cap** — flag employees below floor (min premium ₱500) or above ceiling (max premium ₱5,000)
+
+### Pag-IBIG (HDMF) Auditor
+- [ ] **Tiered rate** — verify EE: 1% if basic ≤ ₱1,500, 2% if > ₱1,500; ER: always 2%; both capped at max ₱200
+- [ ] **MCRF form validation** — cross-check individual contributions sum to form total; verify Pag-IBIG MID numbers
+- [ ] **MP2 deduction check** — if employee has MP2 savings, verify separate line item and correct deduction
+
+### BIR Auditor
+- [ ] **Withholding tax bracket** — recompute each employee's withholding tax using TRAIN Law 6-bracket table; compare against payroll entry value; flag if difference > ₱1
+- [ ] **1601-C monthly return** — verify sum of all employee withholding taxes matches form total; check correct BIR TIN format
+- [ ] **2316 annual certificate** — verify YTD gross income = sum of all period basic pays; verify YTD tax withheld = sum of all period WHT; check 13th month + de minimis exemptions applied correctly
+- [ ] **1604-C alphalist** — verify employee count matches; cross-check totals against sum of all 2316 certificates; flag missing TIN entries
+- [ ] **Tax status validation** — verify employee tax status (S, ME, ME1, ME2, ME3, etc.) matches the personal exemption applied in computation
+
+### DOLE Auditor
+- [ ] **13th Month Pay** — recompute 1/12 of total basic salary per employee for the year; compare against DOLE compliance report values
+- [ ] **Minimum wage compliance** — verify no employee's daily rate (basic / daily_rate_divisor) falls below the regional minimum wage for NCR/Palawan
+- [ ] **OT/NSD premium rates** — verify OT at 125% and NSD at 10% were applied correctly in payroll entries vs DTR data
+
+### Auditor UI
+- [ ] **Run Audit button** — triggers full audit across all agencies for a selected pay period or year
+- [ ] **Traffic light dashboard** — green/yellow/red per agency with counts
+- [ ] **Drill-down table** — per-employee findings with expected vs actual columns
+- [ ] **Fix suggestions** — actionable text for each ERROR (e.g., "Employee PTC-005: SSS contribution should be ₱2,250 (MSC ₱15,000) but recorded as ₱2,100. Difference: ₱150 underpayment.")
+- [ ] **Export audit report** — PDF with company letterhead, audit date, auditor signature line, findings table
+
+---
+
+## Phase 9: Scale (Production)
 > Only after product-market fit is confirmed. These are infra and platform decisions, not features.
 
 - [ ] React frontend (replace Streamlit for production-grade UX)
@@ -247,7 +366,7 @@
 
 ---
 
-## Phase 9: Security Hardening
+## Phase 10: Security Hardening
 > To be run as a dedicated audit pass before any public/production launch. Covers secrets management, API surface, RLS completeness, and supply-chain hygiene.
 
 - [ ] **Secrets audit** — verify zero hardcoded credentials in tracked files; all keys loaded exclusively from environment variables (`os.environ`) or `st.secrets`; `.env` permanently in `.gitignore` and confirmed not tracked
@@ -289,6 +408,7 @@ Phase 1 (Payroll Core)
                                             └── Phase 6 (Portal Expansion)
                                                   ├── Time-in/out + Notifications
                                                   └── Phase 7 (BI)
-                                                        └── Phase 8 (Scale)
-                                                              └── Phase 9 (Security Hardening)
+                                                        └── Phase 8 (Demo Simulator)
+                                                              └── Phase 9 (Scale)
+                                                                    └── Phase 10 (Security Hardening)
 ```

@@ -42,27 +42,18 @@ def _load_company() -> dict:
     return result.data[0] if result.data else {}
 
 
-def _load_active_employee_count() -> int:
+def _load_employee_counts() -> tuple[int, int]:
+    """Return (active_count, total_count) in a single query."""
     db = get_db()
     result = (
         db.table("employees")
-        .select("id", count="exact")
-        .eq("company_id", get_company_id())
-        .eq("is_active", True)
-        .execute()
-    )
-    return result.count or 0
-
-
-def _load_all_employee_count() -> int:
-    db = get_db()
-    result = (
-        db.table("employees")
-        .select("id", count="exact")
+        .select("id, is_active")
         .eq("company_id", get_company_id())
         .execute()
     )
-    return result.count or 0
+    total = len(result.data)
+    active = sum(1 for e in result.data if e.get("is_active", True))
+    return active, total
 
 
 def _load_pay_periods() -> list[dict]:
@@ -103,33 +94,66 @@ def _load_employee_names(employee_ids: list[str]) -> dict[str, str]:
     return {r["id"]: f"{r['first_name']} {r['last_name']}" for r in result.data}
 
 
-def _load_payroll_history() -> list[dict]:
-    """Load all finalized/paid periods with aggregate totals for charts."""
-    db = get_db()
-    periods_result = (
-        db.table("pay_periods")
-        .select("*")
-        .eq("company_id", get_company_id())
-        .in_("status", ["finalized", "paid"])
-        .order("period_start", desc=False)
-        .execute()
-    )
-    rows = []
-    for p in periods_result.data:
-        entries = _load_payroll_entries(p["id"])
-        if not entries:
-            continue
-        rows.append({
-            "period":     p["period_start"],
-            "gross_pay":  sum(e["gross_pay"] for e in entries) / 100,
-            "net_pay":    sum(e["net_pay"]   for e in entries) / 100,
-            "headcount":  len(entries),
-            "sss":        sum(e["sss_employee"]       + e["sss_employer"]       for e in entries) / 100,
-            "philhealth": sum(e["philhealth_employee"] + e["philhealth_employer"] for e in entries) / 100,
-            "pagibig":    sum(e["pagibig_employee"]   + e["pagibig_employer"]   for e in entries) / 100,
-            "bir":        sum(e["withholding_tax"]    for e in entries) / 100,
-        })
-    return rows
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_payroll_history(_cid: str = "") -> list[dict]:
+    """Load all finalized/paid periods with aggregate totals for charts.
+
+    Uses a single batch query to avoid N+1 round-trips.
+    Cached for 2 minutes to avoid repeated heavy queries.
+    """
+    db  = get_db()
+    cid = get_company_id()
+
+    # Single query: get all entries for finalized/paid periods, grouped
+    try:
+        periods_result = (
+            db.table("pay_periods")
+            .select("id, period_start, status")
+            .eq("company_id", cid)
+            .in_("status", ["finalized", "paid"])
+            .order("period_start", desc=False)
+            .execute()
+        )
+        if not periods_result.data:
+            return []
+
+        pp_ids = [p["id"] for p in periods_result.data]
+        pp_start_map = {p["id"]: p["period_start"] for p in periods_result.data}
+
+        # Batch load ALL entries for all finalized periods in ONE query
+        all_entries = (
+            db.table("payroll_entries")
+            .select("pay_period_id, gross_pay, net_pay, sss_employee, sss_employer, "
+                     "philhealth_employee, philhealth_employer, pagibig_employee, "
+                     "pagibig_employer, withholding_tax")
+            .in_("pay_period_id", pp_ids)
+            .execute()
+        ).data
+
+        # Group by period
+        from collections import defaultdict
+        grouped = defaultdict(list)
+        for e in all_entries:
+            grouped[e["pay_period_id"]].append(e)
+
+        rows = []
+        for pp_id in pp_ids:
+            entries = grouped.get(pp_id, [])
+            if not entries:
+                continue
+            rows.append({
+                "period":     pp_start_map[pp_id],
+                "gross_pay":  sum(e["gross_pay"] for e in entries) / 100,
+                "net_pay":    sum(e["net_pay"]   for e in entries) / 100,
+                "headcount":  len(entries),
+                "sss":        sum(e["sss_employee"]       + e["sss_employer"]       for e in entries) / 100,
+                "philhealth": sum(e["philhealth_employee"] + e["philhealth_employer"] for e in entries) / 100,
+                "pagibig":    sum(e["pagibig_employee"]   + e["pagibig_employer"]   for e in entries) / 100,
+                "bir":        sum(e["withholding_tax"]    for e in entries) / 100,
+            })
+        return rows
+    except Exception:
+        return []
 
 
 def _load_current_remittance_status() -> dict[str, dict | None]:
@@ -360,7 +384,7 @@ def _render_bento_row1(next_period, active_count, total_count):
 
     with col_next:
         card_html = (
-            f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}min-height:180px;">'
+            f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}min-height:150px;">'
             f'  <div style="{_LABEL}">Upcoming Milestone</div>'
             f'  <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px">'
             f'    <span style="font-size:44px;font-weight:800;color:#005bc1;line-height:1;letter-spacing:-2px;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">{date_disp}</span>'
@@ -378,8 +402,8 @@ def _render_bento_row1(next_period, active_count, total_count):
         inactive = total_count - active_count
         sub_txt  = f"{inactive} inactive" if inactive else "All active"
         card_html = (
-            f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="background:#febf0d;border-radius:16px;padding:24px;min-height:180px;display:flex;flex-direction:column;justify-content:space-between;">'
-            f'  <div style="font-size:36px;font-weight:900;color:#000;line-height:1;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">{active_count}</div>'
+            f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="background:#febf0d;border-radius:16px;padding:24px;min-height:150px;display:flex;flex-direction:column;justify-content:space-between;">'
+            f'  <div class="gxp-count" data-to="{active_count}" style="font-size:36px;font-weight:900;color:#000;line-height:1;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">0</div>'
             f'  <div>'
             f'    <div style="font-size:1rem;font-weight:700;color:#000;">Active Employees</div>'
             f'    <div style="font-size:12px;font-weight:500;color:rgba(0,0,0,.55);margin-top:4px">{sub_txt}</div>'
@@ -465,7 +489,7 @@ def _render_bento_row2(latest_period, history, cal_events):
                 f'<div class="gxp-bento-hero-card" style="{_CARD}">'
                 f'  <div style="{_MLBL}">Payroll Expenditure</div>'
                 f'  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
-                f'    <span style="font-size:1.6rem;font-weight:800;color:#191c1d;letter-spacing:-1px">{gross_fmt}</span>'
+                f'    <span class="gxp-count-money" data-to="{latest_gross}" style="font-size:1.6rem;font-weight:800;color:#191c1d;letter-spacing:-1px">&#8369;0</span>'
                 f'    {trend_s}'
                 f'  </div>'
                 f'  <div style="font-size:10px;color:#9ca3af;margin-top:4px">{period_lbl}</div>'
@@ -1659,12 +1683,60 @@ def render():
 
     inject_css()
 
+    # ── Show greeting immediately (before data loads) ──
+    import datetime as _dt
+    _hour = _dt.datetime.now().hour
+    _greeting = "Good morning" if _hour < 12 else ("Good afternoon" if _hour < 18 else "Good evening")
+    _display_name = st.session_state.get("display_name", "Admin")
+    _first_name = _display_name.split()[0] if _display_name else "Admin"
+    _now = _dt.datetime.now()
+    _date_str = _now.strftime("%B %d, %Y")
+    _time_str = _now.strftime("%I:%M %p").lstrip("0")
+
+    hdr_l, hdr_r = st.columns([3, 1])
+    with hdr_l:
+        st.markdown(
+            f'<h2 class="gxp-editorial-heading" style="margin-top:0">{_greeting}, {_first_name}.</h2>'
+            f'<p class="gxp-editorial-sub">Everything is ready for your next pay cycle.</p>',
+            unsafe_allow_html=True,
+        )
+    with hdr_r:
+        st.markdown(
+            f'<div style="text-align:right;padding-top:8px">'
+            f'  <div style="font-size:14px;font-weight:700;color:var(--gxp-text)">{_date_str}</div>'
+            f'  <div style="font-size:12px;color:var(--gxp-text2);margin-top:2px">{_time_str}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Skeleton placeholders (show instantly while data loads) ──
+    _skel_placeholder = st.empty()
+    _SKEL_CARD = (
+        '<div class="gxp-skeleton" style="min-height:150px;margin-bottom:8px;"></div>'
+    )
+    _SKEL_SMALL = (
+        '<div class="gxp-skeleton" style="height:60px;margin-bottom:6px;"></div>'
+    )
+    with _skel_placeholder.container():
+        sk_main, sk_side = st.columns([3, 1], gap="medium")
+        with sk_main:
+            sk1, sk2, sk3 = st.columns(3, gap="medium")
+            sk1.markdown(_SKEL_CARD, unsafe_allow_html=True)
+            sk2.markdown(_SKEL_CARD, unsafe_allow_html=True)
+            sk3.markdown(_SKEL_CARD, unsafe_allow_html=True)
+            sk4, sk5 = st.columns(2, gap="medium")
+            sk4.markdown(_SKEL_CARD, unsafe_allow_html=True)
+            sk5.markdown(_SKEL_CARD, unsafe_allow_html=True)
+        with sk_side:
+            st.markdown(_SKEL_SMALL, unsafe_allow_html=True)
+            st.markdown(_SKEL_SMALL, unsafe_allow_html=True)
+            st.markdown(_SKEL_SMALL, unsafe_allow_html=True)
+
     # ── Load all data ─────────────────────────────────
     company             = _load_company()
-    active_count        = _load_active_employee_count()
-    total_count         = _load_all_employee_count()
+    active_count, total_count = _load_employee_counts()
     periods             = _load_pay_periods()
-    history             = _load_payroll_history()
+    history             = _load_payroll_history(_cid=get_company_id())
     remittance_status   = _load_current_remittance_status()
     deadlines           = _get_deadlines(remittance_status)
     pending_leave, pending_ot = _count_pending_requests()
@@ -1683,37 +1755,11 @@ def render():
 
     headcount = len(latest_entries)
 
-    # ── Editorial Header + Live Clock ─────────────────
-    import datetime as _dt
-    _hour = _dt.datetime.now().hour
-    _greeting = "Good morning" if _hour < 12 else ("Good afternoon" if _hour < 18 else "Good evening")
-    _display_name = st.session_state.get("display_name", "Admin")
-    _first_name = _display_name.split()[0] if _display_name else "Admin"
-
     # Build calendar events from loaded data
     _cal_events = _build_calendar_events(periods, deadlines)
 
-    # Header row: Greeting (left) | Date & Time (right)
-    _now = _dt.datetime.now()
-    _date_str = _now.strftime("%B %d, %Y")
-    _time_str = _now.strftime("%I:%M %p").lstrip("0")
-    hdr_l, hdr_r = st.columns([3, 1])
-    with hdr_l:
-        st.markdown(
-            f'<h2 class="gxp-editorial-heading" style="margin-top:0">{_greeting}, {_first_name}.</h2>'
-            f'<p class="gxp-editorial-sub">Everything is ready for your next pay cycle.</p>',
-            unsafe_allow_html=True,
-        )
-    with hdr_r:
-        st.markdown(
-            f'<div style="text-align:right;padding-top:8px">'
-            f'  <div style="font-size:14px;font-weight:700;color:var(--gxp-text)">{_date_str}</div>'
-            f'  <div style="font-size:12px;color:var(--gxp-text2);margin-top:2px">{_time_str}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+    # ── Clear skeletons, render real content ───────────
+    _skel_placeholder.empty()
 
     # ── Bento grid ─────────────────────────────────────────────
     # Outer 2-column: left (3/4) for content rows, right (1/4) for Reminders + Alerts
@@ -1857,15 +1903,45 @@ def render():
         });
       }
       wireAlerts();
+
+      /* ── Counting number animation ─────────────────────────── */
+      function animateCounts(){
+        /* Integer counts */
+        pd.querySelectorAll('.gxp-count[data-to]').forEach(function(el){
+          if(el._counted) return;
+          el._counted = true;
+          var target = parseInt(el.getAttribute('data-to')) || 0;
+          if(target === 0){ el.textContent = '0'; return; }
+          var dur = 800, start = performance.now();
+          (function step(now){
+            var t = Math.min((now - start) / dur, 1);
+            var ease = 1 - Math.pow(1 - t, 3);
+            el.textContent = Math.round(ease * target).toLocaleString();
+            if(t < 1) requestAnimationFrame(step);
+          })(performance.now());
+        });
+        /* Money counts (centavos → formatted peso) */
+        pd.querySelectorAll('.gxp-count-money[data-to]').forEach(function(el){
+          if(el._counted) return;
+          el._counted = true;
+          var target = parseInt(el.getAttribute('data-to')) || 0;
+          if(target === 0){ el.innerHTML = '&#8369;0.00'; return; }
+          var dur = 1000, start = performance.now();
+          (function step(now){
+            var t = Math.min((now - start) / dur, 1);
+            var ease = 1 - Math.pow(1 - t, 3);
+            var val = Math.round(ease * target);
+            var pesos = (val / 100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+            el.innerHTML = '&#8369;' + pesos;
+            if(t < 1) requestAnimationFrame(step);
+          })(performance.now());
+        });
+      }
+      animateCounts();
+      setTimeout(animateCounts, 300);
+      setTimeout(animateCounts, 800);
     })();
     </script>""", height=0)
-
-    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
-
-    # ── 2. Quick Actions (M3 icon cards) ─────────────
-    _render_quick_actions_m3()
-
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
     # ── 3. KPI Stat Cards ────────────────────────────
     _render_stat_cards(active_count, total_count, total_gross, total_net, total_cost,

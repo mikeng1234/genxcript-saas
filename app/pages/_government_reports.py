@@ -35,6 +35,24 @@ def _fmt(centavos: int) -> str:
     return f"₱{centavos / 100:,.2f}"
 
 
+def _metric_cards_html(items: list[tuple[str, str, str, str]]) -> str:
+    """Render a row of M3 metric cards. Each item: (label, value, bg, fg)."""
+    cards = ""
+    for label, value, bg, fg in items:
+        cards += (
+            f'<div style="flex:1;min-width:120px;background:{bg};border-radius:12px;'
+            f'padding:12px 16px;">'
+            f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
+            f'letter-spacing:0.06em;color:{fg};opacity:0.7;margin-bottom:4px;">{label}</div>'
+            f'<div style="font-size:18px;font-weight:800;color:{fg};">{value}</div>'
+            f'</div>'
+        )
+    return (
+        f'<div style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 4px;">'
+        f'{cards}</div>'
+    )
+
+
 # ============================================================
 # Database Operations
 # ============================================================
@@ -250,11 +268,18 @@ def _delete_remittance(record_id: str) -> None:
 # Report Definitions
 # ============================================================
 
+_REPORT_COLORS = {
+    "sss":        {"bg": "#ede9fe", "fg": "#5b21b6", "accent": "#7c3aed"},
+    "philhealth": {"bg": "#cffafe", "fg": "#155e75", "accent": "#0891b2"},
+    "pagibig":    {"bg": "#fce7f3", "fg": "#9d174d", "accent": "#db2777"},
+    "bir":        {"bg": "#fee2e2", "fg": "#991b1b", "accent": "#dc2626"},
+}
+
 REPORTS = {
     "sss": {
         "title": "SSS R3 / R5",
         "subtitle": "Monthly Collection List",
-        "icon": '<span class="mdi mdi-bank" style="font-size:18px;"></span>',
+        "icon": "&#127974;",  # bank emoji
         "description": "Employee/employer SSS contributions with Monthly Salary Credit breakdown.",
         "generator": generate_sss_r3,
         "filename_prefix": "SSS_R3",
@@ -262,7 +287,7 @@ REPORTS = {
     "philhealth": {
         "title": "PhilHealth RF-1",
         "subtitle": "Monthly Remittance Report",
-        "icon": '<span class="mdi mdi-hospital-box" style="font-size:18px;"></span>',
+        "icon": "&#127973;",  # hospital emoji
         "description": "Employee/employer PhilHealth premium contributions.",
         "generator": generate_philhealth_rf1,
         "filename_prefix": "PhilHealth_RF1",
@@ -270,7 +295,7 @@ REPORTS = {
     "pagibig": {
         "title": "Pag-IBIG MCRF",
         "subtitle": "Monthly Collection Remittance Form",
-        "icon": '<span class="mdi mdi-home" style="font-size:18px;"></span>',
+        "icon": "&#127968;",  # house emoji
         "description": "Employee/employer Pag-IBIG Fund contributions.",
         "generator": generate_pagibig_mcrf,
         "filename_prefix": "PagIBIG_MCRF",
@@ -278,7 +303,7 @@ REPORTS = {
     "bir": {
         "title": "BIR 1601-C",
         "subtitle": "Monthly Withholding Tax Remittance",
-        "icon": '<span class="mdi mdi-clipboard-text" style="font-size:18px;"></span>',
+        "icon": "&#128203;",  # clipboard emoji
         "description": "Withholding tax on compensation — gross, non-taxable, taxable income, and tax withheld.",
         "generator": generate_bir_1601c,
         "filename_prefix": "BIR_1601C",
@@ -304,6 +329,7 @@ def _preview_sss(employees, entries):
         total_er += er
         rows.append({
             "Employee": f"{emp['last_name']}, {emp['first_name']}",
+            "Basic Salary": _fmt(emp.get("basic_salary", 0)),
             "SSS No.": emp.get("sss_no", "") or "—",
             "EE Share": _fmt(ee),
             "ER Share": _fmt(er),
@@ -312,13 +338,11 @@ def _preview_sss(employees, entries):
 
     if rows:
         st.dataframe(rows, width="stretch", hide_index=True)
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Employee Total", _fmt(total_ee))
-        with col2:
-            st.metric("Employer Total", _fmt(total_er))
-        with col3:
-            st.metric("Grand Total", _fmt(total_ee + total_er))
+        st.markdown(_metric_cards_html([
+            ("Employee Total", _fmt(total_ee), "#ede9fe", "#5b21b6"),
+            ("Employer Total", _fmt(total_er), "#dbeafe", "#1e40af"),
+            ("Grand Total", _fmt(total_ee + total_er), "#d1fae5", "#065f46"),
+        ]), unsafe_allow_html=True)
 
 
 def _preview_philhealth(employees, entries):
@@ -335,7 +359,8 @@ def _preview_philhealth(employees, entries):
         total_er += er
         rows.append({
             "Employee": f"{emp['last_name']}, {emp['first_name']}",
-            "PhilHealth No.": emp.get("philhealth_no", "") or "—",
+            "Basic Salary": _fmt(emp.get("basic_salary", 0)),
+            "PhilHealth No.": emp.get("philhealth_no", "") or "\u2014",
             "EE Share": _fmt(ee),
             "ER Share": _fmt(er),
             "Total Premium": _fmt(ee + er),
@@ -343,13 +368,11 @@ def _preview_philhealth(employees, entries):
 
     if rows:
         st.dataframe(rows, width="stretch", hide_index=True)
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Employee Total", _fmt(total_ee))
-        with col2:
-            st.metric("Employer Total", _fmt(total_er))
-        with col3:
-            st.metric("Grand Total", _fmt(total_ee + total_er))
+        st.markdown(_metric_cards_html([
+            ("Employee Total", _fmt(total_ee), "#cffafe", "#155e75"),
+            ("Employer Total", _fmt(total_er), "#dbeafe", "#1e40af"),
+            ("Grand Total", _fmt(total_ee + total_er), "#d1fae5", "#065f46"),
+        ]), unsafe_allow_html=True)
 
 
 def _preview_pagibig(employees, entries):
@@ -366,7 +389,8 @@ def _preview_pagibig(employees, entries):
         total_er += er
         rows.append({
             "Employee": f"{emp['last_name']}, {emp['first_name']}",
-            "Pag-IBIG MID": emp.get("pagibig_no", "") or "—",
+            "Basic Salary": _fmt(emp.get("basic_salary", 0)),
+            "Pag-IBIG MID": emp.get("pagibig_no", "") or "\u2014",
             "EE Share": _fmt(ee),
             "ER Share": _fmt(er),
             "Total": _fmt(ee + er),
@@ -374,13 +398,11 @@ def _preview_pagibig(employees, entries):
 
     if rows:
         st.dataframe(rows, width="stretch", hide_index=True)
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Employee Total", _fmt(total_ee))
-        with col2:
-            st.metric("Employer Total", _fmt(total_er))
-        with col3:
-            st.metric("Grand Total", _fmt(total_ee + total_er))
+        st.markdown(_metric_cards_html([
+            ("Employee Total", _fmt(total_ee), "#fce7f3", "#9d174d"),
+            ("Employer Total", _fmt(total_er), "#dbeafe", "#1e40af"),
+            ("Grand Total", _fmt(total_ee + total_er), "#d1fae5", "#065f46"),
+        ]), unsafe_allow_html=True)
 
 
 def _preview_bir(employees, entries):
@@ -403,7 +425,8 @@ def _preview_bir(employees, entries):
         total_wht += wht
         rows.append({
             "Employee": f"{emp['last_name']}, {emp['first_name']}",
-            "TIN": emp.get("bir_tin", "") or "—",
+            "Basic Salary": _fmt(emp.get("basic_salary", 0)),
+            "TIN": emp.get("bir_tin", "") or "\u2014",
             "Gross": _fmt(gross),
             "Non-Taxable": _fmt(nontax),
             "Mandatory Ded.": _fmt(mandatory),
@@ -413,15 +436,12 @@ def _preview_bir(employees, entries):
 
     if rows:
         st.dataframe(rows, width="stretch", hide_index=True)
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total Gross", _fmt(total_gross))
-        with col2:
-            st.metric("Total Taxable", _fmt(total_taxable))
-        with col3:
-            st.metric("Total Tax Withheld", _fmt(total_wht))
-        with col4:
-            st.metric("Employees", str(len(rows)))
+        st.markdown(_metric_cards_html([
+            ("Total Gross", _fmt(total_gross), "#e7e8e9", "#424753"),
+            ("Total Taxable", _fmt(total_taxable), "#fef3c7", "#92400e"),
+            ("Tax Withheld", _fmt(total_wht), "#fee2e2", "#991b1b"),
+            ("Employees", str(len(rows)), "#dbeafe", "#1e40af"),
+        ]), unsafe_allow_html=True)
 
 
 PREVIEW_FUNCS = {
@@ -440,6 +460,7 @@ def render(show_title: bool = True):
     inject_css()
     if show_title:
         st.title("Government Reports")
+        st.caption("Generate and download mandatory government remittance reports.")
     else:
         # Remove the top padding inject_css() adds for the page title area
         st.markdown(
@@ -500,19 +521,41 @@ def render(show_title: bool = True):
             if not employees:
                 st.warning("No payroll entries found for this period. Compute payroll first.")
             else:
-                # ---- Report Header ----
+                # ---- M3 Report Card ----
+                rcolors = _REPORT_COLORS.get(selected_report, {"bg": "#e7e8e9", "fg": "#424753", "accent": "#005bc1"})
                 st.markdown(
-                    f"<h3 style='margin:0 0 4px 0;'>{report_info['icon']}&nbsp;{report_info['title']}</h3>",
+                    f'''<div style="background:#fff;border-radius:16px;padding:24px;margin:8px 0 20px;
+                                   box-shadow:0 1px 6px rgba(0,0,0,0.05);border:1px solid #e7e8e9;">
+                      <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
+                        <div style="width:48px;height:48px;border-radius:12px;background:{rcolors['bg']};
+                                    display:flex;align-items:center;justify-content:center;
+                                    font-size:22px;">{report_info['icon']}</div>
+                        <div style="flex:1;">
+                          <div style="font-size:18px;font-weight:800;color:#191c1d;line-height:1.2;">
+                            {report_info['title']}</div>
+                          <div style="font-size:12px;color:#727784;">{report_info['subtitle']}</div>
+                        </div>
+                        <span style="background:{rcolors['bg']};color:{rcolors['fg']};padding:4px 12px;
+                               border-radius:9999px;font-size:10px;font-weight:700;
+                               text-transform:uppercase;letter-spacing:0.04em;">Ready to Download</span>
+                      </div>
+                      <div style="background:#f8f9fa;border-radius:10px;padding:10px 16px;
+                                  display:flex;gap:24px;font-size:12px;color:#424753;">
+                        <span><strong>Period:</strong> {period_label}</span>
+                        <span><strong>Employees:</strong> {len(employees)}</span>
+                        <span><strong>Status:</strong> {period['status'].title()}</span>
+                      </div>
+                    </div>''',
                     unsafe_allow_html=True,
                 )
-                st.caption(f"{report_info['description']}")
-                st.markdown(f"**Period:** {period_label}  |  **Employees:** {len(employees)}")
+
+                st.caption(report_info['description'])
 
                 # ---- Preview Table ----
                 preview_func = PREVIEW_FUNCS[selected_report]
                 preview_func(employees, entries)
 
-                st.divider()
+                st.write("")
 
                 # ---- Download PDF ----
                 pdf_bytes = report_info["generator"](company, employees, entries, period_label)
@@ -548,12 +591,21 @@ def render(show_title: bool = True):
             emp_in_year = [e for e in all_employees if e["id"] in annual_entries]
 
             # ── BIR Form 2316 ─────────────────────────────────────────────────
-            st.subheader("BIR Form 2316")
-            st.caption(
-                "Certificate of Compensation Payment / Tax Withheld — "
-                "one PDF per employee, covering the full calendar year."
+            st.markdown(
+                f'''<div style="display:flex;align-items:center;gap:16px;margin:8px 0 12px;">
+                  <div style="width:42px;height:42px;border-radius:10px;background:#fee2e2;
+                              display:flex;align-items:center;justify-content:center;font-size:20px;">
+                    &#128203;</div>
+                  <div>
+                    <div style="font-size:16px;font-weight:800;color:#191c1d;">BIR Form 2316</div>
+                    <div style="font-size:11px;color:#727784;">Certificate of Compensation Payment / Tax Withheld
+                      &mdash; one PDF per employee, full calendar year</div>
+                  </div>
+                  <span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:9999px;
+                         font-size:10px;font-weight:700;margin-left:auto;">{len(emp_in_year)} EMPLOYEES</span>
+                </div>''',
+                unsafe_allow_html=True,
             )
-            st.markdown(f"**{len(emp_in_year)} employee(s) with payroll data for {selected_year}**")
 
             hc = st.columns([3, 2, 2, 2, 1.5])
             for col, label in zip(hc, ["Employee", "BIR TIN", "Gross Compensation", "Tax Withheld", ""]):
@@ -580,17 +632,24 @@ def render(show_title: bool = True):
 
             # ── BIR Form 1604-C ───────────────────────────────────────────────
             st.divider()
-            st.subheader("BIR Form 1604-C")
-            st.caption(
-                "Annual Information Return of Income Taxes Withheld on Compensation — "
-                "due **January 31** of the following year."
-            )
-
             total_tw = sum(monthly_taxes.values())
             st.markdown(
-                f"**{len(emp_in_year)} employee(s)** · "
-                f"**Total taxes withheld {selected_year}: PHP {total_tw / 100:,.2f}**"
+                f'''<div style="display:flex;align-items:center;gap:16px;margin:8px 0 12px;">
+                  <div style="width:42px;height:42px;border-radius:10px;background:#fef3c7;
+                              display:flex;align-items:center;justify-content:center;font-size:20px;">
+                    &#128196;</div>
+                  <div>
+                    <div style="font-size:16px;font-weight:800;color:#191c1d;">BIR Form 1604-C</div>
+                    <div style="font-size:11px;color:#727784;">Annual Information Return of Income Taxes Withheld
+                      &mdash; due <strong>January 31</strong></div>
+                  </div>
+                </div>''',
+                unsafe_allow_html=True,
             )
+            st.markdown(_metric_cards_html([
+                ("Employees", str(len(emp_in_year)), "#dbeafe", "#1e40af"),
+                (f"Total Tax Withheld {selected_year}", f"PHP {total_tw/100:,.2f}", "#fee2e2", "#991b1b"),
+            ]), unsafe_allow_html=True)
 
             MONTH_NAMES = [
                 "January", "February", "March", "April", "May", "June",
@@ -652,16 +711,18 @@ def render(show_title: bool = True):
     # DOLE 13TH MONTH REPORT TAB
     # ============================================================
     with tab_dole13:
-        st.subheader("DOLE 13th Month Pay Compliance Report")
-        st.caption(
-            "Required under **PD 851** and **DOLE Labor Advisory No. 18, s. 2018**. "
-            "Submit to the nearest DOLE Regional Office **not later than January 15** "
-            "of the following year."
-        )
-        st.info(
-            "This report covers the **full calendar year** selected. "
-            "It pulls the accumulated 13th Month Pay amounts from all finalized payroll entries.",
-            icon="📋",
+        st.markdown(
+            '''<div style="display:flex;align-items:center;gap:16px;margin:0 0 12px;">
+              <div style="width:42px;height:42px;border-radius:10px;background:#d1fae5;
+                          display:flex;align-items:center;justify-content:center;font-size:20px;">
+                &#127873;</div>
+              <div>
+                <div style="font-size:16px;font-weight:800;color:#191c1d;">DOLE 13th Month Pay Compliance Report</div>
+                <div style="font-size:11px;color:#727784;">PD 851 / DOLE LA No. 18, s. 2018
+                  &mdash; submit by <strong>January 15</strong></div>
+              </div>
+            </div>''',
+            unsafe_allow_html=True,
         )
 
         today = _date.today()
@@ -685,10 +746,11 @@ def render(show_title: bool = True):
             )
 
             # ── Summary metrics ───────────────────────────────────────────────
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Employment", len(all_employees))
-            m2.metric("Workers Benefitted", len(benefitted_emps))
-            m3.metric("Total 13th Month Granted", f"₱{total_13th/100:,.2f}")
+            st.markdown(_metric_cards_html([
+                ("Total Employment", str(len(all_employees)), "#e7e8e9", "#424753"),
+                ("Workers Benefitted", str(len(benefitted_emps)), "#dbeafe", "#1e40af"),
+                ("Total 13th Month Granted", f"₱{total_13th/100:,.2f}", "#d1fae5", "#065f46"),
+            ]), unsafe_allow_html=True)
 
             st.divider()
 

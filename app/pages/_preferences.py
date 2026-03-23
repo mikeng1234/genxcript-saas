@@ -42,7 +42,7 @@ DATE_FORMAT_EXAMPLES = {
 
 PAGES_LIST = [
     "Dashboard", "Employees", "Payroll Run",
-    "Payroll Comparison", "OT Analytics", "Government Reports",
+    "Payroll Comparison", "Workforce Analytics", "Government Reports",
     "Calendar", "Company Setup",
 ]
 
