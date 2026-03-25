@@ -101,10 +101,11 @@ def _onboarding_badge(completed: int, total: int) -> str:
 # Database operations
 # ============================================================
 
-def _load_employees(show_inactive: bool = False) -> list[dict]:
-    """Load employees from Supabase."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_employees(show_inactive: bool = False, _cid: str = "") -> list[dict]:
+    """Load employees from Supabase. Cached 5 min."""
     db = get_db()
-    company_id = get_company_id()
+    company_id = _cid or get_company_id()
     query = db.table("employees").select("*").eq("company_id", company_id)
     if not show_inactive:
         query = query.eq("is_active", True)
@@ -112,11 +113,23 @@ def _load_employees(show_inactive: bool = False) -> list[dict]:
     return result.data
 
 
+def _invalidate_employee_caches():
+    """Clear all employee-related caches after a write operation."""
+    for fn in [
+        _load_employees, _load_all_photo_urls, _load_all_departments,
+        _load_distinct_positions, _load_department_names, _load_distinct_departments,
+        _load_all_employees_for_reports_to, _load_employees_for_balance,
+    ]:
+        if hasattr(fn, "clear"):
+            fn.clear()
+
+
 def _create_employee(data: dict) -> dict:
     """Insert a new employee into Supabase."""
     db = get_db()
     data["company_id"] = get_company_id()
     result = db.table("employees").insert(data).execute()
+    _invalidate_employee_caches()
     return result.data[0]
 
 
@@ -124,6 +137,7 @@ def _update_employee(employee_id: str, data: dict) -> dict:
     """Update an employee in Supabase."""
     db = get_db()
     result = db.table("employees").update(data).eq("id", employee_id).execute()
+    _invalidate_employee_caches()
     return result.data[0]
 
 
@@ -213,8 +227,9 @@ def _load_single_employee(emp_id: str) -> dict:
     return result.data or {}
 
 
-def _load_all_photo_urls() -> dict[str, str]:
-    """Return {employee_id: photo_url} for all employees with a photo."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_all_photo_urls(_cid: str = "") -> dict[str, str]:
+    """Return {employee_id: photo_url} for all employees with a photo. Cached 5 min."""
     try:
         rows = (
             get_db().table("employee_profiles")
@@ -239,8 +254,9 @@ def _clear_dialog_state(emp_id: str) -> None:
         st.session_state.pop(k, None)
 
 
-def _load_all_departments() -> dict:
-    """Return {employee_id: department_str} for all employees in this company."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_all_departments(_cid: str = "") -> dict:
+    """Return {employee_id: department_str} for all employees in this company. Cached 5 min."""
     try:
         db  = get_db()
         cid = get_company_id()
@@ -352,8 +368,9 @@ def _next_employee_no(existing_nos: list[str]) -> str:
     return "EMP-001"
 
 
-def _load_distinct_positions() -> list[str]:
-    """Load sorted unique non-empty positions from this company's employees."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_distinct_positions(_cid: str = "") -> list[str]:
+    """Load sorted unique non-empty positions from this company's employees. Cached 5 min."""
     db = get_db()
     result = (
         db.table("employees")
@@ -371,7 +388,8 @@ def _load_distinct_positions() -> list[str]:
     return sorted(positions)
 
 
-def _load_department_names() -> list[str]:
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_department_names(_cid: str = "") -> list[str]:
     """Load department names from the departments table for filter use."""
     try:
         db = get_db()
@@ -389,7 +407,8 @@ def _load_department_names() -> list[str]:
         return []
 
 
-def _load_distinct_departments() -> list[str]:
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_distinct_departments(_cid: str = "") -> list[str]:
     """Load sorted unique non-empty departments from employee_profiles for this company."""
     db = get_db()
     cid = get_company_id()
@@ -410,7 +429,8 @@ def _load_distinct_departments() -> list[str]:
     return sorted(departments)
 
 
-def _load_leave_templates() -> list[dict]:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_leave_templates(_cid: str = "") -> list[dict]:
     """Load leave entitlement templates for the current company."""
     db = get_db()
     result = (
@@ -444,7 +464,8 @@ def _template_label(tmpl: dict) -> str:
     )
 
 
-def _load_all_employees_for_reports_to(exclude_id=None) -> list[dict]:
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_all_employees_for_reports_to(exclude_id=None, _cid: str = "") -> list[dict]:
     """Load active employees for the 'Reports To' dropdown, excluding self."""
     rows = (
         get_db().table("employees")
@@ -459,7 +480,8 @@ def _load_all_employees_for_reports_to(exclude_id=None) -> list[dict]:
     return rows
 
 
-def _load_schedules_for_form() -> list[dict]:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_schedules_for_form(_cid: str = "") -> list[dict]:
     """Load shift schedules for the schedule dropdown in the employee form."""
     return (
         get_db().table("schedules")
@@ -496,10 +518,10 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
     defaults = existing or {}
 
     # Load helpers outside form (DB calls are fine here)
-    leave_templates      = _load_leave_templates()
-    schedules            = _load_schedules_for_form()
-    distinct_positions   = _load_distinct_positions()
-    distinct_departments = _load_distinct_departments()
+    leave_templates      = _load_leave_templates(_cid=get_company_id())
+    schedules            = _load_schedules_for_form(_cid=get_company_id())
+    distinct_positions   = _load_distinct_positions(_cid=get_company_id())
+    distinct_departments = _load_distinct_departments(_cid=get_company_id())
 
     # Auto-suggest employee number only for new employees
     if not is_edit:
@@ -788,19 +810,19 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
                 st.error("Basic salary must be greater than zero.")
                 return None
 
-            # Resolve position from session state (widgets live outside the form)
+            # Resolve position — always uppercase for consistency
             _pos_sel = st.session_state.get(pos_select_key, "")
             if _pos_sel == _NEW_POSITION_SENTINEL:
                 resolved_position = st.session_state.get(pos_new_key, "").strip().upper()
             else:
-                resolved_position = _pos_sel
+                resolved_position = (_pos_sel or "").strip().upper()
 
-            # Resolve department from session state
+            # Resolve department — always uppercase for consistency
             _dept_sel = st.session_state.get(dept_select_key, "")
             if _dept_sel == _NEW_DEPT_SENTINEL:
                 resolved_department = st.session_state.get(dept_new_key, "").strip().upper()
             else:
-                resolved_department = _dept_sel
+                resolved_department = (_dept_sel or "").strip().upper()
 
             # Clear outside-form session state for add mode so next open starts fresh
             if not is_edit:
@@ -842,7 +864,8 @@ def _employee_form(existing: dict | None = None, form_key: str = "add") -> dict 
 # Leave Balances Admin View — DB helpers
 # ============================================================
 
-def _load_company_leave_settings() -> dict:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_company_leave_settings(_cid: str = "") -> dict:
     """Load leave entitlement defaults + replenishment policy from companies table."""
     result = (
         get_db().table("companies")
@@ -854,7 +877,8 @@ def _load_company_leave_settings() -> dict:
     return result.data or {}
 
 
-def _load_leave_templates_map() -> dict:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_leave_templates_map(_cid: str = "") -> dict:
     """Return {template_id: {name, vl_days, sl_days, cl_days}} for all company templates."""
     result = (
         get_db().table("leave_entitlement_templates")
@@ -865,7 +889,8 @@ def _load_leave_templates_map() -> dict:
     return {r["id"]: r for r in (result.data or [])}
 
 
-def _load_employees_for_balance() -> list[dict]:
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_employees_for_balance(_cid: str = "") -> list[dict]:
     """Active employees with leave template assignment and department."""
     employees = (
         get_db().table("employees")
@@ -876,7 +901,7 @@ def _load_employees_for_balance() -> list[dict]:
         .execute()
     ).data or []
     # Department lives in employee_profiles — merge it in
-    dept_map = _load_all_departments()
+    dept_map = _load_all_departments(_cid=get_company_id())
     for emp in employees:
         emp["department"] = dept_map.get(emp["id"], "")
     return employees
@@ -1241,9 +1266,9 @@ def _render_leave_balances_tab():
             key="lb_year",
         )
 
-    company   = _load_company_leave_settings()
-    templates = _load_leave_templates_map()
-    employees = _load_employees_for_balance()
+    company   = _load_company_leave_settings(_cid=get_company_id())
+    templates = _load_leave_templates_map(_cid=get_company_id())
+    employees = _load_employees_for_balance(_cid=get_company_id())
     usage     = _load_approved_leave_year(year)
     overrides = _load_leave_balance_overrides(year)  # carry-over rows from year-end processing
 
@@ -1275,7 +1300,7 @@ def _render_leave_balances_tab():
     all_positions = sorted({(emp.get("position") or "").strip() for emp in employees} - {""})
     all_depts     = sorted({emp.get("department") or "" for emp in employees} - {""})
     # Load dept names from structured departments table (fall back to employee data)
-    _dept_names_structured = _load_department_names()
+    _dept_names_structured = _load_department_names(_cid=get_company_id())
     if _dept_names_structured:
         all_depts = _dept_names_structured
 
@@ -1568,14 +1593,14 @@ def _edit_employee_dialog(emp_id: str):
     p       = profile or {}
 
     # Inject department from employee_profiles
-    dept_lookup = _load_all_departments()
+    dept_lookup = _load_all_departments(_cid=get_company_id())
     emp["department"] = dept_lookup.get(emp_id, "")
 
     # ── Dropdown data ──────────────────────────────────────────────────────────
-    distinct_positions   = _load_distinct_positions()
-    distinct_departments = _load_distinct_departments()
-    leave_templates      = _load_leave_templates()
-    schedules            = _load_schedules_for_form()
+    distinct_positions   = _load_distinct_positions(_cid=get_company_id())
+    distinct_departments = _load_distinct_departments(_cid=get_company_id())
+    leave_templates      = _load_leave_templates(_cid=get_company_id())
+    schedules            = _load_schedules_for_form(_cid=get_company_id())
 
     position_options = distinct_positions + [_NEW_POSITION_SENTINEL]
     dept_options     = distinct_departments + [_NEW_DEPT_SENTINEL]
@@ -2019,20 +2044,20 @@ def _edit_employee_dialog(emp_id: str):
             st.error("Basic salary must be greater than zero.")
             return
 
-        # Resolve position
+        # Resolve position — always uppercase for consistency
         pos_sel = ss.get(pos_key, "")
         resolved_position = (
             (ss.get(posn_key, "") or "").strip().upper()
             if pos_sel == _NEW_POSITION_SENTINEL
-            else pos_sel
+            else (pos_sel or "").strip().upper()
         )
 
-        # Resolve department
+        # Resolve department — always uppercase for consistency
         dep_sel = ss.get(dep_key, "")
         resolved_department = (
             (ss.get(depn_key, "") or "").strip().upper()
             if dep_sel == _NEW_DEPT_SENTINEL
-            else dep_sel
+            else (dep_sel or "").strip().upper()
         )
 
         # Resolve leave template
@@ -2214,14 +2239,26 @@ def _render_employees_tab(show_salary_toggle: bool = True):
             with a reveal toggle. If False (dashboard dialog), salary is
             never shown.
     """
-    # Open edit dialog if editing_id is set (dialog stays open until save/cancel clears it)
-    if st.session_state.get("editing_id"):
-        _edit_employee_dialog(st.session_state["editing_id"])
+    # Open edit dialog if editing_id is set.
+    # Check if any non-edit button was clicked this rerun (salary toggle, filter, etc.)
+    # — if so, clear editing_id since the user interacted with something else.
+    _edit_id = st.session_state.get("editing_id")
+    if _edit_id:
+        # Only open dialog if we're not processing another button click
+        # The dialog decorator handles its own open/close state internally
+        try:
+            _edit_employee_dialog(_edit_id)
+        except Exception:
+            # Dialog was closed by user (X button) or conflict — clear state
+            st.session_state.pop("editing_id", None)
+            _clear_dialog_state(_edit_id)
 
     # Row 1: add button (right-aligned)
     _, col_add = st.columns([5, 1])
     with col_add:
         add_clicked = st.button("+ Add Employee", type="primary", width="stretch")
+        if add_clicked:
+            st.session_state.pop("editing_id", None)  # close any open edit dialog
 
     # Read filter flags from session state so employee load uses last-selected values
     # (checkboxes live inside the expander below; session state keeps them across reruns)
@@ -2258,46 +2295,62 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                     st.error(f"Error adding employee: {error_msg}")
 
     # --- Load employees + departments ---
-    employees   = _load_employees(show_inactive=show_inactive)
-    dept_lookup = _load_all_departments()
+    employees   = _load_employees(show_inactive=show_inactive, _cid=get_company_id())
+    dept_lookup = _load_all_departments(_cid=get_company_id())
     for emp in employees:
-        emp["department"] = dept_lookup.get(emp["id"], "")
+        emp["department"] = (dept_lookup.get(emp["id"], "") or "").strip().upper()
 
     # Filter controls — must be rendered AFTER employees are loaded so options are dynamic
-    all_positions = sorted({(e.get("position") or "").strip() for e in employees} - {""})
-    all_depts     = sorted({(e.get("department") or "").strip() for e in employees} - {""})
+    _all_positions_full = sorted({(e.get("position") or "").strip().upper() for e in employees} - {""})
+    _all_depts_full     = sorted({(e.get("department") or "").strip().upper() for e in employees} - {""})
     # Load dept names from structured departments table (fall back to employee data)
-    _dept_names_structured = _load_department_names()
+    _dept_names_structured = _load_department_names(_cid=get_company_id())
     if _dept_names_structured:
-        all_depts = _dept_names_structured
-    # ── Collapsible filter bar ─────────────────────────────────
-    with st.expander("Filters", expanded=False):
-        fcol, chkcol = st.columns([3, 2])
-        with fcol:
-            sel_dept = st.multiselect("Department", all_depts,     key="emp_f_dept", placeholder="All departments")
-            sel_pos  = st.multiselect("Position",   all_positions, key="emp_f_pos",  placeholder="All positions")
-            search   = st.text_input("Employee",    placeholder="Name or employee number…",
-                                     label_visibility="visible",   key="emp_search")
-        with chkcol:
-            st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)  # align with inputs
-            st.checkbox("Show inactive",      key="emp_show_inactive")
-            st.checkbox("Incomplete IDs only", key="emp_incomplete")
+        _all_depts_full = sorted(set(_all_depts_full) | set(_dept_names_structured))
 
-    # --- Onboarding summary banner ---
-    if employees:
-        incomplete = [e for e in employees if _onboarding_status(e)[0] < len(ONBOARDING_FIELDS)]
-        if incomplete:
-            names = ", ".join(
-                f"{e['first_name']} {e['last_name']}" for e in incomplete[:3]
-            )
-            more = f" and {len(incomplete) - 3} more" if len(incomplete) > 3 else ""
-            st.warning(
-                f"**{len(incomplete)} employee{'s' if len(incomplete) > 1 else ''} have incomplete government IDs:** "
-                f"{names}{more}. Edit their profiles to add the missing details.",
-                icon="⚠️",
-            )
+    # ── Cross-filter: narrow choices based on current selection ──
+    # Read current selections from session state (before widgets render)
+    _cur_dept = st.session_state.get("emp_f_dept", [])
+    _cur_pos  = st.session_state.get("emp_f_pos", [])
 
-    # --- Apply all filters ---
+    # If dept is selected → only show positions in those departments
+    if _cur_dept:
+        _dept_upper = {d.upper() for d in _cur_dept}
+        _avail_positions = sorted({
+            (e.get("position") or "").strip().upper()
+            for e in employees
+            if (e.get("department") or "").upper() in _dept_upper
+        } - {""})
+    else:
+        _avail_positions = _all_positions_full
+
+    # If position is selected → only show departments that have those positions
+    if _cur_pos:
+        _pos_upper = {p.upper() for p in _cur_pos}
+        _avail_depts = sorted({
+            (e.get("department") or "").strip().upper()
+            for e in employees
+            if (e.get("position") or "").upper() in _pos_upper
+        } - {""})
+    else:
+        _avail_depts = _all_depts_full
+
+    # ── Filters (left) + Stats (right) side by side ─────────────
+    col_filters, col_stats = st.columns([1, 1], gap="large")
+
+    with col_filters:
+        with st.expander("Filters", expanded=False):
+            sel_dept = st.multiselect("Department", _avail_depts, key="emp_f_dept", placeholder="All departments")
+            sel_pos  = st.multiselect("Position", _avail_positions, key="emp_f_pos", placeholder="All positions")
+            search   = st.text_input("Employee", placeholder="Name or employee number…",
+                                     label_visibility="visible", key="emp_search")
+            c_chk1, c_chk2 = st.columns(2)
+            with c_chk1:
+                st.checkbox("Show inactive", key="emp_show_inactive")
+            with c_chk2:
+                st.checkbox("Incomplete Profile only", key="emp_incomplete")
+
+    # --- Apply filters first so stats reflect filtered data ---
     filtered = employees
     if search:
         q = search.lower()
@@ -2308,13 +2361,121 @@ def _render_employees_tab(show_salary_toggle: bool = True):
             or q in e["employee_no"].lower()
         ]
     if sel_pos:
-        filtered = [e for e in filtered if (e.get("position") or "") in sel_pos]
+        _sel_pos_upper = {p.upper() for p in sel_pos}
+        filtered = [e for e in filtered if (e.get("position") or "").upper() in _sel_pos_upper]
     if sel_dept:
-        filtered = [e for e in filtered if (e.get("department") or "") in sel_dept]
-
-    # --- Incomplete only filter ---
+        _sel_dept_upper = {d.upper() for d in sel_dept}
+        filtered = [e for e in filtered if (e.get("department") or "").upper() in _sel_dept_upper]
     if show_incomplete_only:
         filtered = [e for e in filtered if _onboarding_status(e)[0] < len(ONBOARDING_FIELDS)]
+
+    # ── Stat cards (right column) — counts reflect filtered data ──
+    _total     = len(filtered)
+    _active    = sum(1 for e in filtered if e.get("is_active", True))
+    _inactive  = sum(1 for e in filtered if not e.get("is_active", True))
+    _regular   = sum(1 for e in filtered if (e.get("employment_type") or "") == "regular")
+    _probi     = sum(1 for e in filtered if (e.get("employment_type") or "") == "probationary")
+    _depts     = len({(e.get("department") or "Unassigned") for e in filtered})
+    _incomplete_ids = sum(1 for e in filtered if _onboarding_status(e)[0] < len(ONBOARDING_FIELDS))
+
+    # ── Card filter state — clicking a stat card applies a sub-filter ──
+    _card_filter = st.session_state.get("emp_card_filter", None)
+
+    # Apply card filter to narrow the list further
+    if _card_filter == "active":
+        filtered = [e for e in filtered if e.get("is_active", True)]
+    elif _card_filter == "inactive":
+        filtered = [e for e in filtered if not e.get("is_active", True)]
+    elif _card_filter == "regular":
+        filtered = [e for e in filtered if (e.get("employment_type") or "") == "regular"]
+    elif _card_filter == "probationary":
+        filtered = [e for e in filtered if (e.get("employment_type") or "") == "probationary"]
+    elif _card_filter == "incomplete":
+        filtered = [e for e in filtered if _onboarding_status(e)[0] < len(ONBOARDING_FIELDS)]
+
+    with col_stats:
+        if sel_dept:
+            st.caption(f"Showing in {', '.join(sel_dept)}")
+        else:
+            st.caption("Showing all")
+
+        # Render clickable stat cards as buttons in a grid
+        _r1c1, _r1c2, _r1c3 = st.columns(3)
+        _r2c1, _r2c2, _r2c3 = st.columns(3)
+
+        def _render_stat_btn(col, label, value, key_val, bg, border, fg, icon=""):
+            is_active = _card_filter == key_val
+            outline = f"outline:2px solid {fg};outline-offset:-2px;" if is_active else ""
+            with col:
+                st.markdown(
+                    f'<div class="gxp-filter-card" data-filter="{key_val}" style="background:{bg};'
+                    f'border:1px solid {border};border-radius:12px;padding:10px 14px;{outline}'
+                    f'cursor:pointer;">'
+                    f'<div style="font-size:9px;font-weight:700;color:{fg};text-transform:uppercase;'
+                    f'letter-spacing:0.06em;">{label}</div>'
+                    f'<div style="font-size:24px;font-weight:800;color:{fg};line-height:1.2;">'
+                    f'{value:,}</div></div>',
+                    unsafe_allow_html=True,
+                )
+                if st.button(
+                    "\u200b", key=f"_sf_{key_val}",
+                    help=f"Filter to {label.lower()}" if not is_active else "Clear filter",
+                ):
+                    if is_active:
+                        st.session_state.pop("emp_card_filter", None)
+                    else:
+                        st.session_state["emp_card_filter"] = key_val
+                    st.rerun()
+
+        _render_stat_btn(_r1c1, "Total",         _total,     "total",        "#eff6ff", "#bfdbfe", "#005bc1")
+        _render_stat_btn(_r1c2, "Active",        _active,    "active",       "#f0fdf4", "#bbf7d0", "#16a34a")
+        _render_stat_btn(_r1c3, "Regular",       _regular,   "regular",      "#fefce8", "#fde68a", "#ca8a04")
+        _render_stat_btn(_r2c1, "Probationary",  _probi,     "probationary", "#fdf4ff", "#e9d5ff", "#9333ea")
+        if show_inactive:
+            _render_stat_btn(_r2c2, "Inactive",  _inactive,  "inactive",     "#fef2f2", "#fecaca", "#dc2626")
+        else:
+            _render_stat_btn(_r2c2, "Departments", _depts,   "departments",  "#f8fafc", "#e2e8f0", "#334155")
+        if _incomplete_ids > 0:
+            _render_stat_btn(_r2c3, "Incomplete", _incomplete_ids, "incomplete", "#fef2f2", "#fecaca", "#dc2626")
+        elif show_inactive:
+            _render_stat_btn(_r2c3, "Departments", _depts, "departments", "#f8fafc", "#e2e8f0", "#334155")
+
+    # --- Onboarding summary banner ---
+    if employees:
+        incomplete = [e for e in employees if _onboarding_status(e)[0] < len(ONBOARDING_FIELDS)]
+        if incomplete:
+            names = ", ".join(
+                f"{e['first_name']} {e['last_name']}" for e in incomplete[:3]
+            )
+            more = f" and {len(incomplete) - 3} more" if len(incomplete) > 3 else ""
+            st.warning(
+                f"**{len(incomplete)} employee{'s' if len(incomplete) > 1 else ''} have incomplete profiles:** "
+                f"{names}{more}. Edit their profiles to add the missing details.",
+                icon="⚠️",
+            )
+
+    # JS: wire stat card clicks to hidden buttons + employee card hover
+    import streamlit.components.v1 as _stc_sf
+    _stc_sf.html("""<script>
+    (function(){
+      var pd = window.parent.document;
+      function wire(){
+        pd.querySelectorAll('.gxp-filter-card').forEach(function(card){
+          if(card._sfWired) return;
+          card._sfWired = true;
+          card.addEventListener('click', function(){
+            var fkey = card.getAttribute('data-filter');
+            if(!fkey) return;
+            var btn = pd.querySelector('[class*="st-key-_sf_' + fkey + '"] button');
+            if(btn) btn.click();
+          });
+        });
+      }
+      wire();
+      setTimeout(wire, 500);
+      setTimeout(wire, 1500);
+    })();
+    </script>""", height=0)
 
     # --- Employee Card Grid ---
     if not filtered:
@@ -2324,62 +2485,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
             st.info("No employees found. Click '+ Add Employee' to get started.")
         return
 
-    # ── Animated summary stats ─────────────────────────────────────────────
-    _total     = len(filtered)
-    _active    = sum(1 for e in filtered if e.get("is_active", True))
-    _inactive  = _total - _active
-    _regular   = sum(1 for e in filtered if (e.get("employment_type") or "") == "regular")
-    _probi     = sum(1 for e in filtered if (e.get("employment_type") or "") == "probationary")
-    _depts     = len({(e.get("department") or "Unassigned") for e in filtered})
-    _incomplete_ids = sum(1 for e in filtered if _onboarding_status(e)[0] < len(ONBOARDING_FIELDS))
-
-    _stat_id = f"emp-stats-{_total}-{_active}-{_depts}"
-    st.markdown(
-        f'<div style="display:flex;gap:12px;flex-wrap:wrap;margin:0 0 12px;">'
-        f'<div class="gxp-count-stat" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;'
-        f'padding:12px 18px;flex:1;min-width:120px;">'
-        f'<div style="font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;'
-        f'letter-spacing:0.06em;">Total</div>'
-        f'<div class="gxp-count" data-to="{_total}" style="font-size:28px;font-weight:800;'
-        f'color:#005bc1;line-height:1.2;">0</div></div>'
-        f'<div class="gxp-count-stat" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;'
-        f'padding:12px 18px;flex:1;min-width:120px;">'
-        f'<div style="font-size:10px;font-weight:700;color:#166534;text-transform:uppercase;'
-        f'letter-spacing:0.06em;">Active</div>'
-        f'<div class="gxp-count" data-to="{_active}" style="font-size:28px;font-weight:800;'
-        f'color:#16a34a;line-height:1.2;">0</div></div>'
-        f'<div class="gxp-count-stat" style="background:#fefce8;border:1px solid #fde68a;border-radius:12px;'
-        f'padding:12px 18px;flex:1;min-width:120px;">'
-        f'<div style="font-size:10px;font-weight:700;color:#854d0e;text-transform:uppercase;'
-        f'letter-spacing:0.06em;">Regular</div>'
-        f'<div class="gxp-count" data-to="{_regular}" style="font-size:28px;font-weight:800;'
-        f'color:#ca8a04;line-height:1.2;">0</div></div>'
-        f'<div class="gxp-count-stat" style="background:#fdf4ff;border:1px solid #e9d5ff;border-radius:12px;'
-        f'padding:12px 18px;flex:1;min-width:120px;">'
-        f'<div style="font-size:10px;font-weight:700;color:#6b21a8;text-transform:uppercase;'
-        f'letter-spacing:0.06em;">Probationary</div>'
-        f'<div class="gxp-count" data-to="{_probi}" style="font-size:28px;font-weight:800;'
-        f'color:#9333ea;line-height:1.2;">0</div></div>'
-        f'<div class="gxp-count-stat" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;'
-        f'padding:12px 18px;flex:1;min-width:120px;">'
-        f'<div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;'
-        f'letter-spacing:0.06em;">Departments</div>'
-        f'<div class="gxp-count" data-to="{_depts}" style="font-size:28px;font-weight:800;'
-        f'color:#334155;line-height:1.2;">0</div></div>'
-        + (
-            f'<div class="gxp-count-stat" style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;'
-            f'padding:12px 18px;flex:1;min-width:120px;">'
-            f'<div style="font-size:10px;font-weight:700;color:#991b1b;text-transform:uppercase;'
-            f'letter-spacing:0.06em;">Incomplete IDs</div>'
-            f'<div class="gxp-count" data-to="{_incomplete_ids}" style="font-size:28px;font-weight:800;'
-            f'color:#dc2626;line-height:1.2;">0</div></div>'
-            if _incomplete_ids > 0 else ''
-        )
-        + '</div>',
-        unsafe_allow_html=True,
-    )
-
-    # JS: animate counting numbers
+    # JS: animate counting numbers (re-animates when data-to changes)
     import streamlit.components.v1 as _stc_count
     _stc_count.html("""<script>
     (function(){
@@ -2387,17 +2493,18 @@ def _render_employees_tab(show_salary_toggle: bool = True):
       function animateCounts(){
         var els = pd.querySelectorAll('.gxp-count[data-to]');
         els.forEach(function(el){
-          if(el._counted) return;
-          el._counted = true;
           var target = parseInt(el.getAttribute('data-to')) || 0;
+          var prev = el._lastTarget;
+          if(prev === target) return;
+          el._lastTarget = target;
           if(target === 0){ el.textContent = '0'; return; }
-          var duration = 800;
+          var duration = 600;
           var start = performance.now();
+          var from = parseInt(el.textContent.replace(/,/g,'')) || 0;
           function step(now){
             var t = Math.min((now - start) / duration, 1);
-            // ease-out cubic
             var ease = 1 - Math.pow(1 - t, 3);
-            var val = Math.round(ease * target);
+            var val = Math.round(from + (target - from) * ease);
             el.textContent = val.toLocaleString();
             if(t < 1) requestAnimationFrame(step);
           }
@@ -2421,13 +2528,16 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                 key="toggle_salary",
                 icon="👁️" if not salary_visible else "🙈",
             ):
+                st.session_state.pop("editing_id", None)
+                st.session_state.pop("emp_card_filter", None)
                 st.session_state.emp_salary_visible = not salary_visible
+                st.rerun()
     else:
         salary_visible = False
         st.caption(f"Showing {len(filtered)} employee{'s' if len(filtered) != 1 else ''}")
 
     # Load photo URLs for all employees
-    photo_urls = _load_all_photo_urls()
+    photo_urls = _load_all_photo_urls(_cid=get_company_id())
 
     # Avatar palette (cycles through 8 colors)
     _AV_PAL = [
@@ -2522,10 +2632,12 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                     )
 
                 st.markdown(
-                    f"<div style='opacity:{opacity};background:#ffffff;border-radius:16px;"
+                    f"<div class='gxp-emp-card' style='opacity:{opacity};background:#ffffff;border-radius:16px;"
                     f"padding:22px 22px 14px;margin-bottom:4px;"
                     f"box-shadow:0px 20px 40px rgba(45,51,53,0.06);"
-                    f"display:flex;flex-direction:column;gap:13px;'>"
+                    f"display:flex;flex-direction:column;gap:13px;"
+                    f"transition:transform 0.18s cubic-bezier(.34,1.56,.64,1),box-shadow 0.18s ease;"
+                    f"cursor:pointer;'>"
                     f"<div style='display:flex;justify-content:space-between;align-items:flex-start;'>"
                     f"{avatar_html}"
                     f"<div style='background:#ebeef0;padding:3px 10px;border-radius:9999px;"
@@ -2618,7 +2730,6 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                     with c1:
                         if st.button("Yes, Confirm", key=f"inv_yes_{emp['id']}", type="primary"):
                             from app.auth import invite_employee
-                            from app.db_helper import get_db, get_company_id
                             ok, result = invite_employee(emp["email"])
                             if ok:
                                 smtp_failed   = False
@@ -2684,7 +2795,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                 from reports.emp201_pdf import generate_emp201_pdf
                 import base64 as _b64mod
                 import streamlit.components.v1 as _cv1
-                _dept_lkp  = _load_all_departments()
+                _dept_lkp  = _load_all_departments(_cid=get_company_id())
                 _p201      = _load_employee_profile(_print_emp_id)
                 _pdf_bytes = generate_emp201_pdf(
                     _print_emp, _p201, _dept_lkp.get(_print_emp_id, "")
@@ -2733,11 +2844,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
 
 def render():
     inject_css()
-    st.markdown(
-        '<p class="gxp-page-label">TEAM</p>'
-        '<h2 class="gxp-editorial-heading">Employees</h2>',
-        unsafe_allow_html=True,
-    )
+    st.title("Employees")
 
     # ── Page-level toasts (shown above tabs so they're always visible) ─────────
     if "_edit_toast" in st.session_state:
@@ -2804,11 +2911,12 @@ def render():
     # ── Programmatic tab redirect (e.g. from Dashboard "Approvals" swipe) ──
     _tab_redirect = st.session_state.pop("_emp_tab_redirect", None)
 
-    tab_emp, tab_approvals, tab_balances, tab_special = st.tabs([
-        "Employees",
+    tab_emp, tab_approvals, tab_balances, tab_special, tab_org = st.tabs([
+        "Directory",
         "Leave & OT Approvals",
         "Leave Balances",
         "Special Leaves",
+        "Org Chart",
     ])
 
     if _tab_redirect:
@@ -2841,3 +2949,9 @@ def render():
 
     with tab_special:
         _render_special_leaves_tab()
+
+    with tab_org:
+        # Import org chart renderer from company_setup
+        from app.pages._company_setup import _render_org_tree_component, _load_departments
+        departments = _load_departments(_cid=get_company_id())
+        _render_org_tree_component(departments)

@@ -438,12 +438,16 @@ def _unsaved_nav_dialog(intended: str) -> None:
 
 
 _intended = st.session_state.get("nav_page", st.session_state.current_page)
-_dirty_nav = (
-    _intended != st.session_state.current_page
-    and bool(st.session_state.get("editing_id"))
-)
-if _dirty_nav:
-    st.session_state.nav_page = st.session_state.current_page
+_dirty_nav = False
+if _intended != st.session_state.current_page and st.session_state.get("editing_id"):
+    # Instead of showing a dialog (which conflicts with the edit dialog),
+    # just silently close the edit and navigate.
+    st.session_state.pop("editing_id", None)
+    # Clear dialog state keys
+    for _k in list(st.session_state):
+        if _k.startswith(("d_", "dp_", "_dp_")):
+            del st.session_state[_k]
+    st.session_state.current_page = _intended
 
 # ── Grouped sidebar navigation ────────────────────────────────────────────
 _NAV_ICONS = {
@@ -486,9 +490,6 @@ for _grp_name, _grp_pages in _NAV_GROUPS:
             if not st.session_state.get("editing_id"):
                 st.session_state.current_page = _p
             st.rerun()
-
-if _dirty_nav:
-    _unsaved_nav_dialog(_intended)
 
 st.session_state.current_page = st.session_state.nav_page
 page = st.session_state.nav_page
@@ -1119,6 +1120,8 @@ for _co in _accessible_now:
     _cosw_key = f"__cosw__{_co['id']}"
     if st.sidebar.button(_cosw_key, key=f"_cosw_{_co['id']}"):
         update_active_company(_co["id"], _co["role"], _co["name"])
+        # Clear ALL cached data so every page reloads fresh for the new company
+        st.cache_data.clear()
         st.session_state.nav_page = "Dashboard"
         st.rerun()
 

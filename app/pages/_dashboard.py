@@ -95,14 +95,15 @@ def _load_employee_names(employee_ids: list[str]) -> dict[str, str]:
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def _load_payroll_history(_cid: str = "") -> list[dict]:
+def _load_payroll_history(cid: str = "") -> list[dict]:
     """Load all finalized/paid periods with aggregate totals for charts.
 
     Uses a single batch query to avoid N+1 round-trips.
-    Cached for 2 minutes to avoid repeated heavy queries.
+    Cached for 2 minutes keyed by company_id.
     """
     db  = get_db()
-    cid = get_company_id()
+    if not cid:
+        cid = get_company_id()
 
     # Single query: get all entries for finalized/paid periods, grouped
     try:
@@ -401,9 +402,10 @@ def _render_bento_row1(next_period, active_count, total_count):
     with col_emp:
         inactive = total_count - active_count
         sub_txt  = f"{inactive} inactive" if inactive else "All active"
+        _cid_tag = get_company_id()[:8]  # force DOM refresh on company switch
         card_html = (
-            f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="background:#febf0d;border-radius:16px;padding:24px;min-height:150px;display:flex;flex-direction:column;justify-content:space-between;">'
-            f'  <div class="gxp-count" data-to="{active_count}" style="font-size:36px;font-weight:900;color:#000;line-height:1;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">0</div>'
+            f'<div class="gxp-bento-hero-card gxp-bento-clickable" data-cid="{_cid_tag}" style="background:#febf0d;border-radius:16px;padding:24px;min-height:150px;display:flex;flex-direction:column;justify-content:space-between;">'
+            f'  <div class="gxp-count" data-to="{active_count}" style="font-size:36px;font-weight:900;color:#000;line-height:1;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">{active_count}</div>'
             f'  <div>'
             f'    <div style="font-size:1rem;font-weight:700;color:#000;">Active Employees</div>'
             f'    <div style="font-size:12px;font-weight:500;color:rgba(0,0,0,.55);margin-top:4px">{sub_txt}</div>'
@@ -489,7 +491,7 @@ def _render_bento_row2(latest_period, history, cal_events):
                 f'<div class="gxp-bento-hero-card" style="{_CARD}">'
                 f'  <div style="{_MLBL}">Payroll Expenditure</div>'
                 f'  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
-                f'    <span class="gxp-count-money" data-to="{latest_gross}" style="font-size:1.6rem;font-weight:800;color:#191c1d;letter-spacing:-1px">&#8369;0</span>'
+                f'    <span class="gxp-count-money" data-to="{latest_gross}" data-cid="{get_company_id()[:8]}" style="font-size:1.6rem;font-weight:800;color:#191c1d;letter-spacing:-1px">&#8369;{latest_gross / 100:,.2f}</span>'
                 f'    {trend_s}'
                 f'  </div>'
                 f'  <div style="font-size:10px;color:#9ca3af;margin-top:4px">{period_lbl}</div>'
@@ -1693,11 +1695,13 @@ def render():
     _date_str = _now.strftime("%B %d, %Y")
     _time_str = _now.strftime("%I:%M %p").lstrip("0")
 
+    st.title("Dashboard")
+
     hdr_l, hdr_r = st.columns([3, 1])
     with hdr_l:
         st.markdown(
-            f'<h2 class="gxp-editorial-heading" style="margin-top:0">{_greeting}, {_first_name}.</h2>'
-            f'<p class="gxp-editorial-sub">Everything is ready for your next pay cycle.</p>',
+            f'<p style="font-size:16px;font-weight:600;color:#191c1d;margin:0;">{_greeting}, {_first_name}.</p>'
+            f'<p style="font-size:13px;color:#727784;margin:4px 0 0;">Everything is ready for your next pay cycle.</p>',
             unsafe_allow_html=True,
         )
     with hdr_r:
@@ -1736,7 +1740,7 @@ def render():
     company             = _load_company()
     active_count, total_count = _load_employee_counts()
     periods             = _load_pay_periods()
-    history             = _load_payroll_history(_cid=get_company_id())
+    history             = _load_payroll_history(cid=get_company_id())
     remittance_status   = _load_current_remittance_status()
     deadlines           = _get_deadlines(remittance_status)
     pending_leave, pending_ot = _count_pending_requests()
@@ -1908,9 +1912,10 @@ def render():
       function animateCounts(){
         /* Integer counts */
         pd.querySelectorAll('.gxp-count[data-to]').forEach(function(el){
-          if(el._counted) return;
-          el._counted = true;
           var target = parseInt(el.getAttribute('data-to')) || 0;
+          var current = parseInt(el.textContent.replace(/,/g,'')) || 0;
+          /* Skip if already correct, or animate from 0 on first load */
+          if(current === target) return;
           if(target === 0){ el.textContent = '0'; return; }
           var dur = 800, start = performance.now();
           (function step(now){
@@ -1922,9 +1927,10 @@ def render():
         });
         /* Money counts (centavos → formatted peso) */
         pd.querySelectorAll('.gxp-count-money[data-to]').forEach(function(el){
-          if(el._counted) return;
-          el._counted = true;
           var target = parseInt(el.getAttribute('data-to')) || 0;
+          var curText = el.textContent.replace(/[^\d]/g,'') || '0';
+          var current = parseInt(curText) || 0;
+          if(current === target) return;
           if(target === 0){ el.innerHTML = '&#8369;0.00'; return; }
           var dur = 1000, start = performance.now();
           (function step(now){

@@ -48,8 +48,9 @@ def _period_label(period: dict) -> str:
 # Database operations
 # ============================================================
 
-def _load_pay_periods() -> list[dict]:
-    """Load all finalized/paid pay periods for this company, newest first."""
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_pay_periods(_cid: str = "") -> list[dict]:
+    """Load all finalized/paid pay periods. Cached 2 min."""
     db = get_db()
     result = (
         db.table("pay_periods")
@@ -62,8 +63,9 @@ def _load_pay_periods() -> list[dict]:
     return result.data
 
 
+@st.cache_data(ttl=120, show_spinner=False)
 def _load_payroll_entries(pay_period_id: str) -> dict:
-    """Return {employee_id: entry_row} for a given pay period."""
+    """Return {employee_id: entry_row}. Cached 2 min."""
     db = get_db()
     result = (
         db.table("payroll_entries")
@@ -74,8 +76,9 @@ def _load_payroll_entries(pay_period_id: str) -> dict:
     return {row["employee_id"]: row for row in result.data}
 
 
-def _load_employees() -> dict:
-    """Return {employee_id: employee_row} for this company, ordered by last name."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_employees(_cid: str = "") -> dict:
+    """Return {employee_id: employee_row}. Cached 5 min."""
     db = get_db()
     result = (
         db.table("employees")
@@ -145,7 +148,7 @@ def render():
     st.caption("Compare two finalized pay periods to spot changes in pay, headcount, and government contributions.")
 
     # Pre-load employees for filter dropdowns
-    _all_employees = _load_employees()
+    _all_employees = _load_employees(_cid=get_company_id())
     _positions = sorted({e.get("position") or "" for e in _all_employees.values() if e.get("position")})
 
     # ── Filters ────────────────────────────────────────────────
@@ -165,7 +168,7 @@ def render():
     # ------------------------------------------------------------------
     # Load periods — need at least 2 finalized to compare
     # ------------------------------------------------------------------
-    periods = _load_pay_periods()
+    periods = _load_pay_periods(_cid=get_company_id())
 
     if len(periods) < 2:
         st.info("You need at least 2 finalized pay periods to compare.")

@@ -257,12 +257,20 @@ section[data-testid="stMain"] {
     border: none !important;
     border-radius: 9999px !important;
     padding: 0.85rem 2rem !important;
+    min-height: 48px !important;
     font-weight: 700 !important;
     font-size: 0.9rem !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
     box-shadow: 0 8px 24px rgba(0,91,193,0.25) !important;
     transition: opacity 0.2s, transform 0.1s !important;
     letter-spacing: 0.01em !important;
+}
+/* Keep button container height stable during Sign In transition */
+.st-key-signin_btn {
+    min-height: 48px !important;
+}
+.st-key-signin_btn .stButton {
+    min-height: 48px !important;
 }
 [data-testid="stHorizontalBlock"]:has(.login-brand-marker)
   > [data-testid="stColumn"]:nth-child(2) [data-testid="stButton"] button[kind="primary"]:hover {

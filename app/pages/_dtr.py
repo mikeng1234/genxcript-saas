@@ -21,22 +21,24 @@ from backend.dtr import (
 # Database helpers
 # ============================================================
 
-def _load_employees() -> list[dict]:
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_employees(_cid: str = "") -> list[dict]:
     return (
         get_db().table("employees")
         .select("id, employee_no, first_name, last_name, position, schedule_id")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .eq("is_active", True)
         .order("last_name")
         .execute()
     ).data or []
 
 
-def _load_schedules() -> dict:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_schedules(_cid: str = "") -> dict:
     rows = (
         get_db().table("schedules")
         .select("*")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .execute()
     ).data or []
     return {r["id"]: r for r in rows}
@@ -75,25 +77,27 @@ def _load_time_logs_range(start: date, end: date) -> list[dict]:
     ).data or []
 
 
-def _load_employee_profiles() -> dict:
-    """Returns {employee_id: department}"""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_employee_profiles(_cid: str = "") -> dict:
+    """Returns {employee_id: department}. Cached 5 min."""
     rows = (
         get_db().table("employee_profiles")
         .select("employee_id, department")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .execute()
     ).data or []
     return {r["employee_id"]: (r.get("department") or "") for r in rows}
 
 
-def _load_dept_names_from_table() -> list[str]:
-    """Load structured department names for filter dropdowns."""
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_dept_names_from_table(_cid: str = "") -> list[str]:
+    """Load structured department names for filter dropdowns. Cached 10 min."""
     try:
         db = get_db()
         result = (
             db.table("departments")
             .select("name")
-            .eq("company_id", get_company_id())
+            .eq("company_id", _cid or get_company_id())
             .eq("is_active", True)
             .order("name")
             .execute()
@@ -259,8 +263,8 @@ def _render_daily_entry():
     st.caption(f"**{work_date.strftime('%A, %B %d, %Y')}**")
 
     # ── Load data ─────────────────────────────────────────────
-    employees = _load_employees()
-    schedules = _load_schedules()
+    employees = _load_employees(_cid=get_company_id())
+    schedules = _load_schedules(_cid=get_company_id())
     overrides = _load_overrides_for_date(work_date)
     existing  = _load_time_logs_for_date(work_date)
 
@@ -268,22 +272,36 @@ def _render_daily_entry():
         st.info("No active employees found.")
         return
 
-    profiles = _load_employee_profiles()   # {employee_id: department}
+    profiles = _load_employee_profiles(_cid=get_company_id())   # {employee_id: department}
     for emp in employees:
         emp["department"] = profiles.get(emp["id"], "")
 
-    # ── Filter bar ────────────────────────────────────────────
-    all_positions = sorted({(e.get("position") or "").strip() for e in employees} - {""})
-    all_depts     = sorted({(e.get("department") or "").strip() for e in employees} - {""})
-    _dept_names_structured = _load_dept_names_from_table()
+    # ── Filter bar with cross-filtering ──────────────────────
+    _all_pos_full = sorted({(e.get("position") or "").strip().upper() for e in employees} - {""})
+    _all_dept_full = sorted({(e.get("department") or "").strip().upper() for e in employees} - {""})
+    _dept_names_structured = _load_dept_names_from_table(_cid=get_company_id())
     if _dept_names_structured:
-        all_depts = _dept_names_structured
+        _all_dept_full = sorted(set(_all_dept_full) | set(_dept_names_structured))
+
+    _cur_de_dept = st.session_state.get("de_f_dept", [])
+    _cur_de_pos  = st.session_state.get("de_f_pos", [])
+    if _cur_de_dept:
+        _de_avail_pos = sorted({(e.get("position") or "").upper() for e in employees
+                                if (e.get("department") or "").upper() in {d.upper() for d in _cur_de_dept}} - {""})
+    else:
+        _de_avail_pos = _all_pos_full
+    if _cur_de_pos:
+        _de_avail_dept = sorted({(e.get("department") or "").upper() for e in employees
+                                 if (e.get("position") or "").upper() in {p.upper() for p in _cur_de_pos}} - {""})
+    else:
+        _de_avail_dept = _all_dept_full
+
     # ── Collapsible filter bar ────────────────────────────────
     with st.expander("Filters", expanded=False):
         fcol, _ = st.columns([3, 2])
         with fcol:
-            de_sel_dept = st.multiselect("Department", all_depts,     key="de_f_dept", placeholder="All departments")
-            de_sel_pos  = st.multiselect("Position",   all_positions, key="de_f_pos",  placeholder="All positions")
+            de_sel_dept = st.multiselect("Department", _de_avail_dept, key="de_f_dept", placeholder="All departments")
+            de_sel_pos  = st.multiselect("Position",   _de_avail_pos,  key="de_f_pos",  placeholder="All positions")
             de_search   = st.text_input("Employee",    placeholder="Name or employee no…",
                                         label_visibility="visible", key="de_search")
 
@@ -495,8 +513,8 @@ def _render_summary():
         st.error("Start date must be before end date.")
         return
 
-    employees = _load_employees()
-    profiles  = _load_employee_profiles()
+    employees = _load_employees(_cid=get_company_id())
+    profiles  = _load_employee_profiles(_cid=get_company_id())
     logs      = _load_time_logs_range(range_start, range_end)
 
     if not employees:
@@ -507,17 +525,31 @@ def _render_summary():
     for emp in employees:
         emp["department"] = profiles.get(emp["id"], "")
 
-    # ── Filter bar ────────────────────────────────────────────
-    all_positions = sorted({(e.get("position") or "").strip() for e in employees} - {""})
-    all_depts     = sorted({(e.get("department") or "").strip() for e in employees} - {""})
-    _dept_names_structured = _load_dept_names_from_table()
+    # ── Filter bar with cross-filtering ──────────────────────
+    _sm_pos_full = sorted({(e.get("position") or "").strip().upper() for e in employees} - {""})
+    _sm_dept_full = sorted({(e.get("department") or "").strip().upper() for e in employees} - {""})
+    _dept_names_structured = _load_dept_names_from_table(_cid=get_company_id())
     if _dept_names_structured:
-        all_depts = _dept_names_structured
+        _sm_dept_full = sorted(set(_sm_dept_full) | set(_dept_names_structured))
+
+    _cur_sm_dept = st.session_state.get("sm_f_dept", [])
+    _cur_sm_pos  = st.session_state.get("sm_f_pos", [])
+    if _cur_sm_dept:
+        _sm_avail_pos = sorted({(e.get("position") or "").upper() for e in employees
+                                if (e.get("department") or "").upper() in {d.upper() for d in _cur_sm_dept}} - {""})
+    else:
+        _sm_avail_pos = _sm_pos_full
+    if _cur_sm_pos:
+        _sm_avail_dept = sorted({(e.get("department") or "").upper() for e in employees
+                                 if (e.get("position") or "").upper() in {p.upper() for p in _cur_sm_pos}} - {""})
+    else:
+        _sm_avail_dept = _sm_dept_full
+
     # ── Filter bar (vertical) ─────────────────────────────────
     fcol, _ = st.columns([2, 5])
     with fcol:
-        sm_sel_dept = st.multiselect("Department", all_depts,     key="sm_f_dept", placeholder="All departments")
-        sm_sel_pos  = st.multiselect("Position",   all_positions, key="sm_f_pos",  placeholder="All positions")
+        sm_sel_dept = st.multiselect("Department", _sm_avail_dept, key="sm_f_dept", placeholder="All departments")
+        sm_sel_pos  = st.multiselect("Position",   _sm_avail_pos,  key="sm_f_pos",  placeholder="All positions")
         sm_search   = st.text_input("Employee",    placeholder="Name or employee no…",
                                     label_visibility="visible",   key="sm_search")
 
@@ -744,7 +776,7 @@ def _render_summary():
     detail_logs.sort(key=lambda l: l["work_date"])
 
     # Load schedule for this employee
-    schedules = _load_schedules()
+    schedules = _load_schedules(_cid=get_company_id())
     sel_emp = next((e for e in filtered_employees if e["id"] == selected_id), None)
 
     def _time_to_minutes(t_str):
@@ -1063,6 +1095,7 @@ def _render_corrections():
     with col_filter:
         status_filter = st.selectbox(
             "Show", ["pending", "all", "approved", "rejected"],
+            format_func=str.title,
             key="corr_filter",
         )
 
@@ -1155,7 +1188,7 @@ def _render_corrections():
                                     .execute()
                                 ).data
                                 if emp_row and req_in and req_out:
-                                    schedules = _load_schedules()
+                                    schedules = _load_schedules(_cid=get_company_id())
                                     emp       = emp_row[0]
                                     work_date = date.fromisoformat(corr["work_date"])
                                     overrides = _load_overrides_for_date(work_date)
@@ -1207,13 +1240,8 @@ def _render_corrections():
 def render():
     inject_css()
 
-    # ── Editorial heading ─────────────────────────────────────
-    st.markdown(
-        '<p class="gxp-page-label">ATTENDANCE</p>'
-        '<h2 class="gxp-editorial-heading">Attendance</h2>'
-        '<p class="gxp-editorial-sub">Daily Time Record &amp; Corrections</p>',
-        unsafe_allow_html=True,
-    )
+    st.title("Attendance")
+    st.caption("Daily Time Record & Corrections")
 
     # ── Monthly KPI cards ─────────────────────────────────────
     try:

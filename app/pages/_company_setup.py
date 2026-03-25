@@ -34,15 +34,17 @@ REGIONS = [
 # Database operations — Company
 # ============================================================
 
-def _load_company() -> dict:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_company(_cid: str = "") -> dict:
     db = get_db()
-    result = db.table("companies").select("*").eq("id", get_company_id()).execute()
+    result = db.table("companies").select("*").eq("id", _cid or get_company_id()).execute()
     return result.data[0] if result.data else {}
 
 
 def _update_company(data: dict) -> dict:
     db = get_db()
     result = db.table("companies").update(data).eq("id", get_company_id()).execute()
+    _load_company.clear()  # invalidate cache
     return result.data[0]
 
 
@@ -50,22 +52,32 @@ def _update_company(data: dict) -> dict:
 # Database operations — Leave Entitlement Templates
 # ============================================================
 
-def _load_templates() -> list[dict]:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_templates(_cid: str = "") -> list[dict]:
     db = get_db()
     result = (
         db.table("leave_entitlement_templates")
         .select("*")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .order("min_service_months")
         .execute()
     )
     return result.data or []
 
 
+def _invalidate_setup_caches():
+    """Clear all company setup caches after a write."""
+    for fn in [_load_company, _load_templates, _load_holidays,
+               _load_schedules, _load_locations, _load_departments]:
+        if hasattr(fn, "clear"):
+            fn.clear()
+
+
 def _create_template(data: dict) -> dict:
     db = get_db()
     data["company_id"] = get_company_id()
     result = db.table("leave_entitlement_templates").insert(data).execute()
+    _load_templates.clear()
     return result.data[0]
 
 
@@ -77,12 +89,14 @@ def _update_template(tmpl_id: str, data: dict) -> dict:
         .eq("id", tmpl_id)
         .execute()
     )
+    _load_templates.clear()
     return result.data[0]
 
 
 def _delete_template(tmpl_id: str):
     db = get_db()
     db.table("leave_entitlement_templates").delete().eq("id", tmpl_id).execute()
+    _load_templates.clear()
 
 
 # ============================================================
@@ -102,8 +116,9 @@ _HOLIDAY_TYPE_COLORS = {
 }
 
 
-def _load_holidays(year: int) -> list[dict]:
-    """Load national (company_id IS NULL) + company-specific holidays for a year."""
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_holidays(year: int, _cid: str = "") -> list[dict]:
+    """Load national + company-specific holidays for a year. Cached 10 min."""
     db  = get_db()
     cid = get_company_id()
     result = (
@@ -121,12 +136,14 @@ def _add_custom_holiday(data: dict) -> dict:
     db = get_db()
     data["company_id"] = get_company_id()
     result = db.table("holidays").insert(data).execute()
+    _load_holidays.clear()
     return result.data[0]
 
 
 def _delete_custom_holiday(holiday_id: str):
     db = get_db()
     db.table("holidays").delete().eq("id", holiday_id).execute()
+    _load_holidays.clear()
 
 
 def _upsert_national_holiday_override(national_row: dict, observed_date) -> None:
@@ -354,7 +371,7 @@ def _render_template_section():
                 st.session_state.show_add_template = False
                 st.rerun()
 
-    templates = _load_templates()
+    templates = _load_templates(_cid=get_company_id())
 
     if not templates:
         st.info("No templates yet. Click **+ Add Template** to create your first leave tier.")
@@ -855,7 +872,8 @@ _DAYS_LABEL = {
 }
 
 
-def _load_schedules() -> list[dict]:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_schedules(_cid: str = "") -> list[dict]:
     return (
         get_db().table("schedules")
         .select("*")
@@ -868,6 +886,7 @@ def _load_schedules() -> list[dict]:
 def _create_schedule(data: dict) -> dict:
     data["company_id"] = get_company_id()
     result = get_db().table("schedules").insert(data).execute()
+    _load_schedules.clear()
     return result.data[0]
 
 
@@ -878,18 +897,21 @@ def _update_schedule(sched_id: str, data: dict) -> dict:
         .eq("id", sched_id)
         .execute()
     )
+    _load_schedules.clear()
     return result.data[0]
 
 
 def _delete_schedule(sched_id: str):
     get_db().table("schedules").delete().eq("id", sched_id).execute()
+    _load_schedules.clear()
 
 
 # ============================================================
 # Database operations — Company Locations (geofencing)
 # ============================================================
 
-def _load_locations() -> list[dict]:
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_locations(_cid: str = "") -> list[dict]:
     return (
         get_db().table("company_locations")
         .select("*")
@@ -902,16 +924,19 @@ def _load_locations() -> list[dict]:
 def _create_location(data: dict) -> dict:
     data["company_id"] = get_company_id()
     result = get_db().table("company_locations").insert(data).execute()
+    _load_locations.clear()
     return result.data[0]
 
 
 def _update_location(loc_id: str, data: dict) -> dict:
     result = get_db().table("company_locations").update(data).eq("id", loc_id).execute()
+    _load_locations.clear()
     return result.data[0]
 
 
 def _delete_location(loc_id: str):
     get_db().table("company_locations").delete().eq("id", loc_id).execute()
+    _load_locations.clear()
 
 
 def _location_form(form_key: str, defaults: dict | None = None, submit_label: str = "Save Location") -> dict | None:
@@ -1028,6 +1053,12 @@ def _schedule_form(
             value=bool(d.get("is_overnight", False)),
             help="Check this if end time is on the next calendar day.",
         )
+        require_break_clock = st.checkbox(
+            "Require break clock-in/out",
+            value=bool(d.get("require_break_clock", False)),
+            help="When enabled, employees on this shift must tap Start Break / End Break in the portal. "
+                 "If unchecked, the scheduled break is implied (deducted automatically).",
+        )
 
         st.markdown("**Working Days**")
         day_cols = st.columns(7)
@@ -1060,6 +1091,7 @@ def _schedule_form(
             "end_time":      end_time.strftime("%H:%M"),
             "break_minutes": int(break_minutes),
             "is_overnight":  bool(is_overnight),
+            "require_break_clock": bool(require_break_clock),
             "work_days":     selected_days,
         }
     return None
@@ -1096,7 +1128,7 @@ def _render_schedules_tab():
                 st.session_state.show_add_schedule = False
                 st.rerun()
 
-    schedules = _load_schedules()
+    schedules = _load_schedules(_cid=get_company_id())
 
     if not schedules:
         st.info("No schedules defined yet. Click **+ Add Schedule** to create your first shift profile.")
@@ -1123,7 +1155,10 @@ def _render_schedules_tab():
         row[0].text(sched["name"] + overnight_tag)
         row[1].text(f"{net_hrs:.1f} hrs")
         row[2].text(f"{sched.get('start_time','')[:5]} – {sched.get('end_time','')[:5]}")
-        row[3].text(f"{sched.get('break_minutes', 60)} min")
+        brk_label = f"{sched.get('break_minutes', 60)} min"
+        if sched.get("require_break_clock"):
+            brk_label += " (clock req.)"
+        row[3].text(brk_label)
         row[4].caption(days_str)
 
         act1, act2 = row[5].columns(2)
@@ -1316,7 +1351,7 @@ def _render_locations_tab():
                 st.session_state.show_add_location = False
                 st.rerun()
 
-    locations = _load_locations()
+    locations = _load_locations(_cid=get_company_id())
 
     if not locations:
         st.info(
@@ -1408,8 +1443,9 @@ def _render_locations_tab():
 # Database operations — Departments / Org Structure
 # ============================================================
 
-def _load_departments() -> list[dict]:
-    """Load all departments for this company, ordered by sort_order then name."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_departments(_cid: str = "") -> list[dict]:
+    """Load all departments for this company. Cached 5 min."""
     db = get_db()
     result = (
         db.table("departments")
@@ -1426,6 +1462,7 @@ def _create_department(data: dict) -> dict:
     db = get_db()
     data["company_id"] = get_company_id()
     result = db.table("departments").insert(data).execute()
+    _load_departments.clear()
     return result.data[0]
 
 
@@ -1438,6 +1475,7 @@ def _update_department(dept_id: str, data: dict) -> dict:
         .eq("id", dept_id)
         .execute()
     )
+    _load_departments.clear()
     return result.data[0]
 
 
@@ -1817,7 +1855,7 @@ def _render_org_tab():
         "Departments are used to group employees, filter payroll views, and set access scopes."
     )
 
-    departments = _load_departments()
+    departments = _load_departments(_cid=get_company_id())
     dept_by_id  = {d["id"]: d for d in departments}
 
     # ── Session state guards ─────────────────────────────────
@@ -2112,7 +2150,7 @@ def render():
     if st.session_state.pop("company_saved", False):
         st.success("Company settings saved successfully.")
 
-    company = _load_company()
+    company = _load_company(_cid=get_company_id())
 
     if not company:
         st.error("No company found. Please contact your administrator.")

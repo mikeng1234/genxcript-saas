@@ -45,8 +45,9 @@ _AVATAR_COLORS = [
 
 # ── Data helpers ─────────────────────────────────────────────────────────────
 
-def _load_ot_data(year: int) -> list[dict]:
-    """Return all approved OT requests for the given year, company-scoped."""
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_ot_data(year: int, _cid: str = "") -> list[dict]:
+    """Return all approved OT requests for the given year, company-scoped. Cached 2 min."""
     result = (
         get_db().table("overtime_requests")
         .select("id, employee_id, ot_date, hours, status")
@@ -59,9 +60,10 @@ def _load_ot_data(year: int) -> list[dict]:
     return result.data or []
 
 
-def _load_employee_map() -> dict:
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_employee_map(_cid: str = "") -> dict:
     """
-    Returns {employee_id: {name, department, shift_name}}.
+    Returns {employee_id: {name, department, shift_name}}. Cached 5 min.
     """
     db         = get_db()
     company_id = get_company_id()
@@ -103,8 +105,9 @@ def _load_employee_map() -> dict:
     return emp_map
 
 
-def _load_time_logs(start_date: date, end_date: date) -> list[dict]:
-    """Return time_logs rows for the given date range, company-scoped."""
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_time_logs(start_date: date, end_date: date, _cid: str = "") -> list[dict]:
+    """Return time_logs rows for the given date range, company-scoped. Cached 2 min."""
     result = (
         get_db().table("time_logs")
         .select(
@@ -304,7 +307,7 @@ def render() -> None:
     # =========================================================================
     with tab_ot:
         ot_data = _load_ot_data(selected_year)
-        emp_map = _load_employee_map()
+        emp_map = _load_employee_map(_cid=get_company_id())
 
         if not ot_data:
             st.info(
@@ -483,7 +486,7 @@ def render() -> None:
         range_start = date(selected_year, 1, 1)
         range_end   = min(date(selected_year, 12, 31), today)
         logs_raw    = _load_time_logs(range_start, range_end)
-        emp_map2    = _load_employee_map()
+        emp_map2    = _load_employee_map(_cid=get_company_id())
 
         late_rows = [r for r in logs_raw if (r.get("late_minutes") or 0) > 0]
 
@@ -772,7 +775,7 @@ def render() -> None:
         range_start3 = date(selected_year, 1, 1)
         range_end3   = min(date(selected_year, 12, 31), today)
         logs_raw3    = _load_time_logs(range_start3, range_end3)
-        emp_map3     = _load_employee_map()
+        emp_map3     = _load_employee_map(_cid=get_company_id())
 
         ut_rows = [r for r in logs_raw3 if (r.get("undertime_minutes") or 0) > 0]
 
@@ -1059,7 +1062,7 @@ def render() -> None:
         range_start4 = date(selected_year, 1, 1)
         range_end4   = min(date(selected_year, 12, 31), today)
         logs_raw4    = _load_time_logs(range_start4, range_end4)
-        emp_map4     = _load_employee_map()
+        emp_map4     = _load_employee_map(_cid=get_company_id())
 
         # Load scheduled break_minutes via schedules join
         try:

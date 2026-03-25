@@ -356,13 +356,62 @@
 
 ## Phase 9: Scale (Production)
 > Only after product-market fit is confirmed. These are infra and platform decisions, not features.
+> **Strategy:** Don't over-engineer infrastructure before you have paying clients. Current setup (Beelink + Cloudflare + Supabase free tier) handles first 20 clients at zero hosting cost. Every peso goes to development, not servers.
 
-- [ ] React frontend (replace Streamlit for production-grade UX)
-- [ ] Electron desktop app (if clients demand offline-first)
-- [ ] Mobile app (React Native or Flutter) — employee portal goes mobile
-- [ ] API layer (REST/GraphQL) — enables 3rd-party integrations (payroll banks, HRIS)
-- [ ] White-label support — resellers can rebrand for their own clients
-- [ ] Record retention module (5–7 year archival per DOLE and BIR requirements)
+### 9A — Current Setup (1–20 clients) ✅ In Use
+> Single Streamlit instance on Beelink Mini PC. All companies share one process. Data isolated via Supabase RLS + `_cid`-keyed `@st.cache_data`. Zero hosting cost.
+
+- [x] **Beelink Mini PC** — always-on home server (I:\SaaS\PaySys)
+- [x] **Cloudflare Quick Tunnel** — free HTTPS URL (`*.trycloudflare.com`), auto-restart via `start_all.bat`
+- [x] **Discord webhook** — auto-posts new tunnel URL on restart
+- [x] **Supabase free tier** — 500 MB DB, 1 GB storage, 50k monthly active users
+- [x] **`@st.cache_data` everywhere** — ~35 cached functions, 2-10 min TTL, write invalidation
+- [ ] **Permanent domain** — buy a cheap domain ($2/yr `.xyz` or `.site`), add to Cloudflare, create named tunnel for fixed URL (e.g., `app.genxcript.xyz`)
+- [ ] **Auto-start on boot** — shortcut in `shell:startup` folder pointing to `start_all.bat`
+- [ ] **Windows sleep prevention** — `powercfg /change standby-timeout-ac 0`
+
+### 9B — Small Scale (20–50 clients, ~6 months)
+> Multiple Streamlit instances behind Nginx reverse proxy on a proper VPS. ~₱2,000/mo.
+
+- [ ] **VPS migration** — DigitalOcean or AWS Lightsail (Singapore region, closest to PH): 2 vCPU, 4 GB RAM, ~$12-24/mo
+- [ ] **Docker Compose** — containerize Streamlit app + Nginx; `docker-compose up -d` deploys everything
+- [ ] **Multiple instances** — group 10-15 clients per Streamlit instance (port 8501, 8502, 8503...); Nginx routes by subdomain
+- [ ] **Custom domain** — `genxcript.com` with subdomains: `client-a.genxcript.com`, `client-b.genxcript.com`
+- [ ] **SSL via Certbot** — auto-renewing Let's Encrypt certificates for all subdomains
+- [ ] **GitHub Actions CI/CD** — push to `master` → auto-deploy to VPS via SSH
+- [ ] **Uptime monitoring** — free tier UptimeRobot or Healthchecks.io; alert on Discord if any instance goes down
+- [ ] **Supabase Pro** — upgrade when approaching free tier limits (~$25/mo for 8 GB DB + 100 GB storage)
+- [ ] **Daily DB backup** — `pg_dump` cron job → local + cloud storage (S3 or Backblaze B2)
+
+### 9C — Medium Scale (50–100 clients, ~1 year)
+> Start React frontend rebuild while keeping Streamlit running for existing clients. ~₱5,000/mo hosting.
+
+- [ ] **React frontend** — replace Streamlit for production-grade UX (Next.js or Vite + React)
+- [ ] **FastAPI backend** — REST API layer between React frontend and Supabase; enables mobile app later
+- [ ] **API authentication** — JWT tokens via Supabase Auth; role-based access at API level
+- [ ] **Mobile app** — React Native or Flutter for employee portal (clock-in, payslips, leave requests)
+- [ ] **White-label support** — resellers can rebrand; company logo + colors loaded from DB
+- [ ] **Parallel operation** — run Streamlit (existing clients) + React (new clients) simultaneously during migration
+
+### 9D — Large Scale (100+ clients, ~2 years)
+> Full SaaS architecture. ~₱15,000/mo+ hosting. Consider hiring DevOps.
+
+- [ ] **Kubernetes (K8s)** or **Railway/Render auto-scaling** — containers scale up/down based on traffic
+- [ ] **CDN for static assets** — Cloudflare or Vercel Edge; instant page loads worldwide
+- [ ] **Read replicas** — Supabase read replicas for analytics queries (don't slow down transactional queries)
+- [ ] **Per-seat pricing engine** — billing integration (Stripe or PayMongo for PH)
+- [ ] **Electron desktop app** — if clients demand offline-first (sync when connected)
+- [ ] **API layer (GraphQL)** — enables 3rd-party integrations (payroll banks, HRIS, BIR e-filing)
+- [ ] **Record retention module** — 5–7 year archival per DOLE and BIR requirements; cold storage tier
+- [ ] **SOC 2 / ISO 27001 prep** — if targeting enterprise clients or government contracts
+
+### Infrastructure Cost Projection
+| Phase | Clients | Monthly Cost | What You Get |
+|-------|---------|-------------|-------------|
+| **9A (Now)** | 1–20 | ₱0 | Beelink + free Cloudflare + free Supabase |
+| **9B (~6 mo)** | 20–50 | ~₱2,000 | VPS + domain + Supabase Pro |
+| **9C (~1 yr)** | 50–100 | ~₱5,000 | VPS cluster + React rebuild + mobile app |
+| **9D (~2 yr)** | 100+ | ~₱15,000+ | K8s + CDN + read replicas + billing |
 
 ---
 
@@ -377,11 +426,64 @@
 - [ ] **File upload security** — DTR snapshots: validate MIME type + size server-side before Storage upload; reject non-image files; confirm bucket policy is `private` (no anonymous reads)
 - [ ] **PDF/report security** — confirm generated PDFs are served directly to the requesting user and not cached in a public path; add company_id assertion before fetching payroll data for PDF generation
 - [ ] **Dependency pinning** — pin all `requirements.txt` to exact versions with hashes (`pip-compile --generate-hashes`); add Dependabot or manual quarterly review for CVEs
-- [ ] **Error message hardening** — ensure no raw Python tracebacks or database errors are shown to end users; wrap all DB calls in try/except with user-friendly messages
+- [ ] **Error message hardening (2-tier)** — Two types of error display:
+  - **User-facing (browser):** friendly error page ("Something went wrong. Please try again or contact your administrator.") with a reference code (e.g., `ERR-20260324-A3F2`) and a "Report Issue" button; no raw tracebacks, no stack traces, no database error details visible to users
+  - **Developer-facing (server logs):** full Python traceback + Supabase error details written to `stderr` / structured log file with timestamp, user ID, company ID, page, and the reference code matching the user-facing message; use Python `logging` module with rotating file handler (`logs/genxcript.log`, 10MB max, 5 backups)
+  - Wrap all page `render()` functions in a top-level try/except that catches any unhandled exception, logs the full traceback server-side, and shows the friendly error page client-side
+  - Database errors (PGRST*, connection timeouts, JWT expired) get specific friendly messages ("Connection issue — please refresh") instead of generic "Something went wrong"
+  - Form validation errors remain inline (red text under the field) — only unexpected/unhandled errors get the friendly error page treatment
 - [ ] **HTTPS enforcement** — document that production deployment must run behind TLS (Nginx + Certbot, Railway, or Cloudflare Tunnel); never run production on plain HTTP
 - [ ] **Rate limiting on login** — add server-side attempt counter (e.g., 5 failed logins → 15-min lockout) stored in Supabase or `st.cache_resource` dict to prevent brute-force attacks
 - [ ] **Penetration test** — run OWASP ZAP scan on the ngrok/production URL; fix any HIGH/CRITICAL findings before go-live
 - [ ] **Shannon Lite** — autonomous white box AI pentester (GitHub: search "shannon lite autonomous pentester"); run against production URL with source code access for deeper OWASP coverage beyond ZAP; white box mode allows it to trace auth flows, RLS logic, and injection paths through actual code paths
+
+---
+
+## Phase 11: QA & Test Guide
+> Final quality gate before production. Systematic page-by-page testing + written test guide for ongoing regression testing.
+
+### 11A — Test Guide Creation
+> At the end of development, create a step-by-step test guide for every page. Each guide covers happy path, edge cases, error scenarios, and expected results.
+
+- [ ] **Login Page** — valid/invalid credentials, employee vs admin login, password reset flow, "Remember me", rate limiting, wrong company
+- [ ] **Dashboard** — skeleton loading, data accuracy (active employees, payroll figures, YTD), company switch refresh, bento card clicks, reminder/alert actions, calendar events
+- [ ] **Employees** — CRUD (add/edit/deactivate), photo upload/remove, salary toggle, filter combinations, search, gov ID validation dots, 201 PDF print, portal invite, password reset
+- [ ] **Employees > Leave & OT Approvals** — approve/reject flows, badge counts, history, cross-navigation from dashboard reminders
+- [ ] **Employees > Leave Balances** — year selector, department filter, balance accuracy vs leave requests, carry-over
+- [ ] **Employees > Special Leaves** — CRUD, approval flow
+- [ ] **Payroll Run** — create period, compute & save (verify SSS/PH/PI/tax), DTR suggestions, absent deduction, batch save, submit for review, approve & finalize, status refresh
+- [ ] **Payslips** — PDF generation, peso sign rendering, YTD totals, all deduction line items
+- [ ] **Payroll Comparison** — period-over-period variance, new hires/exits detection
+- [ ] **Attendance > Daily Entry** — inline time inputs, save all, late/UT/OT computation, shift column
+- [ ] **Attendance > Summary** — selectable rows, day-by-day timeline, department filter, heatmap colors, overnight shift rendering
+- [ ] **Attendance > Corrections** — submit/approve/reject, DTR recomputation
+- [ ] **Workforce Analytics** — OT heatmap, Late Monitoring (Spotfire drill-down), Undertime (same), Break Monitoring, department→employee→calendar flow
+- [ ] **Government Reports** — SSS R3, PhilHealth RF-1, Pag-IBIG MCRF, BIR 1601-C (salary column, totals, PDF download), BIR 2316, BIR 1604-C, DOLE 13th Month
+- [ ] **Calendar** — month navigation, today button, pay period highlighting, holiday colors, deadline dots, upcoming events sidebar, holiday table
+- [ ] **Company Setup > General** — company profile save, payroll policy, daily rate divisor
+- [ ] **Company Setup > Leave Templates** — CRUD, carry-over policy, assignment
+- [ ] **Company Setup > Holidays** — national read-only, custom CRUD, observed date, year selector
+- [ ] **Company Setup > Schedules** — CRUD, overnight toggle, break clock toggle, working days
+- [ ] **Company Setup > Locations** — Leaflet map, add/edit/delete GPS location, geofence radius
+- [ ] **Company Setup > Organization** — department CRUD, hierarchy, org chart (d3-org-chart), search/pulse, employee count, reports_to
+- [ ] **Company Setup > Activity Log** — search, action types, before/after diffs
+- [ ] **Employee Portal > My Profile** — view/edit personal info, permanent address checkbox, photo
+- [ ] **Employee Portal > My Payslips** — list, download PDF
+- [ ] **Employee Portal > My Time & Leave** — clock in/out, break tracking, Leaflet map, leave/OT request filing, DTR history, correction request
+- [ ] **Employee Portal > People Search** — org chart with search, pulse effect
+- [ ] **Employee Portal > Preferences** — theme, display settings
+- [ ] **Multi-company** — company switch, data isolation, cache refresh, sidebar updates
+
+### 11B — Full Bug Sweep
+> Pass through every page systematically, testing each item from the test guide. Document and fix all bugs found.
+
+- [ ] **Pass 1 — Happy path** — walk through each page's primary workflow end-to-end
+- [ ] **Pass 2 — Edge cases** — empty states, zero values, missing data, maximum lengths, special characters
+- [ ] **Pass 3 — Error scenarios** — network timeout, invalid input, permission denied, expired session
+- [ ] **Pass 4 — Cross-page flows** — dashboard → employees, reminders → approvals, alerts → gov reports, payroll → payslips
+- [ ] **Pass 5 — Multi-tenant** — switch companies, verify data isolation, cache freshness
+- [ ] **Pass 6 — Responsive/mobile** — test via Cloudflare tunnel on mobile browser
+- [ ] **Pass 7 — Security red team** — run the 10 scenarios from Security & Privacy Auditor skill
 
 ---
 
@@ -408,7 +510,8 @@ Phase 1 (Payroll Core)
                                             └── Phase 6 (Portal Expansion)
                                                   ├── Time-in/out + Notifications
                                                   └── Phase 7 (BI)
-                                                        └── Phase 8 (Demo Simulator)
+                                                        └── Phase 8 (Demo Simulator + Gov Auditor)
                                                               └── Phase 9 (Scale)
                                                                     └── Phase 10 (Security Hardening)
+                                                                          └── Phase 11 (QA & Test Guide)
 ```

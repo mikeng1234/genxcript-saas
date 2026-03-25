@@ -57,19 +57,21 @@ def _metric_cards_html(items: list[tuple[str, str, str, str]]) -> str:
 # Database Operations
 # ============================================================
 
-def _load_company() -> dict:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_company(_cid: str = "") -> dict:
     db = get_db()
-    result = db.table("companies").select("*").eq("id", get_company_id()).execute()
+    result = db.table("companies").select("*").eq("id", _cid or get_company_id()).execute()
     return result.data[0] if result.data else {}
 
 
-def _load_pay_periods() -> list[dict]:
-    """Load finalized/paid pay periods (reports only make sense for these)."""
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_pay_periods(_cid: str = "") -> list[dict]:
+    """Load finalized/paid pay periods. Cached 2 min."""
     db = get_db()
     result = (
         db.table("pay_periods")
         .select("*")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .in_("status", ["finalized", "paid"])
         .order("period_start", desc=True)
         .execute()
@@ -77,21 +79,23 @@ def _load_pay_periods() -> list[dict]:
     return result.data
 
 
-def _load_employees() -> list[dict]:
-    """Load all employees (including inactive — they may have entries for the period)."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_employees(_cid: str = "") -> list[dict]:
+    """Load all employees (including inactive). Cached 5 min."""
     db = get_db()
     result = (
         db.table("employees")
         .select("*")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .order("last_name")
         .execute()
     )
     return result.data
 
 
+@st.cache_data(ttl=120, show_spinner=False)
 def _load_payroll_entries(pay_period_id: str) -> dict:
-    """Load payroll entries for a period, keyed by employee_id."""
+    """Load payroll entries for a period, keyed by employee_id. Cached 2 min."""
     db = get_db()
     result = (
         db.table("payroll_entries")
@@ -468,8 +472,8 @@ def render(show_title: bool = True):
             unsafe_allow_html=True,
         )
 
-    company      = _load_company()
-    all_employees = _load_employees()
+    company      = _load_company(_cid=get_company_id())
+    all_employees = _load_employees(_cid=get_company_id())
 
     # ============================================================
     # Tab layout
@@ -482,7 +486,7 @@ def render(show_title: bool = True):
     # MONTHLY REPORTS TAB
     # ============================================================
     with tab_monthly:
-        periods = _load_pay_periods()
+        periods = _load_pay_periods(_cid=get_company_id())
 
         if not periods:
             st.info("No finalized pay periods yet. Finalize a payroll run first to generate reports.")

@@ -26,19 +26,21 @@ def _fmt(centavos: int) -> str:
 # Database operations
 # ============================================================
 
-def _load_company() -> dict:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_company(_cid: str = "") -> dict:
     db = get_db()
-    result = db.table("companies").select("*").eq("id", get_company_id()).execute()
+    result = db.table("companies").select("*").eq("id", _cid or get_company_id()).execute()
     return result.data[0] if result.data else {}
 
 
-def _load_pay_periods() -> list[dict]:
-    """Load finalized/paid pay periods."""
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_pay_periods(_cid: str = "") -> list[dict]:
+    """Load finalized/paid pay periods. Cached 2 min."""
     db = get_db()
     result = (
         db.table("pay_periods")
         .select("*")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .in_("status", ["finalized", "paid"])
         .order("period_start", desc=True)
         .execute()
@@ -46,31 +48,34 @@ def _load_pay_periods() -> list[dict]:
     return result.data
 
 
-def _load_all_pay_periods() -> list[dict]:
-    """Load all pay periods (including drafts)."""
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_all_pay_periods(_cid: str = "") -> list[dict]:
+    """Load all pay periods. Cached 2 min."""
     db = get_db()
     result = (
         db.table("pay_periods")
         .select("*")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .order("period_start", desc=True)
         .execute()
     )
     return result.data
 
 
-def _load_employees() -> list[dict]:
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_employees(_cid: str = "") -> list[dict]:
     db = get_db()
     result = (
         db.table("employees")
         .select("*")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .order("last_name")
         .execute()
     )
     return result.data
 
 
+@st.cache_data(ttl=120, show_spinner=False)
 def _load_payroll_entries(pay_period_id: str) -> dict:
     db = get_db()
     result = (
@@ -91,7 +96,7 @@ def render():
     st.title("Payslips")
 
     # Load pay periods (show all, but note which are finalized)
-    all_periods = _load_all_pay_periods()
+    all_periods = _load_all_pay_periods(_cid=get_company_id())
 
     if not all_periods:
         st.info("No pay periods found. Create one in Payroll Run first.")
@@ -114,8 +119,8 @@ def render():
         return
 
     # Load data
-    company = _load_company()
-    all_employees = _load_employees()
+    company = _load_company(_cid=get_company_id())
+    all_employees = _load_employees(_cid=get_company_id())
     entries = _load_payroll_entries(period["id"])
 
     # Filter to employees with computed entries

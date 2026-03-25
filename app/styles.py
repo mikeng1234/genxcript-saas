@@ -652,20 +652,36 @@ def inject_css():
             padding-bottom: 2rem !important;
         }}
 
-        /* ── Collapse zero-height component iframes (sidebar hide, JS overlay) ── */
-        [data-testid="stElementContainer"][height="0px"] {{
+        /* ── Collapse zero-height component iframes ── */
+        /* Use animation to delay display:none — gives JS 1s to execute first */
+        @keyframes gxp-collapse {{
+            0%   {{ height: 0; min-height: 0; margin: 0; padding: 0; overflow: hidden; }}
+            99%  {{ height: 0; min-height: 0; margin: 0; padding: 0; overflow: hidden; }}
+            100% {{ display: none; height: 0; }}
+        }}
+        [data-testid="stElementContainer"][height="0px"],
+        [data-testid="stElementContainer"][height="0"],
+        [data-testid="stElementContainer"]:has(iframe[height="0"]) {{
             height: 0 !important;
             min-height: 0 !important;
+            max-height: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
             overflow: hidden !important;
+            border: none !important;
+            position: absolute !important;
+            width: 0 !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
         }}
-        /* ── Collapse empty element containers (no visible content) ── */
+        /* ── Collapse empty element containers ── */
         [data-testid="stElementContainer"]:empty {{
+            position: absolute !important;
+            width: 0 !important;
             height: 0 !important;
-            min-height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
+            overflow: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
         }}
 
         /* ── Body / general text ── */
@@ -1683,6 +1699,74 @@ def inject_css():
         .st-key-remind_approvals_pill,
         .st-key-alert_nav_gov,
         .st-key-alert_nav_payroll {{
+            height: 0 !important;
+            overflow: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
+
+        /* ══════════════════════════════════════════════════════════
+           UNIFIED INTERACTION SYSTEM — 3 tiers, consistent everywhere
+           ══════════════════════════════════════════════════════════ */
+
+        /* ── Tier 1: Large cards (bento, employee cards) ── */
+        .gxp-hover-lg,
+        .gxp-emp-card,
+        .gxp-bento-hero-card {{
+            transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.18s ease !important;
+            cursor: pointer !important;
+        }}
+        .gxp-hover-lg:hover,
+        .gxp-emp-card:hover,
+        .gxp-bento-hero-card:hover {{
+            transform: translateY(-4px) !important;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.12) !important;
+        }}
+        .gxp-hover-lg:active,
+        .gxp-emp-card:active,
+        .gxp-bento-hero-card:active {{
+            transform: scale(0.97) !important;
+            transition-duration: 0.08s !important;
+        }}
+
+        /* ── Tier 2: Medium cards (filter cards, calendar cells, action buttons) ── */
+        .gxp-hover-md,
+        .gxp-filter-card,
+        .gxp-cal-cell:not(.empty),
+        .gxp-remind-action-btn {{
+            transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.18s ease !important;
+            cursor: pointer !important;
+        }}
+        .gxp-hover-md:hover,
+        .gxp-filter-card:hover,
+        .gxp-cal-cell:not(.empty):hover,
+        .gxp-remind-action-btn:hover {{
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+        }}
+        .gxp-hover-md:active,
+        .gxp-filter-card:active,
+        .gxp-cal-cell:not(.empty):active,
+        .gxp-remind-action-btn:active {{
+            transform: scale(0.97) !important;
+            transition-duration: 0.06s !important;
+        }}
+
+        /* ── Tier 3: Small/subtle (table rows, list items) ── */
+        .gxp-hover-sm {{
+            transition: transform 0.15s ease, background 0.15s ease !important;
+            cursor: pointer !important;
+        }}
+        .gxp-hover-sm:hover {{
+            transform: translateY(-1px) !important;
+            background: rgba(0,0,0,0.02) !important;
+        }}
+        .gxp-hover-sm:active {{
+            transform: scale(0.99) !important;
+        }}
+
+        /* ── Stat card filter buttons — hide visually ── */
+        [class*="st-key-_sf_"] .stButton {{
             height: 0 !important;
             overflow: hidden !important;
             margin: 0 !important;

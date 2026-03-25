@@ -25,9 +25,10 @@ from backend.deadlines import get_remittance_deadlines, load_holiday_set
 # Database helpers
 # ============================================================
 
-def _load_holidays(year: int) -> list[dict]:
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_holidays(year: int, _cid: str = "") -> list[dict]:
     """
-    Return merged holiday list for the current company for a given year.
+    Return merged holiday list for the current company for a given year. Cached 10 min.
     - National holidays (company_id IS NULL) are the base.
     - Company-specific overrides replace the national entry for the same holiday name.
     - Company-added custom holidays (unique names) are appended.
@@ -81,7 +82,8 @@ def _load_holidays(year: int) -> list[dict]:
     return merged
 
 
-def _load_pay_periods_overlapping(year: int, month: int) -> list[dict]:
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_pay_periods_overlapping(year: int, month: int, _cid: str = "") -> list[dict]:
     """Return pay periods whose date range overlaps with the given month."""
     db     = get_db()
     first  = date(year, month, 1).isoformat()

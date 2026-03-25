@@ -73,24 +73,26 @@ def _fmt(centavos: int) -> str:
 # Database operations
 # ============================================================
 
-def _load_company() -> dict:
-    """Load the current company record (for pay_frequency etc.)."""
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_company(_cid: str = "") -> dict:
+    """Load the current company record. Cached 10 min."""
     db = get_db()
     result = (
         db.table("companies")
         .select("*")
-        .eq("id", get_company_id())
+        .eq("id", _cid or get_company_id())
         .single()
         .execute()
     )
     return result.data or {}
 
 
-def _load_departments_map() -> dict:
-    """Return {employee_id: department} for this company's active employees."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_departments_map(_cid: str = "") -> dict:
+    """Return {employee_id: department}. Cached 5 min."""
     try:
         db  = get_db()
-        cid = get_company_id()
+        cid = _cid or get_company_id()
         emp_ids = [r["id"] for r in db.table("employees").select("id").eq("company_id", cid).execute().data or []]
         if not emp_ids:
             return {}
@@ -100,14 +102,15 @@ def _load_departments_map() -> dict:
         return {}
 
 
-def _load_dept_names_from_table() -> list[str]:
-    """Load structured department names for filter dropdowns."""
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_dept_names_from_table(_cid: str = "") -> list[str]:
+    """Load structured department names. Cached 10 min."""
     try:
         db = get_db()
         result = (
             db.table("departments")
             .select("name")
-            .eq("company_id", get_company_id())
+            .eq("company_id", _cid or get_company_id())
             .eq("is_active", True)
             .order("name")
             .execute()
@@ -117,13 +120,14 @@ def _load_dept_names_from_table() -> list[str]:
         return []
 
 
-def _load_employees() -> list[dict]:
-    """Load active employees from Supabase."""
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_employees(_cid: str = "") -> list[dict]:
+    """Load active employees. Cached 5 min."""
     db = get_db()
     result = (
         db.table("employees")
         .select("*")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .eq("is_active", True)
         .order("last_name")
         .execute()
@@ -131,13 +135,14 @@ def _load_employees() -> list[dict]:
     return result.data
 
 
-def _load_pay_periods() -> list[dict]:
-    """Load all pay periods from Supabase."""
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_pay_periods(_cid: str = "") -> list[dict]:
+    """Load all pay periods. Cached 2 min."""
     db = get_db()
     result = (
         db.table("pay_periods")
         .select("*")
-        .eq("company_id", get_company_id())
+        .eq("company_id", _cid or get_company_id())
         .order("period_start", desc=True)
         .execute()
     )
@@ -156,6 +161,10 @@ def _update_pay_period(period_id: str, data: dict) -> dict:
     """Update a pay period (e.g. status change)."""
     db = get_db()
     result = db.table("pay_periods").update(data).eq("id", period_id).execute()
+    # Invalidate related caches
+    _load_pay_periods.clear()
+    _load_all_period_history.clear()
+    _load_all_period_history_detailed.clear()
     return result.data[0]
 
 
@@ -251,8 +260,10 @@ def _hourly_rate_centavos(emp: dict, divisor: int = 26) -> float:
 # Pay Period Management
 # ============================================================
 
-def _load_all_period_history() -> list[dict]:
-    """Load aggregate totals for all finalized/paid periods — used for the trend chart."""
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_all_period_history(cid: str = "") -> list[dict]:
+    """Load aggregate totals for all finalized/paid periods — used for the trend chart.
+    Cached for 2 minutes; cid param ensures per-company isolation."""
     db = get_db()
     periods_result = (
         db.table("pay_periods")
@@ -273,11 +284,18 @@ def _load_all_period_history() -> list[dict]:
         entries = entries_result.data
         if not entries:
             continue
+        govt_ee = sum(
+            e["sss_employee"] + e["philhealth_employee"] + e["pagibig_employee"]
+            for e in entries
+        ) / 100
+        tax = sum(e["withholding_tax"] for e in entries) / 100
         rows.append({
             "period": p["period_start"],
             "gross_pay":       sum(e["gross_pay"]         for e in entries) / 100,
             "total_deductions":sum(e["total_deductions"]  for e in entries) / 100,
             "net_pay":         sum(e["net_pay"]           for e in entries) / 100,
+            "govt_ee":         govt_ee,
+            "tax":             tax,
             "employer_cost":   sum(
                 e["sss_employer"] + e["philhealth_employer"] + e["pagibig_employer"]
                 for e in entries
@@ -286,9 +304,79 @@ def _load_all_period_history() -> list[dict]:
     return rows
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_all_period_history_detailed(cid: str = "") -> list[dict]:
+    """Load per-employee payroll data for all finalized periods — for analytics drill-down.
+    Cached for 2 minutes; cid param ensures per-company isolation."""
+    cid = cid or get_company_id()
+    db = get_db()
+    cid = get_company_id()
+    periods_result = (
+        db.table("pay_periods")
+        .select("id, period_start, status")
+        .eq("company_id", cid)
+        .in_("status", ["finalized", "paid"])
+        .order("period_start", desc=False)
+        .execute()
+    )
+    # Load all employees + departments
+    emps = (
+        db.table("employees").select("id, first_name, last_name, position")
+        .eq("company_id", cid).execute().data or []
+    )
+    emp_map = {e["id"]: f"{e['last_name']}, {e['first_name']}" for e in emps}
+
+    profiles = (
+        db.table("employee_profiles").select("employee_id, department_id")
+        .eq("company_id", cid).execute().data or []
+    )
+    dept_by_emp = {p["employee_id"]: p.get("department_id") for p in profiles}
+
+    depts = (
+        db.table("departments").select("id, name")
+        .eq("company_id", cid).execute().data or []
+    )
+    dept_name_map = {d["id"]: d["name"] for d in depts}
+
+    # Also map by text department from profiles
+    profiles_txt = (
+        db.table("employee_profiles").select("employee_id, department")
+        .eq("company_id", cid).execute().data or []
+    )
+    dept_txt_by_emp = {p["employee_id"]: (p.get("department") or "").strip() for p in profiles_txt}
+
+    rows = []
+    for p in periods_result.data:
+        entries = (
+            db.table("payroll_entries").select("*")
+            .eq("pay_period_id", p["id"]).execute().data or []
+        )
+        for e in entries:
+            eid = e["employee_id"]
+            dept_id = dept_by_emp.get(eid)
+            dept_name = dept_name_map.get(dept_id, "") if dept_id else ""
+            if not dept_name:
+                dept_name = dept_txt_by_emp.get(eid, "Unassigned") or "Unassigned"
+
+            govt_ee = (e["sss_employee"] + e["philhealth_employee"] + e["pagibig_employee"]) / 100
+            rows.append({
+                "period": p["period_start"],
+                "employee_id": eid,
+                "employee_name": emp_map.get(eid, "Unknown"),
+                "department": dept_name,
+                "gross_pay": e["gross_pay"] / 100,
+                "net_pay": e["net_pay"] / 100,
+                "govt_ee": govt_ee,
+                "tax": e["withholding_tax"] / 100,
+                "total_deductions": e["total_deductions"] / 100,
+                "employer_cost": (e["sss_employer"] + e["philhealth_employer"] + e["pagibig_employer"]) / 100,
+            })
+    return rows
+
+
 def _render_pay_period_selector() -> dict | None:
     """Render pay period creation and selection. Returns selected period or None."""
-    periods = _load_pay_periods()
+    periods = _load_pay_periods(_cid=get_company_id())
 
     col_select, col_new = st.columns([3, 1])
 
@@ -323,7 +411,7 @@ def _render_pay_period_selector() -> dict | None:
         st.subheader("Create Pay Period")
 
         # Load company settings once
-        company = _load_company()
+        company = _load_company(_cid=get_company_id())
         pay_frequency = company.get("pay_frequency", "semi-monthly")
         daily_rate_divisor = int(company.get("daily_rate_divisor") or 26)
 
@@ -925,69 +1013,400 @@ def _render_period_totals(entries: dict, employees: list[dict]):
 # Main Page Render
 # ============================================================
 
-def _render_payroll_processing():
-    # ---- Payroll History Combination Chart ----
-    st.subheader("Payroll History")
+def _render_payroll_analytics():
+    """Spotfire-style drill-down: Department pie → Department bar → Employee pie."""
+    from plotly.subplots import make_subplots
 
-    history = _load_all_period_history()
+    # ── Load data ─────────────────────────────────────────────
+    history_raw = _load_all_period_history_detailed(cid=get_company_id())
 
-    if not history:
-        st.info("Chart will appear once you have at least one finalized pay period.")
-    else:
-        df_hist = pd.DataFrame(history)
+    if not history_raw:
+        st.info("Analytics will appear once you have at least one finalized pay period.")
+        return
 
-        fig = go.Figure()
+    df = pd.DataFrame(history_raw)
+    df["period_date"] = pd.to_datetime(df["period"])
 
-        # Grouped bars: Net Pay, Total Deductions, Employer Cost
-        fig.add_trace(go.Bar(
-            name="Net Pay",
-            x=df_hist["period"],
-            y=df_hist["net_pay"],
-            marker_color="#2ca02c",
-            offsetgroup=0,
+    # ── Time range filter ─────────────────────────────────────
+    _range_options = {"6 Months": 6, "1 Year": 12, "1.5 Years": 18, "2 Years": 24}
+    _, _range_col = st.columns([6, 2])
+    with _range_col:
+        range_label = st.selectbox(
+            "Time Range", list(_range_options.keys()),
+            index=1, key="pr_analytics_range", label_visibility="collapsed",
+        )
+    cutoff = pd.Timestamp.now() - pd.DateOffset(months=_range_options[range_label])
+    df = df[df["period_date"] >= cutoff].copy()
+
+    if df.empty:
+        st.caption(f"No finalized periods in the last {range_label.lower()}.")
+        return
+
+    # ── Filter bar (department + employee grouped by department) ──
+    all_depts = sorted(df["department"].unique().tolist())
+    all_emps_by_dept = {}
+    for d in all_depts:
+        emps_in_dept = sorted(df[df["department"] == d]["employee_name"].unique().tolist())
+        all_emps_by_dept[d] = emps_in_dept
+
+    # Build grouped employee options: "DEPT | Employee Name"
+    grouped_emp_options = []
+    for d in all_depts:
+        for emp_name in all_emps_by_dept[d]:
+            grouped_emp_options.append(f"{d}  ·  {emp_name}")
+
+    with st.expander("Filters", expanded=False):
+        f1, f2 = st.columns(2)
+        with f1:
+            sel_depts = st.multiselect(
+                "Department", all_depts,
+                key="pr_an_dept", placeholder="All departments",
+            )
+        with f2:
+            # Filter employee options based on selected departments
+            if sel_depts:
+                avail_options = [o for o in grouped_emp_options
+                                 if any(o.startswith(d + "  ·  ") for d in sel_depts)]
+            else:
+                avail_options = grouped_emp_options
+            sel_emps_raw = st.multiselect(
+                "Employee", avail_options,
+                key="pr_an_emp", placeholder="All employees",
+            )
+
+    # Apply filters
+    if sel_depts:
+        df = df[df["department"].isin(sel_depts)]
+    if sel_emps_raw:
+        # Extract employee names from "DEPT · Name" format
+        sel_emp_names = [s.split("  ·  ", 1)[1] for s in sel_emps_raw if "  ·  " in s]
+        if sel_emp_names:
+            df = df[df["employee_name"].isin(sel_emp_names)]
+
+    if df.empty:
+        st.caption("No data matches the current filters.")
+        return
+
+    # ── Department aggregation ────────────────────────────────
+    dept_agg = (
+        df.groupby("department")
+        .agg(
+            gross=("gross_pay", "sum"),
+            net=("net_pay", "sum"),
+            govt_ee=("govt_ee", "sum"),
+            tax=("tax", "sum"),
+            headcount=("employee_id", "nunique"),
+        )
+        .reset_index()
+        .sort_values("gross", ascending=False)
+    )
+
+    _DEPT_COLORS = ["#005bc1", "#10b981", "#f59e0b", "#ef4444",
+                    "#8b5cf6", "#0891b2", "#db2777", "#6366f1",
+                    "#059669", "#d97706"]
+    dept_color_map = {d: _DEPT_COLORS[i % len(_DEPT_COLORS)]
+                      for i, d in enumerate(dept_agg["department"])}
+
+    # ── Department selection state ────────────────────────────
+    sel_dept = st.session_state.get("pr_sel_dept")
+    if sel_dept not in dept_agg["department"].values:
+        sel_dept = dept_agg["department"].iloc[0]
+        st.session_state.pr_sel_dept = sel_dept
+
+    # ═══════════════════════════════════════════════════════════
+    # ROW 1: Dept Pie (left) + Dept Stacked Bar over time (right)
+    # ═══════════════════════════════════════════════════════════
+    col_pie, col_bar = st.columns([1, 2])
+
+    with col_pie:
+        colors = [dept_color_map[d] for d in dept_agg["department"]]
+        pull = [0.06 if d == sel_dept else 0 for d in dept_agg["department"]]
+
+        fig_pie = go.Figure(go.Pie(
+            labels=dept_agg["department"],
+            values=dept_agg["gross"],
+            marker=dict(colors=colors),
+            pull=pull,
+            textinfo="label+percent",
+            textposition="inside",
+            textfont=dict(size=11),
+            hovertemplate="<b>%{label}</b><br>Gross: ₱%{value:,.0f}<br>%{percent}<extra></extra>",
+            sort=False,
         ))
-        fig.add_trace(go.Bar(
-            name="Total Deductions",
-            x=df_hist["period"],
-            y=df_hist["total_deductions"],
-            marker_color="#d62728",
-            offsetgroup=1,
-        ))
-        fig.add_trace(go.Bar(
-            name="Employer Cost",
-            x=df_hist["period"],
-            y=df_hist["employer_cost"],
-            marker_color="#ff7f0e",
-            offsetgroup=2,
-        ))
+        fig_pie.update_layout(
+            title="Payroll by Department",
+            height=380,
+            margin=dict(l=10, r=10, t=50, b=10),
+            showlegend=False,
+            plot_bgcolor="#f8f9fa",
+            paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Plus Jakarta Sans, system-ui, sans-serif", size=12),
+        )
+        evt_dept = st.plotly_chart(
+            fig_pie, use_container_width=True,
+            key="pr_dept_pie",
+            on_select="rerun",
+            selection_mode="points",
+        )
+        if evt_dept and evt_dept.selection and evt_dept.selection.get("points"):
+            ci = evt_dept.selection["points"][0].get("point_index")
+            if ci is not None and ci < len(dept_agg):
+                new_dept = dept_agg.iloc[ci]["department"]
+                if new_dept != sel_dept:
+                    st.session_state.pr_sel_dept = new_dept
+                    st.session_state.pop("pr_sel_period", None)  # reset period drill
+                    st.rerun()
 
-        # Line overlay: Total Gross Pay
-        fig.add_trace(go.Scatter(
-            name="Gross Pay",
-            x=df_hist["period"],
-            y=df_hist["gross_pay"],
-            mode="lines+markers",
-            line=dict(color="#1f77b4", width=3),
-            marker=dict(size=8),
-        ))
+    # ── Filter to selected department ─────────────────────────
+    df_dept = df[df["department"] == sel_dept].copy()
 
-        fig.update_layout(
-            barmode="group",
-            title="Payroll Breakdown by Period",
-            xaxis_title="Pay Period Start",
-            yaxis_title="Amount (₱)",
-            hovermode="x unified",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            margin=dict(l=0, r=0, t=56, b=0),
+    with col_bar:
+        # Aggregate per period for the selected department
+        dept_periods = (
+            df_dept.groupby("period")
+            .agg(gross=("gross_pay", "sum"), net=("net_pay", "sum"),
+                 govt_ee=("govt_ee", "sum"), tax=("tax", "sum"))
+            .reset_index()
+            .sort_values("period")
         )
 
-        st.plotly_chart(fig, width="stretch")
+        fig_bar = make_subplots(specs=[[{"secondary_y": True}]])
 
-    company = _load_company()
+        # Stacked bars (Net + Govt + Tax = Gross)
+        fig_bar.add_trace(go.Bar(
+            name="Net Pay", x=dept_periods["period"], y=dept_periods["net"],
+            marker_color="#10b981",
+            hovertemplate="Net: ₱%{y:,.0f}<extra></extra>",
+        ), secondary_y=False)
+        fig_bar.add_trace(go.Bar(
+            name="Gov't (EE)", x=dept_periods["period"], y=dept_periods["govt_ee"],
+            marker_color="#3b82f6",
+            hovertemplate="Gov't: ₱%{y:,.0f}<extra></extra>",
+        ), secondary_y=False)
+        fig_bar.add_trace(go.Bar(
+            name="Tax", x=dept_periods["period"], y=dept_periods["tax"],
+            marker_color="#ef4444",
+            hovertemplate="Tax: ₱%{y:,.0f}<extra></extra>",
+        ), secondary_y=False)
+
+        # Line overlay — Gross on secondary axis
+        fig_bar.add_trace(go.Scatter(
+            name="Gross Pay", x=dept_periods["period"], y=dept_periods["gross"],
+            mode="lines+markers",
+            line=dict(color="#005bc1", width=3),
+            marker=dict(size=7),
+            hovertemplate="Gross: ₱%{y:,.0f}<extra></extra>",
+        ), secondary_y=True)
+
+        fig_bar.update_layout(
+            barmode="stack",
+            title=f"{sel_dept} — Payroll Breakdown",
+            height=380,
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                        xanchor="right", x=1, font=dict(size=10)),
+            margin=dict(l=0, r=0, t=56, b=0),
+            plot_bgcolor="#f8f9fa",
+            paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Plus Jakarta Sans, system-ui, sans-serif"),
+        )
+        fig_bar.update_xaxes(title_text=None)
+        fig_bar.update_yaxes(title_text="Components (₱)", secondary_y=False,
+                             tickprefix="₱", tickformat=",")
+        fig_bar.update_yaxes(title_text="Gross (₱)", secondary_y=True,
+                             tickprefix="₱", tickformat=",")
+
+        evt_bar = st.plotly_chart(
+            fig_bar, use_container_width=True,
+            key="pr_dept_bar",
+            on_select="rerun",
+            selection_mode="points",
+        )
+
+        # Handle bar click to select a period
+        sel_period = st.session_state.get("pr_sel_period")
+        if evt_bar and evt_bar.selection and evt_bar.selection.get("points"):
+            ci = evt_bar.selection["points"][0].get("point_index")
+            if ci is not None and ci < len(dept_periods):
+                new_period = dept_periods.iloc[ci]["period"]
+                if new_period != sel_period:
+                    st.session_state.pr_sel_period = new_period
+                    st.rerun()
+
+    # ═══════════════════════════════════════════════════════════
+    # ROW 2: Detail card + Employee pie for selected period
+    # ═══════════════════════════════════════════════════════════
+    dept_row = dept_agg[dept_agg["department"] == sel_dept].iloc[0]
+
+    # Detail card
+    st.markdown(
+        f'<div style="background:#fff;border:1px solid #e7e8e9;border-radius:12px;'
+        f'padding:16px 20px;margin:8px 0;box-shadow:0 1px 4px rgba(0,0,0,0.04);">'
+        f'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+        f'<span style="width:12px;height:12px;border-radius:3px;background:{dept_color_map.get(sel_dept, "#005bc1")};'
+        f'display:inline-block;flex-shrink:0;"></span>'
+        f'<span style="font-size:16px;font-weight:800;color:#191c1d;">{sel_dept}</span>'
+        f'<span style="background:#d1fae5;color:#065f46;padding:2px 10px;border-radius:9999px;'
+        f'font-size:11px;font-weight:700;">&#8369;{dept_row["gross"]:,.0f} gross</span>'
+        f'<span style="background:#dbeafe;color:#1e40af;padding:2px 10px;border-radius:9999px;'
+        f'font-size:11px;font-weight:700;">{int(dept_row["headcount"])} employees</span>'
+        + (f'<span style="background:#fef3c7;color:#92400e;padding:2px 10px;border-radius:9999px;'
+           f'font-size:11px;font-weight:700;">Period: {sel_period}</span>'
+           if sel_period else '')
+        + f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Employee pie for selected period (or all periods) ─────
+    if sel_period:
+        df_emp = df_dept[df_dept["period"] == sel_period].copy()
+        pie_title = f"{sel_dept} — Employee Gross Pay ({sel_period})"
+    else:
+        df_emp = df_dept.copy()
+        pie_title = f"{sel_dept} — Employee Gross Pay (all periods)"
+
+    if df_emp.empty:
+        st.caption("No data for this selection.")
+        return
+
+    emp_agg = (
+        df_emp.groupby("employee_name")
+        .agg(gross=("gross_pay", "sum"), net=("net_pay", "sum"))
+        .reset_index()
+        .sort_values("gross", ascending=False)
+    )
+
+    _EMP_COLORS = ["#2563eb", "#ea580c", "#d97706", "#0891b2",
+                   "#7c3aed", "#db2777", "#0d9488", "#6366f1",
+                   "#059669", "#dc2626", "#4f46e5", "#0284c7"]
+    emp_colors = [_EMP_COLORS[i % len(_EMP_COLORS)] for i in range(len(emp_agg))]
+
+    fig_emp_pie = go.Figure(go.Pie(
+        labels=emp_agg["employee_name"],
+        values=emp_agg["gross"],
+        marker=dict(colors=emp_colors),
+        textinfo="label+percent",
+        textposition="auto",
+        textfont=dict(size=10),
+        hovertemplate="<b>%{label}</b><br>Gross: ₱%{value:,.0f}<br>%{percent}<extra></extra>",
+    ))
+    fig_emp_pie.update_layout(
+        title=pie_title,
+        height=380,
+        margin=dict(l=10, r=10, t=50, b=10),
+        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
+                    font=dict(size=10)),
+        plot_bgcolor="#f8f9fa",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Plus Jakarta Sans, system-ui, sans-serif", size=12),
+    )
+    st.plotly_chart(fig_emp_pie, use_container_width=True, key="pr_emp_pie")
+
+
+def _render_payroll_history():
+    """Payroll history trend charts with time range filter."""
+    from plotly.subplots import make_subplots
+
+    history = _load_all_period_history(cid=get_company_id())
+    if not history:
+        st.info("Charts will appear once you have at least one finalized pay period.")
+        return
+
+    df_hist = pd.DataFrame(history)
+    df_hist["period_date"] = pd.to_datetime(df_hist["period"])
+
+    _range_options = {"6 Months": 6, "1 Year": 12, "1.5 Years": 18, "2 Years": 24}
+    _, _range_col = st.columns([6, 2])
+    with _range_col:
+        range_label = st.selectbox(
+            "Time Range", list(_range_options.keys()),
+            index=1, key="payroll_hist_range", label_visibility="collapsed",
+        )
+    cutoff = pd.Timestamp.now() - pd.DateOffset(months=_range_options[range_label])
+    df_filtered = df_hist[df_hist["period_date"] >= cutoff].copy()
+
+    if df_filtered.empty:
+        st.caption(f"No finalized periods in the last {range_label.lower()}.")
+        return
+
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        fig_stack = go.Figure()
+        fig_stack.add_trace(go.Bar(
+            name="Net Pay", x=df_filtered["period"], y=df_filtered["net_pay"],
+            marker_color="#10b981",
+            hovertemplate="Net Pay: %{y:.1f}%<extra></extra>",
+        ))
+        fig_stack.add_trace(go.Bar(
+            name="Gov't (EE)", x=df_filtered["period"], y=df_filtered["govt_ee"],
+            marker_color="#3b82f6",
+            hovertemplate="Gov't (EE): %{y:.1f}%<extra></extra>",
+        ))
+        fig_stack.add_trace(go.Bar(
+            name="Tax", x=df_filtered["period"], y=df_filtered["tax"],
+            marker_color="#ef4444",
+            hovertemplate="Tax: %{y:.1f}%<extra></extra>",
+        ))
+        fig_stack.update_layout(
+            barmode="stack", barnorm="percent",
+            title="Gross Pay Composition (%)",
+            xaxis_title=None, yaxis_title="% of Gross",
+            yaxis=dict(ticksuffix="%", range=[0, 100]), hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
+            margin=dict(l=0, r=0, t=56, b=0), height=400,
+            plot_bgcolor="#f8f9fa", paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Plus Jakarta Sans, system-ui, sans-serif"),
+        )
+        st.plotly_chart(fig_stack, use_container_width=True, key="payroll_hist_stack")
+
+    with col_right:
+        fig_dual = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_dual.add_trace(go.Scatter(
+            name="Gross Pay", x=df_filtered["period"], y=df_filtered["gross_pay"],
+            mode="lines+markers", line=dict(color="#005bc1", width=3), marker=dict(size=7),
+            fill="tozeroy", fillcolor="rgba(0,91,193,0.08)",
+            hovertemplate="Gross: ₱%{y:,.0f}<extra></extra>",
+        ), secondary_y=False)
+        fig_dual.add_trace(go.Scatter(
+            name="Net Pay", x=df_filtered["period"], y=df_filtered["net_pay"],
+            mode="lines+markers", line=dict(color="#10b981", width=2, dash="dot"), marker=dict(size=6),
+            hovertemplate="Net: ₱%{y:,.0f}<extra></extra>",
+        ), secondary_y=False)
+        fig_dual.add_trace(go.Scatter(
+            name="Gov't (EE)", x=df_filtered["period"], y=df_filtered["govt_ee"],
+            mode="lines+markers", line=dict(color="#3b82f6", width=2), marker=dict(size=5, symbol="diamond"),
+            hovertemplate="Gov't EE: ₱%{y:,.0f}<extra></extra>",
+        ), secondary_y=True)
+        fig_dual.add_trace(go.Scatter(
+            name="Tax", x=df_filtered["period"], y=df_filtered["tax"],
+            mode="lines+markers", line=dict(color="#ef4444", width=2), marker=dict(size=5, symbol="square"),
+            hovertemplate="Tax: ₱%{y:,.0f}<extra></extra>",
+        ), secondary_y=True)
+        fig_dual.add_trace(go.Scatter(
+            name="Employer Cost", x=df_filtered["period"], y=df_filtered["employer_cost"],
+            mode="lines+markers", line=dict(color="#f59e0b", width=2), marker=dict(size=5, symbol="triangle-up"),
+            hovertemplate="Employer: ₱%{y:,.0f}<extra></extra>",
+        ), secondary_y=True)
+        fig_dual.update_layout(
+            title="Payroll Trend (dual axis)", hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
+            margin=dict(l=0, r=0, t=56, b=0), height=400,
+            plot_bgcolor="#f8f9fa", paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Plus Jakarta Sans, system-ui, sans-serif"),
+        )
+        fig_dual.update_xaxes(title_text=None)
+        fig_dual.update_yaxes(title_text="Gross / Net (₱)", secondary_y=False, tickprefix="₱", tickformat=",")
+        fig_dual.update_yaxes(title_text="Deductions (₱)", secondary_y=True, tickprefix="₱", tickformat=",")
+        st.plotly_chart(fig_dual, use_container_width=True, key="payroll_hist_dual")
+
+
+def _render_payroll_processing():
+    company = _load_company(_cid=get_company_id())
     daily_rate_divisor = int(company.get("daily_rate_divisor") or 26)
 
-    employees = _load_employees()
-    dept_map  = _load_departments_map()
+    employees = _load_employees(_cid=get_company_id())
+    dept_map  = _load_departments_map(_cid=get_company_id())
     for emp in employees:
         emp["department"] = dept_map.get(emp["id"], "")
 
@@ -1057,20 +1476,34 @@ def _render_payroll_processing():
                 log_action("updated", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}", {"status": "draft (reopened)"})
                 st.rerun()
 
-    # ── Filter bar ────────────────────────────────────────────
-    all_positions = sorted({(e.get("position") or "").strip() for e in employees} - {""})
-    all_depts     = sorted({(e.get("department") or "").strip() for e in employees} - {""})
-    _dept_names_structured = _load_dept_names_from_table()
+    # ── Filter bar with cross-filtering ─────────────────────────
+    _all_pos_full = sorted({(e.get("position") or "").strip().upper() for e in employees} - {""})
+    _all_dept_full = sorted({(e.get("department") or "").strip().upper() for e in employees} - {""})
+    _dept_names_structured = _load_dept_names_from_table(_cid=get_company_id())
     if _dept_names_structured:
-        all_depts = _dept_names_structured
+        _all_dept_full = sorted(set(_all_dept_full) | set(_dept_names_structured))
+
+    _cur_pp_dept = st.session_state.get("pp_f_dept", [])
+    _cur_pp_pos  = st.session_state.get("pp_f_pos", [])
+    if _cur_pp_dept:
+        _pp_avail_pos = sorted({(e.get("position") or "").upper() for e in employees
+                                if (e.get("department") or "").upper() in {d.upper() for d in _cur_pp_dept}} - {""})
+    else:
+        _pp_avail_pos = _all_pos_full
+    if _cur_pp_pos:
+        _pp_avail_dept = sorted({(e.get("department") or "").upper() for e in employees
+                                 if (e.get("position") or "").upper() in {p.upper() for p in _cur_pp_pos}} - {""})
+    else:
+        _pp_avail_dept = _all_dept_full
+
     pp_s, pp_p, pp_d = st.columns([2, 1.5, 1.5])
     with pp_s:
         pp_search   = st.text_input("Search employees", placeholder="Name or employee no…",
                                     label_visibility="collapsed", key="pp_search")
     with pp_p:
-        pp_sel_pos  = st.multiselect("Position",   all_positions, key="pp_f_pos",  placeholder="All positions")
+        pp_sel_pos  = st.multiselect("Position",   _pp_avail_pos,  key="pp_f_pos",  placeholder="All positions")
     with pp_d:
-        pp_sel_dept = st.multiselect("Department", all_depts,     key="pp_f_dept", placeholder="All departments")
+        pp_sel_dept = st.multiselect("Department", _pp_avail_dept, key="pp_f_dept", placeholder="All departments")
 
     def _pp_match(emp):
         if pp_search:
@@ -1173,7 +1606,7 @@ def _render_payslips_tab():
     from reports.payslip_pdf import generate_payslip_pdf, generate_all_payslips_pdf
 
     # ── Period selector ────────────────────────────────────────────────────
-    all_periods = _load_pay_periods()
+    all_periods = _load_pay_periods(_cid=get_company_id())
 
     if not all_periods:
         st.info("No pay periods found. Create one in Payroll Processing first.")
@@ -1199,8 +1632,8 @@ def _render_payslips_tab():
         return
 
     # ── Load data ──────────────────────────────────────────────────────────
-    company      = _load_company()
-    all_employees = _load_employees()
+    company      = _load_company(_cid=get_company_id())
+    all_employees = _load_employees(_cid=get_company_id())
     entries      = _load_payroll_entries(period["id"])
 
     done_emps    = [e for e in all_employees if e["id"] in entries]
@@ -1216,12 +1649,12 @@ def _render_payslips_tab():
     )
 
     # ── Filters & Sort ────────────────────────────────────────────────────
-    dept_map_ps = _load_departments_map()
+    dept_map_ps = _load_departments_map(_cid=get_company_id())
     for emp in all_employees:
         emp["department"] = dept_map_ps.get(emp["id"], "")
 
     all_depts_ps = sorted({e.get("department") or "" for e in all_employees} - {""})
-    _dept_names_structured = _load_dept_names_from_table()
+    _dept_names_structured = _load_dept_names_from_table(_cid=get_company_id())
     if _dept_names_structured:
         all_depts_ps = _dept_names_structured
     all_pos_ps   = sorted({e.get("position") or "" for e in all_employees} - {""})
@@ -1408,17 +1841,20 @@ def _render_payslips_tab():
 
 def render():
     inject_css()
-    st.markdown(
-        '<p class="gxp-page-label">PAYROLL RUN</p>'
-        '<h1 style="font-size:2.75rem;font-weight:300;letter-spacing:-0.02em;'
-        'margin:0 0 1.5rem;line-height:1.1;">Payroll Run</h1>',
-        unsafe_allow_html=True,
-    )
+    st.title("Payroll Run")
 
-    tab_run, tab_payslips = st.tabs(["📋 Payroll Processing", "🧾 Payslips"])
+    tab_run, tab_analytics, tab_history, tab_payslips = st.tabs([
+        "📋 Payroll Processing", "📊 Analytics", "📈 History", "🧾 Payslips",
+    ])
 
     with tab_run:
         _render_payroll_processing()
+
+    with tab_analytics:
+        _render_payroll_analytics()
+
+    with tab_history:
+        _render_payroll_history()
 
     with tab_payslips:
         _render_payslips_tab()
