@@ -489,7 +489,7 @@ def _render_pay_period_selector() -> dict | None:
                         st.session_state.show_new_period = False
                         for k in ("np_start", "np_end", "np_pay", "np_start_prev"):
                             st.session_state.pop(k, None)
-                        st.success(f"Created pay period: {p_start} to {p_end}")
+                        st.toast(f"📅 Created pay period: {p_start} to {p_end}", icon="✅")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error creating pay period: {e}")
@@ -503,324 +503,435 @@ def _render_pay_period_selector() -> dict | None:
 # Earnings Input & Computation per Employee
 # ============================================================
 
-def _render_employee_payroll(
+def _pr_avatar_inner(emp_id: str, initials: str, photo_urls: dict | None) -> str:
+    """Return inner HTML for avatar — photo if available, else initials."""
+    if photo_urls and emp_id in photo_urls:
+        url = photo_urls[emp_id]
+        return (
+            f'<img src="{url}" style="width:100%;height:100%;object-fit:cover;" '
+            f'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+            f'<span style="color:#fff;font-weight:700;font-size:14px;display:none;'
+            f'width:100%;height:100%;align-items:center;justify-content:center;">{initials}</span>'
+        )
+    return f'<span style="color:#fff;font-weight:700;font-size:14px;">{initials}</span>'
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_pr_photo_urls(_cid: str = "") -> dict:
+    """Load photo URLs for all employees. Cached 5 min."""
+    try:
+        rows = (
+            get_db().table("employee_profiles")
+            .select("employee_id, photo_url")
+            .eq("company_id", get_company_id())
+            .not_.is_("photo_url", "null")
+            .execute()
+            .data or []
+        )
+        return {r["employee_id"]: r["photo_url"] for r in rows if r.get("photo_url")}
+    except Exception:
+        return {}
+
+
+def _render_employee_card_row(
     emp: dict,
+    entries: dict,
+    photo_urls: dict | None = None,
+):
+    """Render a compact employee row card for the payroll list."""
+    name       = f"{emp['first_name']} {emp['last_name']}"
+    is_computed = emp["id"] in entries
+    _initials  = (emp['first_name'][:1] + emp['last_name'][:1]).upper()
+    _colors    = ["#005bc1","#006e2d","#795900","#ba1a1a","#4b0082","#006064","#37474f","#880e4f"]
+    _color     = _colors[hash(emp["id"]) % len(_colors)]
+    _pos       = emp.get("position") or "—"
+    _dept      = emp.get("department") or "—"
+    _salary_lbl = _fmt(emp["basic_salary"])
+
+    if is_computed:
+        _badge = (
+            '<span style="background:#d4edda;color:#155724;padding:2px 8px;'
+            'border-radius:9999px;font-size:10px;font-weight:700;">&#10003; COMPUTED</span>'
+        )
+        _net_val = entries[emp["id"]].get("net_pay", 0)
+        _gross_val = entries[emp["id"]].get("gross_pay", 0)
+        _amount_html = (
+            f'<div style="text-align:right;">'
+            f'<div style="font-size:14px;font-weight:800;color:var(--gxp-accent);">{_fmt(_net_val)}</div>'
+            f'<div style="font-size:10px;color:var(--gxp-text3);">Gross {_fmt(_gross_val)}</div>'
+            f'</div>'
+        )
+    else:
+        _badge = (
+            '<span style="background:#fff3cd;color:#856404;padding:2px 8px;'
+            'border-radius:9999px;font-size:10px;font-weight:700;">&#9675; PENDING</span>'
+        )
+        _amount_html = (
+            f'<div style="text-align:right;">'
+            f'<div style="font-size:11px;color:var(--gxp-text3);">Basic {_salary_lbl}</div>'
+            f'</div>'
+        )
+
+    st.markdown(
+        f'<div class="gxp-pr-emp-row" data-pr-emp="{emp["id"]}" style="'
+        f'display:flex;align-items:center;gap:12px;padding:10px 14px;'
+        f'background:var(--gxp-surface);border-radius:12px;cursor:pointer;'
+        f'border:1px solid var(--gxp-border);margin-bottom:4px;'
+        f'transition:box-shadow 0.15s,transform 0.15s;">'
+        # Avatar
+        f'<div style="width:40px;height:40px;border-radius:50%;background:{_color};'
+        f'display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">'
+        f'{_pr_avatar_inner(emp["id"], _initials, photo_urls)}</div>'
+        # Name + details
+        f'<div style="flex:1;min-width:0;">'
+        f'<div style="display:flex;align-items:center;gap:8px;">'
+        f'<span style="font-size:13px;font-weight:700;color:var(--gxp-text);">{name}</span>'
+        f'{_badge}</div>'
+        f'<div style="font-size:11px;color:var(--gxp-text3);">{emp.get("employee_no","")}</div>'
+        f'<div style="font-size:11px;color:var(--gxp-text3);">{_pos}</div>'
+        f'</div>'
+        # Amount
+        f'{_amount_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_payslip_card(emp, is_done, entries, photo_urls, company, period, select_all):
+    """Render a single payslip card matching the payroll processing card style."""
+    from reports.payslip_pdf import generate_payslip_pdf
+
+    name = f"{emp['first_name']} {emp['last_name']}"
+    _initials = (emp['first_name'][:1] + emp['last_name'][:1]).upper()
+    _colors = ["#005bc1", "#006e2d", "#795900", "#ba1a1a", "#4b0082", "#006064", "#37474f", "#880e4f"]
+    _color = _colors[hash(emp["id"]) % len(_colors)]
+    _pos = emp.get("position") or "—"
+    _dept = emp.get("department") or "—"
+
+    if is_done:
+        entry = entries[emp["id"]]
+        _net_val = entry.get("net_pay", 0)
+        _gross_val = entry.get("gross_pay", 0)
+        _badge = (
+            '<span style="background:#d4edda;color:#155724;padding:2px 8px;'
+            'border-radius:9999px;font-size:10px;font-weight:700;">&#10003; READY</span>'
+        )
+        _amount_html = (
+            f'<div style="text-align:right;">'
+            f'<div style="font-size:14px;font-weight:800;color:var(--gxp-accent);">{_fmt(_net_val)}</div>'
+            f'<div style="font-size:10px;color:var(--gxp-text3);">Gross {_fmt(_gross_val)}</div>'
+            f'</div>'
+        )
+    else:
+        _badge = (
+            '<span style="background:#fff3cd;color:#856404;padding:2px 8px;'
+            'border-radius:9999px;font-size:10px;font-weight:700;">&#9675; PENDING</span>'
+        )
+        _amount_html = (
+            '<div style="text-align:right;">'
+            '<div style="font-size:11px;color:var(--gxp-text3);">Not computed</div>'
+            '</div>'
+        )
+
+    # ── Build swipe action tray (left side, revealed on hover) ──
+    if is_done:
+        _action_tray = (
+            '<div class="ps-swipe-act" style="background:#005bc1;color:#fff;font-size:20px;" '
+            f'data-ps-action="dl_{emp["id"]}">&#11015;<br>'
+            '<span style="font-size:9px;font-weight:700;">Download</span></div>'
+        )
+    else:
+        _action_tray = (
+            '<div class="ps-swipe-act" style="background:#9ca3af;color:#fff;font-size:14px;">'
+            '<span style="font-size:9px;font-weight:700;">Pending</span></div>'
+        )
+
+    # Card HTML with swipe wrapper
+    st.markdown(
+        f'<div class="ps-swipe-wrap">'
+        f'<div class="ps-swipe-actions">{_action_tray}</div>'
+        f'<div class="ps-swipe-card" style="'
+        f'display:flex;align-items:center;gap:12px;padding:10px 14px;'
+        f'background:var(--gxp-surface);border-radius:12px;'
+        f'border:1px solid var(--gxp-border);">'
+        # Avatar
+        f'<div style="width:40px;height:40px;border-radius:50%;background:{_color};'
+        f'display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">'
+        f'{_pr_avatar_inner(emp["id"], _initials, photo_urls)}</div>'
+        # Name + details
+        f'<div style="flex:1;min-width:0;">'
+        f'<div style="display:flex;align-items:center;gap:8px;">'
+        f'<span style="font-size:13px;font-weight:700;color:var(--gxp-text);">{name}</span>'
+        f'{_badge}</div>'
+        f'<div style="font-size:11px;color:var(--gxp-text3);">{emp.get("employee_no","")}</div>'
+        f'<div style="font-size:11px;color:var(--gxp-text3);">{_pos}</div>'
+        f'</div>'
+        # Amount
+        f'{_amount_html}'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Hidden Streamlit widgets for computed employees (triggered by swipe action JS)
+    if is_done:
+        entry = entries[emp["id"]]
+        pdf_bytes = generate_payslip_pdf(company, emp, period, entry)
+        st.download_button(
+            label="_",
+            data=pdf_bytes,
+            file_name=f"payslip_{emp['employee_no']}_{period['period_start']}.pdf",
+            mime="application/pdf",
+            key=f"ps_dl_{emp['id']}",
+        )
+
+
+@st.dialog("Payroll Computation", width="large")
+def _payroll_computation_dialog(
+    emp_id: str,
     period_id: str,
     is_finalized: bool,
-    entries: dict,
     period: dict | None = None,
     daily_rate_divisor: int = 26,
 ):
-    """Render earnings input and computation for one employee."""
-    saved = entries.get(emp["id"], {})
+    """Dialog for computing/viewing payroll for one employee."""
+    db = get_db()
+    cid = get_company_id()
 
-    name       = f"{emp['first_name']} {emp['last_name']}"
-    is_computed = emp["id"] in entries
-    dept        = emp.get("department") or emp.get("position") or ""
-    gross_str   = f"₱{entries[emp['id']]['gross_pay']/100:,.0f} gross" if is_computed else "Not yet computed"
-    status_dot  = "✓" if is_computed else "○"
-    exp_label   = f"{status_dot}  {name}  ·  {dept}  ·  {gross_str}"
+    # Load employee
+    emp_resp = db.table("employees").select("*").eq("id", emp_id).eq("company_id", cid).execute()
+    if not emp_resp.data:
+        st.error("Employee not found.")
+        return
+    emp = emp_resp.data[0]
 
-    with st.expander(exp_label, expanded=False):
-        # M3 mini-header inside expander
-        _initials  = (emp['first_name'][:1] + emp['last_name'][:1]).upper()
-        _colors    = ["#005bc1","#006e2d","#795900","#ba1a1a","#4b0082","#006064","#37474f","#880e4f"]
-        _color     = _colors[hash(emp["id"]) % len(_colors)]
-        _pos       = emp.get("position") or "—"
-        _salary_lbl = _fmt(emp["basic_salary"])
-        _badge_html = (
-            f'<span style="display:inline-flex;align-items:center;gap:0.25rem;'
-            f'background:var(--gxp-success-bg);color:var(--gxp-success-fg);'
-            f'padding:0.15rem 0.6rem;border-radius:9999px;font-size:0.6875rem;font-weight:700;">'
-            f'✓ COMPUTED</span>'
-            if is_computed else
-            f'<span style="display:inline-flex;align-items:center;gap:0.25rem;'
-            f'background:var(--gxp-warning-bg);color:var(--gxp-warning-fg);'
-            f'padding:0.15rem 0.6rem;border-radius:9999px;font-size:0.6875rem;font-weight:700;">'
-            f'○ PENDING</span>'
-        )
-        _net_html = ""
-        if is_computed:
-            _net_val = entries[emp["id"]].get("net_pay", 0)
-            _net_html = (
-                f'<div style="font-size:0.75rem;color:var(--gxp-text3);margin-top:0.125rem;">'
-                f'Net Pay <span style="font-size:1rem;font-weight:800;color:var(--gxp-accent);">'
-                f'{_fmt(_net_val)}</span></div>'
+    # Load existing entry
+    entry_resp = (
+        db.table("payroll_entries")
+        .select("*")
+        .eq("pay_period_id", period_id)
+        .eq("employee_id", emp_id)
+        .execute()
+    )
+    saved = entry_resp.data[0] if entry_resp.data else {}
+
+    name = f"{emp['first_name']} {emp['last_name']}"
+    _initials = (emp['first_name'][:1] + emp['last_name'][:1]).upper()
+    _colors = ["#005bc1","#006e2d","#795900","#ba1a1a","#4b0082","#006064","#37474f","#880e4f"]
+    _color = _colors[hash(emp["id"]) % len(_colors)]
+    _pos = emp.get("position") or "—"
+
+    # Header
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:12px;padding-bottom:12px;'
+        f'border-bottom:1px solid var(--gxp-border);margin-bottom:16px;">'
+        f'<div style="width:48px;height:48px;border-radius:50%;background:{_color};'
+        f'display:flex;align-items:center;justify-content:center;">'
+        f'<span style="color:#fff;font-weight:700;font-size:16px;">{_initials}</span></div>'
+        f'<div><div style="font-size:15px;font-weight:700;">{name}</div>'
+        f'<div style="font-size:12px;color:var(--gxp-text3);">'
+        f'{_pos} &middot; {emp.get("employee_no","")} &middot; Basic {_fmt(emp["basic_salary"])}</div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # If finalized, just show summary
+    if is_finalized and saved:
+        _render_payroll_summary(saved)
+        return
+
+    # ── DTR Insights ──────────────────────────────────────────
+    if period and not is_finalized:
+        _p_start = period.get("period_start", "")
+        _p_end   = period.get("period_end", "")
+        if _p_start and _p_end:
+            _dtr  = _load_dtr_summary_for_period(emp["id"], _p_start, _p_end)
+            _appr_ot_h = _load_approved_ot_hours(emp["id"], _p_start, _p_end)
+            _hr   = _hourly_rate_centavos(emp, daily_rate_divisor)
+
+            _nsd_sugg   = _hr * _dtr["nsd_hours"] * 0.10
+            _ot_sugg    = _hr * _appr_ot_h        * 1.25
+            _bs = emp.get("basic_salary") or 0
+            _salary_type = (emp.get("salary_type") or "monthly").lower()
+            _daily_rate  = _bs if _salary_type == "daily" else int(_bs / daily_rate_divisor)
+            _absent_sugg = _daily_rate * _dtr["absent_days"]
+
+            if _dtr["nsd_hours"] > 0 or _appr_ot_h > 0 or _dtr["ot_hours"] > 0 or _dtr["absent_days"] > 0:
+                with st.expander("DTR Insights for this period", expanded=_dtr["absent_days"] > 0):
+                    _di1, _di2, _di3 = st.columns(3)
+                    _di1.metric("NSD Hours", f"{_dtr['nsd_hours']:.2f} h",
+                                help="10 PM–6 AM hours per DTR")
+                    _di2.metric("Approved OT", f"{_appr_ot_h:.2f} h")
+                    _di3.metric("Absent Days", f"{_dtr['absent_days']} day(s)",
+                                delta=f"-{_fmt(_absent_sugg)}" if _dtr["absent_days"] > 0 else None,
+                                delta_color="inverse")
+
+    # ── Earnings form ─────────────────────────────────────────
+    with st.form(key=f"dlg_earn_{period_id}_{emp_id}"):
+        st.markdown("**Earnings**")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            basic_pay = st.number_input(
+                "Basic Pay (₱)", min_value=0.0,
+                value=_centavos_to_pesos(saved.get("basic_pay", emp["basic_salary"])),
+                step=100.0, format="%.2f",
             )
-        st.markdown(
-            f'<div style="display:flex;align-items:center;gap:1rem;padding:0.5rem 0 1.25rem;'
-            f'border-bottom:1px solid var(--gxp-border);margin-bottom:1.25rem;">'
-            f'<div style="width:48px;height:48px;border-radius:50%;background:{_color};'
-            f'display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
-            f'<span style="color:#fff;font-weight:700;font-size:1.125rem;">{_initials}</span></div>'
-            f'<div style="flex:1;min-width:0;">'
-            f'<div style="font-size:1rem;font-weight:700;color:var(--gxp-text);">{name}</div>'
-            f'<div style="font-size:0.8125rem;color:var(--gxp-text2);">'
-            f'{_pos} · {emp["employee_no"]} · Basic {_salary_lbl}</div>'
-            f'</div>'
-            f'<div style="text-align:right;flex-shrink:0;">'
-            f'{_badge_html}{_net_html}'
-            f'</div></div>',
-            unsafe_allow_html=True,
-        )
-
-        if is_finalized:
-            _render_payroll_summary(saved)
-            return
-
-        # ── DTR Insights ─────────────────────────────────────────────────────────
-        if period and not is_finalized:
-            _p_start = period.get("period_start", "")
-            _p_end   = period.get("period_end", "")
-            if _p_start and _p_end:
-                _dtr  = _load_dtr_summary_for_period(emp["id"], _p_start, _p_end)
-                _appr_ot_h = _load_approved_ot_hours(emp["id"], _p_start, _p_end)
-                _hr   = _hourly_rate_centavos(emp, daily_rate_divisor)
-
-                _nsd_sugg   = _hr * _dtr["nsd_hours"] * 0.10
-                _ot_sugg    = _hr * _appr_ot_h        * 1.25
-                # Daily rate = basic_salary / company divisor (monthly) or as-is (daily)
-                _bs = emp.get("basic_salary") or 0
-                _salary_type = (emp.get("salary_type") or "monthly").lower()
-                _daily_rate  = _bs if _salary_type == "daily" else int(_bs / daily_rate_divisor)
-                _absent_sugg = _daily_rate * _dtr["absent_days"]
-
-                if _dtr["nsd_hours"] > 0 or _appr_ot_h > 0 or _dtr["ot_hours"] > 0 or _dtr["absent_days"] > 0:
-                    with st.expander("📊 DTR Insights for this period", expanded=_dtr["absent_days"] > 0):
-                        _di1, _di2, _di3, _di4, _di5, _di6 = st.columns(6)
-                        _di1.metric("NSD Hours (DTR)", f"{_dtr['nsd_hours']:.2f} h",
-                                    help="Total hours worked 10 PM–6 AM in this period per DTR.")
-                        _di2.metric("NSD Suggested Pay",
-                                    f"₱{_nsd_sugg/100:,.2f}",
-                                    help="NSD hrs × hourly rate × 10% (DOLE Art. 86)")
-                        _di3.metric("Approved OT Hours", f"{_appr_ot_h:.2f} h",
-                                    help="Sum of approved overtime requests in this period.")
-                        _di4.metric("OT Suggested Pay",
-                                    f"₱{_ot_sugg/100:,.2f}",
-                                    help="Approved OT hrs × hourly rate × 125%")
-                        _di5.metric("Absent Days (DTR)", f"{_dtr['absent_days']} day(s)",
-                                    help="Days with status='absent' in DTR for this period.")
-                        _di6.metric("Absent Deduction",
-                                    f"₱{_absent_sugg/100:,.2f}",
-                                    delta=f"-₱{_absent_sugg/100:,.2f}" if _dtr["absent_days"] > 0 else None,
-                                    delta_color="inverse",
-                                    help="Daily rate × absent days. Auto-filled in deductions below.")
-                        if _dtr["ot_hours"] != _appr_ot_h:
-                            st.caption(
-                                f"ℹ️ DTR-computed OT: **{_dtr['ot_hours']:.2f} h** "
-                                f"vs. Approved OT: **{_appr_ot_h:.2f} h**. "
-                                "Payroll uses **approved** OT only."
-                            )
-                        if _dtr["absent_days"] > 0:
-                            st.caption(
-                                f"ℹ️ {_dtr['absent_days']} absent day(s) × "
-                                f"₱{_daily_rate/100:,.2f} daily rate = "
-                                f"**₱{_absent_sugg/100:,.2f}** auto-filled in Absent Deduction below."
-                            )
-
-        # --- Earnings input form ---
-        with st.form(key=f"earnings_{period_id}_{emp['id']}"):
-
-            st.markdown("**Earnings**")
-            col1, col2, col3, col4 = st.columns(4)
-
-            with col1:
-                basic_pay = st.number_input(
-                    "Basic Pay (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(saved.get("basic_pay", emp["basic_salary"])),
-                    step=100.0, format="%.2f",
-                    key=f"basic_{period_id}_{emp['id']}",
-                )
-            with col2:
-                _ot_default = saved.get("overtime_pay")
-                if _ot_default is None and period:
-                    _p_s = period.get("period_start", "")
-                    _p_e = period.get("period_end", "")
-                    if _p_s and _p_e:
-                        _appr_h = _load_approved_ot_hours(emp["id"], _p_s, _p_e)
-                        _ot_default = int(_hourly_rate_centavos(emp, daily_rate_divisor) * _appr_h * 1.25)
-                overtime_pay = st.number_input(
-                    "Overtime (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(_ot_default or 0),
-                    step=100.0, format="%.2f",
-                    key=f"ot_{period_id}_{emp['id']}",
-                    help="Auto-suggested from approved OT requests × 125% rate.",
-                )
-            with col3:
-                holiday_pay = st.number_input(
-                    "Holiday Pay (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(saved.get("holiday_pay", 0)),
-                    step=100.0, format="%.2f",
-                    key=f"hol_{period_id}_{emp['id']}",
-                )
-            with col4:
-                _nd_default = saved.get("night_differential")
-                if _nd_default is None and period:
-                    _p_s2 = period.get("period_start", "")
-                    _p_e2 = period.get("period_end", "")
-                    if _p_s2 and _p_e2:
-                        _dtr2 = _load_dtr_summary_for_period(emp["id"], _p_s2, _p_e2)
-                        _nd_default = int(_hourly_rate_centavos(emp, daily_rate_divisor) * _dtr2["nsd_hours"] * 0.10)
-                night_diff = st.number_input(
-                    "Night Diff (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(_nd_default or 0),
-                    step=100.0, format="%.2f",
-                    key=f"nd_{period_id}_{emp['id']}",
-                    help="Auto-suggested from DTR night-shift hours × 10% premium.",
-                )
-
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                allowances_nt = st.number_input(
-                    "Non-Taxable Allowances (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(saved.get("allowances_nontaxable", 0)),
-                    step=100.0, format="%.2f",
-                    key=f"ant_{period_id}_{emp['id']}",
-                    help="Meal, rice, clothing allowances within de minimis limits",
-                )
-            with col2:
-                allowances_t = st.number_input(
-                    "Taxable Allowances (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(saved.get("allowances_taxable", 0)),
-                    step=100.0, format="%.2f",
-                    key=f"at_{period_id}_{emp['id']}",
-                )
-            with col3:
-                commission = st.number_input(
-                    "Commission (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(saved.get("commission", 0)),
-                    step=100.0, format="%.2f",
-                    key=f"comm_{period_id}_{emp['id']}",
-                )
-            with col4:
-                thirteenth = st.number_input(
-                    "13th Month Accrual (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(saved.get("thirteenth_month_accrual", 0)),
-                    step=100.0, format="%.2f",
-                    key=f"13th_{period_id}_{emp['id']}",
-                )
-
-            # --- Other deductions ---
-            st.markdown("**Other Deductions**")
-            col1, col2, col3, col4, col5 = st.columns(5)
-            with col1:
-                # Auto-suggest absent deduction from DTR if not yet saved
-                _absent_default = saved.get("absent_deduction")
-                if _absent_default is None and period and not is_finalized:
-                    _p_s3 = period.get("period_start", "")
-                    _p_e3 = period.get("period_end", "")
-                    if _p_s3 and _p_e3:
-                        _dtr3 = _load_dtr_summary_for_period(emp["id"], _p_s3, _p_e3)
-                        _bs3 = emp.get("basic_salary") or 0
-                        _st3 = (emp.get("salary_type") or "monthly").lower()
-                        _dr3 = _bs3 if _st3 == "daily" else int(_bs3 / daily_rate_divisor)
-                        _absent_default = _dr3 * _dtr3["absent_days"]
-                absent_ded = st.number_input(
-                    "Absent Deduction (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(_absent_default or 0),
-                    step=100.0, format="%.2f",
-                    key=f"absent_{period_id}_{emp['id']}",
-                    help="Auto-computed: daily rate × absent days from DTR. Editable.",
-                )
-            with col2:
-                sss_loan = st.number_input(
-                    "SSS Loan (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(saved.get("sss_loan", 0)),
-                    step=100.0, format="%.2f",
-                    key=f"sssl_{period_id}_{emp['id']}",
-                )
-            with col3:
-                pagibig_loan = st.number_input(
-                    "Pag-IBIG Loan (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(saved.get("pagibig_loan", 0)),
-                    step=100.0, format="%.2f",
-                    key=f"pil_{period_id}_{emp['id']}",
-                )
-            with col4:
-                cash_advance = st.number_input(
-                    "Cash Advance (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(saved.get("cash_advance", 0)),
-                    step=100.0, format="%.2f",
-                    key=f"ca_{period_id}_{emp['id']}",
-                )
-            with col5:
-                other_ded = st.number_input(
-                    "Other Deductions (₱)", min_value=0.0,
-                    value=_centavos_to_pesos(saved.get("other_deductions", 0)),
-                    step=100.0, format="%.2f",
-                    key=f"other_{period_id}_{emp['id']}",
-                )
-
-            computed = st.form_submit_button("Compute & Save", type="primary", width="stretch")
-
-        if computed:
-            # Convert all inputs to centavos
-            basic_c = _pesos_to_centavos(basic_pay)
-            ot_c = _pesos_to_centavos(overtime_pay)
-            hol_c = _pesos_to_centavos(holiday_pay)
-            nd_c = _pesos_to_centavos(night_diff)
-            ant_c = _pesos_to_centavos(allowances_nt)
-            at_c = _pesos_to_centavos(allowances_t)
-            comm_c = _pesos_to_centavos(commission)
-            thirteenth_c = _pesos_to_centavos(thirteenth)
-            absent_c = _pesos_to_centavos(absent_ded)
-            sssl_c = _pesos_to_centavos(sss_loan)
-            pil_c = _pesos_to_centavos(pagibig_loan)
-            ca_c = _pesos_to_centavos(cash_advance)
-            other_c = _pesos_to_centavos(other_ded)
-
-            # Gross pay = earnings - absent deduction (before contributions)
-            gross = basic_c + ot_c + hol_c + nd_c + ant_c + at_c + comm_c + thirteenth_c - absent_c
-            gross = max(gross, 0)
-
-            # Run computation engine
-            result = compute_payroll(
-                gross_pay=gross,
-                nontaxable_allowances=ant_c,
+        with col2:
+            _ot_default = saved.get("overtime_pay")
+            if _ot_default is None and period:
+                _p_s = period.get("period_start", "")
+                _p_e = period.get("period_end", "")
+                if _p_s and _p_e:
+                    _appr_h = _load_approved_ot_hours(emp["id"], _p_s, _p_e)
+                    _ot_default = int(_hourly_rate_centavos(emp, daily_rate_divisor) * _appr_h * 1.25)
+            overtime_pay = st.number_input(
+                "Overtime (₱)", min_value=0.0,
+                value=_centavos_to_pesos(_ot_default or 0),
+                step=100.0, format="%.2f",
+            )
+        with col3:
+            holiday_pay = st.number_input(
+                "Holiday Pay (₱)", min_value=0.0,
+                value=_centavos_to_pesos(saved.get("holiday_pay", 0)),
+                step=100.0, format="%.2f",
+            )
+        with col4:
+            _nd_default = saved.get("night_differential")
+            if _nd_default is None and period:
+                _p_s2 = period.get("period_start", "")
+                _p_e2 = period.get("period_end", "")
+                if _p_s2 and _p_e2:
+                    _dtr2 = _load_dtr_summary_for_period(emp["id"], _p_s2, _p_e2)
+                    _nd_default = int(_hourly_rate_centavos(emp, daily_rate_divisor) * _dtr2["nsd_hours"] * 0.10)
+            night_diff = st.number_input(
+                "Night Diff (₱)", min_value=0.0,
+                value=_centavos_to_pesos(_nd_default or 0),
+                step=100.0, format="%.2f",
             )
 
-            # Total voluntary deductions (loans, advances, other)
-            vol_deductions = sssl_c + pil_c + ca_c + other_c
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            allowances_nt = st.number_input(
+                "Non-Taxable Allow. (₱)", min_value=0.0,
+                value=_centavos_to_pesos(saved.get("allowances_nontaxable", 0)),
+                step=100.0, format="%.2f",
+            )
+        with col2:
+            allowances_t = st.number_input(
+                "Taxable Allow. (₱)", min_value=0.0,
+                value=_centavos_to_pesos(saved.get("allowances_taxable", 0)),
+                step=100.0, format="%.2f",
+            )
+        with col3:
+            commission = st.number_input(
+                "Commission (₱)", min_value=0.0,
+                value=_centavos_to_pesos(saved.get("commission", 0)),
+                step=100.0, format="%.2f",
+            )
+        with col4:
+            thirteenth = st.number_input(
+                "13th Month (₱)", min_value=0.0,
+                value=_centavos_to_pesos(saved.get("thirteenth_month_accrual", 0)),
+                step=100.0, format="%.2f",
+            )
 
-            # Save to database
-            entry_data = {
-                "basic_pay": basic_c,
-                "overtime_pay": ot_c,
-                "holiday_pay": hol_c,
-                "night_differential": nd_c,
-                "allowances_nontaxable": ant_c,
-                "allowances_taxable": at_c,
-                "commission": comm_c,
-                "thirteenth_month_accrual": thirteenth_c,
-                "absent_deduction": absent_c,
-                "gross_pay": gross,
-                "sss_employee": result.sss_employee,
-                "philhealth_employee": result.philhealth_employee,
-                "pagibig_employee": result.pagibig_employee,
-                "sss_employer": result.sss_employer,
-                "philhealth_employer": result.philhealth_employer,
-                "pagibig_employer": result.pagibig_employer,
-                "withholding_tax": result.withholding_tax,
-                "sss_loan": sssl_c,
-                "pagibig_loan": pil_c,
-                "cash_advance": ca_c,
-                "other_deductions": other_c,
-                "total_deductions": result.total_mandatory_deductions + vol_deductions,
-                "net_pay": result.net_pay - vol_deductions,
-            }
+        st.markdown("**Other Deductions**")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            _absent_default = saved.get("absent_deduction")
+            if _absent_default is None and period and not is_finalized:
+                _p_s3 = period.get("period_start", "")
+                _p_e3 = period.get("period_end", "")
+                if _p_s3 and _p_e3:
+                    _dtr3 = _load_dtr_summary_for_period(emp["id"], _p_s3, _p_e3)
+                    _bs3 = emp.get("basic_salary") or 0
+                    _st3 = (emp.get("salary_type") or "monthly").lower()
+                    _dr3 = _bs3 if _st3 == "daily" else int(_bs3 / daily_rate_divisor)
+                    _absent_default = _dr3 * _dtr3["absent_days"]
+            absent_ded = st.number_input(
+                "Absent Ded. (₱)", min_value=0.0,
+                value=_centavos_to_pesos(_absent_default or 0),
+                step=100.0, format="%.2f",
+            )
+        with col2:
+            sss_loan = st.number_input(
+                "SSS Loan (₱)", min_value=0.0,
+                value=_centavos_to_pesos(saved.get("sss_loan", 0)),
+                step=100.0, format="%.2f",
+            )
+        with col3:
+            pagibig_loan = st.number_input(
+                "Pag-IBIG Loan (₱)", min_value=0.0,
+                value=_centavos_to_pesos(saved.get("pagibig_loan", 0)),
+                step=100.0, format="%.2f",
+            )
+        with col4:
+            cash_advance = st.number_input(
+                "Cash Advance (₱)", min_value=0.0,
+                value=_centavos_to_pesos(saved.get("cash_advance", 0)),
+                step=100.0, format="%.2f",
+            )
+        with col5:
+            other_ded = st.number_input(
+                "Other Ded. (₱)", min_value=0.0,
+                value=_centavos_to_pesos(saved.get("other_deductions", 0)),
+                step=100.0, format="%.2f",
+            )
 
-            try:
-                saved_entry = _upsert_payroll_entry(period_id, emp["id"], entry_data)
-                entries[emp["id"]] = saved_entry
-                log_action("updated", "payroll_entries", period_id, f"Entry for {name}", {"net_pay": entry_data["net_pay"]})
-                st.success(f"Computed: {name} — Net Pay: {_fmt(entry_data['net_pay'])}")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error saving: {e}")
+        computed = st.form_submit_button("Compute & Save", type="primary", use_container_width=True)
 
-        # Show last computed result if available
-        if emp["id"] in entries:
-            _render_payroll_summary(entries[emp["id"]])
+    if computed:
+        basic_c = _pesos_to_centavos(basic_pay)
+        ot_c = _pesos_to_centavos(overtime_pay)
+        hol_c = _pesos_to_centavos(holiday_pay)
+        nd_c = _pesos_to_centavos(night_diff)
+        ant_c = _pesos_to_centavos(allowances_nt)
+        at_c = _pesos_to_centavos(allowances_t)
+        comm_c = _pesos_to_centavos(commission)
+        thirteenth_c = _pesos_to_centavos(thirteenth)
+        absent_c = _pesos_to_centavos(absent_ded)
+        sssl_c = _pesos_to_centavos(sss_loan)
+        pil_c = _pesos_to_centavos(pagibig_loan)
+        ca_c = _pesos_to_centavos(cash_advance)
+        other_c = _pesos_to_centavos(other_ded)
+
+        gross = basic_c + ot_c + hol_c + nd_c + ant_c + at_c + comm_c + thirteenth_c - absent_c
+        gross = max(gross, 0)
+
+        result = compute_payroll(gross_pay=gross, nontaxable_allowances=ant_c)
+        vol_deductions = sssl_c + pil_c + ca_c + other_c
+
+        entry_data = {
+            "basic_pay": basic_c, "overtime_pay": ot_c,
+            "holiday_pay": hol_c, "night_differential": nd_c,
+            "allowances_nontaxable": ant_c, "allowances_taxable": at_c,
+            "commission": comm_c, "thirteenth_month_accrual": thirteenth_c,
+            "absent_deduction": absent_c, "gross_pay": gross,
+            "sss_employee": result.sss_employee,
+            "philhealth_employee": result.philhealth_employee,
+            "pagibig_employee": result.pagibig_employee,
+            "sss_employer": result.sss_employer,
+            "philhealth_employer": result.philhealth_employer,
+            "pagibig_employer": result.pagibig_employer,
+            "withholding_tax": result.withholding_tax,
+            "sss_loan": sssl_c, "pagibig_loan": pil_c,
+            "cash_advance": ca_c, "other_deductions": other_c,
+            "total_deductions": result.total_mandatory_deductions + vol_deductions,
+            "net_pay": result.net_pay - vol_deductions,
+        }
+
+        try:
+            _upsert_payroll_entry(period_id, emp_id, entry_data)
+            log_action("updated", "payroll_entries", period_id, f"Entry for {name}", {"net_pay": entry_data["net_pay"]})
+            st.toast(f"✅ Saved — Net Pay: {_fmt(entry_data['net_pay'])}", icon="💾")
+            st.session_state.pop("_pr_edit_emp", None)
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error saving: {e}")
+
+    # Show summary if already computed
+    if saved:
+        _render_payroll_summary(saved)
 
 
 def _render_payroll_summary(entry: dict):
@@ -1055,24 +1166,18 @@ def _render_payroll_analytics():
         for emp_name in all_emps_by_dept[d]:
             grouped_emp_options.append(f"{d}  ·  {emp_name}")
 
-    with st.expander("Filters", expanded=False):
-        f1, f2 = st.columns(2)
-        with f1:
-            sel_depts = st.multiselect(
-                "Department", all_depts,
-                key="pr_an_dept", placeholder="All departments",
-            )
-        with f2:
-            # Filter employee options based on selected departments
-            if sel_depts:
-                avail_options = [o for o in grouped_emp_options
-                                 if any(o.startswith(d + "  ·  ") for d in sel_depts)]
-            else:
-                avail_options = grouped_emp_options
-            sel_emps_raw = st.multiselect(
-                "Employee", avail_options,
-                key="pr_an_emp", placeholder="All employees",
-            )
+    _af1, _af2 = st.columns(2)
+    with _af1:
+        sel_depts = st.multiselect("Department", all_depts, key="pr_an_dept",
+                                   placeholder="All departments", label_visibility="collapsed")
+    with _af2:
+        if sel_depts:
+            avail_options = [o for o in grouped_emp_options
+                             if any(o.startswith(d + "  ·  ") for d in sel_depts)]
+        else:
+            avail_options = grouped_emp_options
+        sel_emps_raw = st.multiselect("Employee", avail_options, key="pr_an_emp",
+                                      placeholder="All employees", label_visibility="collapsed")
 
     # Apply filters
     if sel_depts:
@@ -1107,55 +1212,39 @@ def _render_payroll_analytics():
     dept_color_map = {d: _DEPT_COLORS[i % len(_DEPT_COLORS)]
                       for i, d in enumerate(dept_agg["department"])}
 
-    # ── Department selection state ────────────────────────────
-    sel_dept = st.session_state.get("pr_sel_dept")
-    if sel_dept not in dept_agg["department"].values:
-        sel_dept = dept_agg["department"].iloc[0]
-        st.session_state.pr_sel_dept = sel_dept
+    # ── Department selection — default to largest ─────────────
+    sel_dept = dept_agg["department"].iloc[0]
 
     # ═══════════════════════════════════════════════════════════
-    # ROW 1: Dept Pie (left) + Dept Stacked Bar over time (right)
+    # ROW 1: Dept Bar (left) + Dept Stacked Bar over time (right)
     # ═══════════════════════════════════════════════════════════
     col_pie, col_bar = st.columns([1, 2])
 
     with col_pie:
-        colors = [dept_color_map[d] for d in dept_agg["department"]]
-        pull = [0.06 if d == sel_dept else 0 for d in dept_agg["department"]]
+        bar_colors = [dept_color_map[d] for d in dept_agg["department"]]
 
-        fig_pie = go.Figure(go.Pie(
-            labels=dept_agg["department"],
-            values=dept_agg["gross"],
-            marker=dict(colors=colors),
-            pull=pull,
-            textinfo="label+percent",
-            textposition="inside",
+        fig_dept = go.Figure(go.Bar(
+            y=dept_agg["department"],
+            x=dept_agg["gross"],
+            orientation="h",
+            marker=dict(color=bar_colors),
+            text=[f"₱{v:,.0f}" for v in dept_agg["gross"]],
+            textposition="auto",
             textfont=dict(size=11),
-            hovertemplate="<b>%{label}</b><br>Gross: ₱%{value:,.0f}<br>%{percent}<extra></extra>",
-            sort=False,
+            hovertemplate="<b>%{y}</b><br>Gross: ₱%{x:,.0f}<extra></extra>",
         ))
-        fig_pie.update_layout(
+        fig_dept.update_layout(
             title="Payroll by Department",
-            height=380,
+            height=max(200, len(dept_agg) * 50 + 80),
             margin=dict(l=10, r=10, t=50, b=10),
-            showlegend=False,
+            xaxis=dict(title=None, tickprefix="₱", tickformat=","),
+            yaxis=dict(title=None, autorange="reversed"),
             plot_bgcolor="#f8f9fa",
             paper_bgcolor="rgba(0,0,0,0)",
             font=dict(family="Plus Jakarta Sans, system-ui, sans-serif", size=12),
+            bargap=0.25,
         )
-        evt_dept = st.plotly_chart(
-            fig_pie, use_container_width=True,
-            key="pr_dept_pie",
-            on_select="rerun",
-            selection_mode="points",
-        )
-        if evt_dept and evt_dept.selection and evt_dept.selection.get("points"):
-            ci = evt_dept.selection["points"][0].get("point_index")
-            if ci is not None and ci < len(dept_agg):
-                new_dept = dept_agg.iloc[ci]["department"]
-                if new_dept != sel_dept:
-                    st.session_state.pr_sel_dept = new_dept
-                    st.session_state.pop("pr_sel_period", None)  # reset period drill
-                    st.rerun()
+        st.plotly_chart(fig_dept, use_container_width=True, key="pr_dept_bar_h")
 
     # ── Filter to selected department ─────────────────────────
     df_dept = df[df["department"] == sel_dept].copy()
@@ -1216,22 +1305,7 @@ def _render_payroll_analytics():
         fig_bar.update_yaxes(title_text="Gross (₱)", secondary_y=True,
                              tickprefix="₱", tickformat=",")
 
-        evt_bar = st.plotly_chart(
-            fig_bar, use_container_width=True,
-            key="pr_dept_bar",
-            on_select="rerun",
-            selection_mode="points",
-        )
-
-        # Handle bar click to select a period
-        sel_period = st.session_state.get("pr_sel_period")
-        if evt_bar and evt_bar.selection and evt_bar.selection.get("points"):
-            ci = evt_bar.selection["points"][0].get("point_index")
-            if ci is not None and ci < len(dept_periods):
-                new_period = dept_periods.iloc[ci]["period"]
-                if new_period != sel_period:
-                    st.session_state.pr_sel_period = new_period
-                    st.rerun()
+        st.plotly_chart(fig_bar, use_container_width=True, key="pr_dept_bar")
 
     # ═══════════════════════════════════════════════════════════
     # ROW 2: Detail card + Employee pie for selected period
@@ -1250,20 +1324,13 @@ def _render_payroll_analytics():
         f'font-size:11px;font-weight:700;">&#8369;{dept_row["gross"]:,.0f} gross</span>'
         f'<span style="background:#dbeafe;color:#1e40af;padding:2px 10px;border-radius:9999px;'
         f'font-size:11px;font-weight:700;">{int(dept_row["headcount"])} employees</span>'
-        + (f'<span style="background:#fef3c7;color:#92400e;padding:2px 10px;border-radius:9999px;'
-           f'font-size:11px;font-weight:700;">Period: {sel_period}</span>'
-           if sel_period else '')
         + f'</div></div>',
         unsafe_allow_html=True,
     )
 
-    # ── Employee pie for selected period (or all periods) ─────
-    if sel_period:
-        df_emp = df_dept[df_dept["period"] == sel_period].copy()
-        pie_title = f"{sel_dept} — Employee Gross Pay ({sel_period})"
-    else:
-        df_emp = df_dept.copy()
-        pie_title = f"{sel_dept} — Employee Gross Pay (all periods)"
+    # ── Employee bar chart for selected department ─────────────
+    df_emp = df_dept.copy()
+    pie_title = f"{sel_dept} — Employee Gross Pay"
 
     if df_emp.empty:
         st.caption("No data for this selection.")
@@ -1279,28 +1346,31 @@ def _render_payroll_analytics():
     _EMP_COLORS = ["#2563eb", "#ea580c", "#d97706", "#0891b2",
                    "#7c3aed", "#db2777", "#0d9488", "#6366f1",
                    "#059669", "#dc2626", "#4f46e5", "#0284c7"]
+
     emp_colors = [_EMP_COLORS[i % len(_EMP_COLORS)] for i in range(len(emp_agg))]
 
-    fig_emp_pie = go.Figure(go.Pie(
-        labels=emp_agg["employee_name"],
-        values=emp_agg["gross"],
-        marker=dict(colors=emp_colors),
-        textinfo="label+percent",
+    fig_emp_bar = go.Figure(go.Bar(
+        y=emp_agg["employee_name"],
+        x=emp_agg["gross"],
+        orientation="h",
+        marker=dict(color=emp_colors),
+        text=[f"₱{v:,.0f}" for v in emp_agg["gross"]],
         textposition="auto",
         textfont=dict(size=10),
-        hovertemplate="<b>%{label}</b><br>Gross: ₱%{value:,.0f}<br>%{percent}<extra></extra>",
+        hovertemplate="<b>%{y}</b><br>Gross: ₱%{x:,.0f}<extra></extra>",
     ))
-    fig_emp_pie.update_layout(
+    fig_emp_bar.update_layout(
         title=pie_title,
-        height=380,
+        height=max(250, len(emp_agg) * 32 + 80),
         margin=dict(l=10, r=10, t=50, b=10),
-        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
-                    font=dict(size=10)),
+        xaxis=dict(title=None, tickprefix="₱", tickformat=","),
+        yaxis=dict(title=None, autorange="reversed"),
         plot_bgcolor="#f8f9fa",
         paper_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Plus Jakarta Sans, system-ui, sans-serif", size=12),
+        bargap=0.2,
     )
-    st.plotly_chart(fig_emp_pie, use_container_width=True, key="pr_emp_pie")
+    st.plotly_chart(fig_emp_bar, use_container_width=True, key="pr_emp_bar_h")
 
 
 def _render_payroll_history():
@@ -1474,6 +1544,7 @@ def _render_payroll_processing():
             if st.button("Reopen for Editing", width="stretch"):
                 _update_pay_period(period["id"], {"status": "draft", "reviewed_by": None, "reviewed_at": None})
                 log_action("updated", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}", {"status": "draft (reopened)"})
+                st.toast("📝 Pay period reopened for editing.", icon="🔓")
                 st.rerun()
 
     # ── Filter bar with cross-filtering ─────────────────────────
@@ -1496,14 +1567,16 @@ def _render_payroll_processing():
     else:
         _pp_avail_dept = _all_dept_full
 
-    pp_s, pp_p, pp_d = st.columns([2, 1.5, 1.5])
-    with pp_s:
-        pp_search   = st.text_input("Search employees", placeholder="Name or employee no…",
+    _pf1, _pf2, _pf3 = st.columns([1.5, 1.5, 2])
+    with _pf1:
+        pp_sel_dept = st.multiselect("Department", _pp_avail_dept, key="pp_f_dept",
+                                     placeholder="All departments", label_visibility="collapsed")
+    with _pf2:
+        pp_sel_pos  = st.multiselect("Position", _pp_avail_pos, key="pp_f_pos",
+                                     placeholder="All positions", label_visibility="collapsed")
+    with _pf3:
+        pp_search   = st.text_input("Employee", placeholder="🔍 Search name or no…",
                                     label_visibility="collapsed", key="pp_search")
-    with pp_p:
-        pp_sel_pos  = st.multiselect("Position",   _pp_avail_pos,  key="pp_f_pos",  placeholder="All positions")
-    with pp_d:
-        pp_sel_dept = st.multiselect("Department", _pp_avail_dept, key="pp_f_dept", placeholder="All departments")
 
     def _pp_match(emp):
         if pp_search:
@@ -1540,8 +1613,84 @@ def _render_payroll_processing():
         unsafe_allow_html=True,
     )
 
+    # ── Employee card grid grouped by department (4 columns) ──
+    _pr_photos = _load_pr_photo_urls(_cid=get_company_id())
+    _sorted_emps = sorted(employees, key=lambda e: (e.get("department") or "Unassigned").upper())
+    _prev_dept = None
+    _col_buf = []  # buffer cards for 4-col grid
+
+    def _flush_cols():
+        if not _col_buf:
+            return
+        gcols = st.columns(4)
+        for ci, _emp in enumerate(_col_buf):
+            with gcols[ci]:
+                _render_employee_card_row(_emp, entries, _pr_photos)
+        _col_buf.clear()
+
+    for emp in _sorted_emps:
+        _dept = (emp.get("department") or "Unassigned").upper()
+        if _dept != _prev_dept:
+            _flush_cols()
+            _dept_count = sum(1 for e in employees if (e.get("department") or "Unassigned").upper() == _dept)
+            _dept_computed = sum(1 for e in employees if (e.get("department") or "Unassigned").upper() == _dept and e["id"] in entries)
+            _dc_color = "#155724" if _dept_computed == _dept_count else "#856404"
+            st.markdown(
+                f"<div style='font-size:11px;font-weight:700;color:#727784;"
+                f"text-transform:uppercase;letter-spacing:0.08em;"
+                f"padding:8px 0 2px;border-bottom:1px solid #ebeef0;"
+                f"margin-bottom:4px;display:flex;justify-content:space-between;'>"
+                f"<span>{_dept} ({_dept_count})</span>"
+                f"<span style='color:{_dc_color};'>"
+                f"{_dept_computed}/{_dept_count} computed</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            _prev_dept = _dept
+        _col_buf.append(emp)
+        if len(_col_buf) == 4:
+            _flush_cols()
+    _flush_cols()  # remaining cards
+
+    # ── Wire card row clicks to open dialog via JS ──
+    import streamlit.components.v1 as _pr_components
+    _pr_components.html("""
+    <script>
+    (function(){
+        const pd = window.parent.document;
+        pd.querySelectorAll('.gxp-pr-emp-row').forEach(r => {
+            if (r.dataset.gxpWired) return;
+            r.dataset.gxpWired = '1';
+            r.addEventListener('click', () => {
+                const eid = r.dataset.prEmp;
+                const btn = pd.querySelector('[class*="st-key-_pr_open_' + eid + '"] button');
+                if (btn) btn.click();
+            });
+            r.addEventListener('mouseenter', () => {
+                r.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                r.style.transform = 'translateY(-1px)';
+            });
+            r.addEventListener('mouseleave', () => {
+                r.style.boxShadow = '';
+                r.style.transform = '';
+            });
+        });
+    })();
+    </script>
+    """, height=0)
+
+    # Hidden buttons per employee (triggered by JS clicks)
     for emp in employees:
-        _render_employee_payroll(emp, period["id"], is_locked, entries, period, daily_rate_divisor)
+        def _on_pr_open(_eid=emp["id"]):
+            st.session_state["_pr_edit_emp"] = _eid
+        st.button("\u200b", key=f"_pr_open_{emp['id']}", on_click=_on_pr_open)
+
+    # Open dialog if employee selected
+    _pr_emp_id = st.session_state.get("_pr_edit_emp")
+    if _pr_emp_id:
+        _payroll_computation_dialog(
+            _pr_emp_id, period["id"], is_locked, period, daily_rate_divisor
+        )
 
     # --- Period totals ---
     _render_period_totals(entries, employees)
@@ -1561,7 +1710,7 @@ def _render_payroll_processing():
             ):
                 _update_pay_period(period["id"], {"status": "reviewed"})
                 log_action("reviewed", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}")
-                st.success("Pay period submitted for review.")
+                st.toast("📋 Pay period submitted for review.", icon="✅")
                 st.rerun()
 
         if not all_computed:
@@ -1569,7 +1718,49 @@ def _render_payroll_processing():
 
     elif period["status"] == "reviewed":
         st.divider()
-        reviewer_name = st.text_input("Reviewer Name", placeholder="e.g. Juan dela Cruz")
+
+        # Build reviewer options from active employees
+        _reviewer_options = [
+            f"{e.get('employee_no', '')} · {e.get('last_name', '')}, {e.get('first_name', '')}"
+            for e in sorted(employees, key=lambda x: (x.get("last_name", ""), x.get("first_name", "")))
+            if e.get("is_active", True)
+        ]
+
+        _rev_search = st.text_input(
+            "Reviewer", placeholder="Type name or employee number…",
+            key="_pr_rev_search",
+        )
+
+        # Filter options based on search
+        _rev_filtered = _reviewer_options
+        if _rev_search and _rev_search.strip():
+            _q = _rev_search.strip().lower()
+            _rev_filtered = [o for o in _reviewer_options if _q in o.lower()]
+
+        _rev_selected = st.session_state.get("_pr_reviewer_selected", "")
+
+        if _rev_search and _rev_search.strip() and not _rev_selected:
+            if _rev_filtered:
+                # Show matching suggestions as radio buttons
+                _pick = st.radio(
+                    "Select reviewer:", _rev_filtered,
+                    label_visibility="collapsed", key="_pr_rev_pick",
+                )
+                if st.button("Confirm Reviewer", key="_pr_rev_confirm"):
+                    st.session_state["_pr_reviewer_selected"] = _pick
+                    st.rerun()
+            else:
+                st.error("⛔ Unauthorized — no matching employee found. Only registered employees can review payroll.")
+
+        reviewer_name = ""
+        if _rev_selected:
+            reviewer_name = _rev_selected
+            st.success(f"✓ Reviewer: **{reviewer_name}**")
+            if st.button("Change Reviewer", key="_pr_rev_clear", type="tertiary"):
+                st.session_state.pop("_pr_reviewer_selected", None)
+                st.session_state.pop("_pr_rev_search", None)
+                st.rerun()
+
         col1, col2, col3 = st.columns([2, 1, 1])
         with col2:
             if st.button(
@@ -1585,11 +1776,13 @@ def _render_payroll_processing():
                     "reviewed_at": datetime.now().isoformat(),
                 })
                 log_action("finalized", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}", {"reviewed_by": reviewer_name.strip()})
-                st.success(f"Approved by {reviewer_name.strip()}. Pay period finalized!")
+                st.toast(f"✅ Approved by {reviewer_name.strip()}. Pay period finalized!", icon="🎉")
+                st.session_state.pop("_pr_reviewer_selected", None)
+                st.session_state.pop("_pr_rev_search", None)
                 st.rerun()
 
         if not reviewer_name.strip():
-            st.caption("Enter reviewer name to approve and finalize.")
+            st.caption("Type a name or employee number to search for the reviewer.")
 
     elif period["status"] == "finalized":
         st.divider()
@@ -1598,6 +1791,7 @@ def _render_payroll_processing():
             if st.button("Mark as Paid", width="stretch"):
                 _update_pay_period(period["id"], {"status": "paid"})
                 log_action("paid", "pay_period", period["id"], f"{period['period_start']} to {period['period_end']}")
+                st.toast("💰 Pay period marked as paid!", icon="✅")
                 st.rerun()
 
 
@@ -1659,22 +1853,31 @@ def _render_payslips_tab():
         all_depts_ps = _dept_names_structured
     all_pos_ps   = sorted({e.get("position") or "" for e in all_employees} - {""})
 
-    ps_s, ps_p, ps_d = st.columns([2, 1.5, 1.5])
-    with ps_s:
-        f_name = st.text_input("Search", placeholder="Name or employee no…",
-                               label_visibility="collapsed", key="ps_f_name")
-    with ps_p:
-        f_pos  = st.multiselect("Position",   all_pos_ps,   key="ps_f_pos",  placeholder="All positions")
-    with ps_d:
-        f_dept = st.multiselect("Department", all_depts_ps, key="ps_f_dept", placeholder="All departments")
-
-    ps_sort_col, _ = st.columns([2, 3])
-    with ps_sort_col:
+    _fc1, _fc2, _fc3, _fc4 = st.columns([1.5, 1.5, 1.5, 1])
+    with _fc1:
+        f_dept = st.multiselect("Department", all_depts_ps, key="ps_f_dept", placeholder="All",
+                                label_visibility="collapsed")
+    with _fc2:
+        if f_dept:
+            _ps_avail_pos = sorted({(e.get("position") or "") for e in all_employees
+                                    if (e.get("department") or "") in f_dept} - {""})
+        else:
+            _ps_avail_pos = all_pos_ps
+        f_pos = st.multiselect("Position", _ps_avail_pos, key="ps_f_pos", placeholder="All positions",
+                               label_visibility="collapsed")
+    with _fc3:
+        f_name = st.text_input("Employee", placeholder="🔍 Search name or no…",
+                               key="ps_f_name", label_visibility="collapsed")
+    with _fc4:
         sort_by = st.selectbox(
             "Sort by",
-            ["Name (A-Z)", "Name (Z-A)", "Net Pay (High-Low)", "Net Pay (Low-High)", "Department"],
-            key="ps_sort",
+            ["A-Z", "Z-A", "Net ↓", "Net ↑", "Dept"],
+            key="ps_sort", label_visibility="collapsed",
         )
+        # Map short labels back to full names for sorting logic
+        _sort_map = {"A-Z": "Name (A-Z)", "Z-A": "Name (Z-A)", "Net ↓": "Net Pay (High-Low)",
+                     "Net ↑": "Net Pay (Low-High)", "Dept": "Department"}
+        sort_by = _sort_map.get(sort_by, sort_by)
 
     def _apply_filters(emp_list):
         result = emp_list
@@ -1702,141 +1905,105 @@ def _render_payslips_tab():
     done_filtered    = _apply_filters(done_emps)
     pending_filtered = _apply_filters(pending_emps)
 
-    # ── Select All + Generate Selected ────────────────────────────────────
-    col_sel_all, col_gen_sel, col_gen_all = st.columns([1, 2, 2])
-    with col_sel_all:
-        select_all = st.checkbox("Select All", key="ps_select_all")
-    with col_gen_sel:
-        gen_selected = st.button(
-            "Generate Selected Payslips",
+    # ── Generate Payslips (based on current filter) ─────────────────────
+    select_all = False  # no longer used, kept for compatibility
+    _filter_label = f" ({len(done_filtered)})" if (f_name or f_dept or f_pos) else f" — All ({len(done_filtered)})"
+    if done_filtered:
+        _gen_pdf_bytes = generate_all_payslips_pdf(company, done_filtered, period, entries)
+        st.download_button(
+            label=f"📄 Generate Payslips{_filter_label}",
+            data=_gen_pdf_bytes,
+            file_name=f"payslips_{period['period_start']}_to_{period['period_end']}.pdf",
+            mime="application/pdf",
             type="primary",
-            use_container_width=True,
-            icon="⬇️",
-            key="ps_gen_selected",
+            key="ps_dl_all",
         )
-    with col_gen_all:
-        if done_emps:
-            all_pdf_bytes = generate_all_payslips_pdf(company, done_emps, period, entries)
-            st.download_button(
-                label="Download All Payslips (PDF)",
-                data=all_pdf_bytes,
-                file_name=f"payslips_{period['period_start']}_to_{period['period_end']}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                icon="📄",
-                key="ps_dl_all",
-            )
+    else:
+        st.info("No computed payslips to generate. Complete payroll processing first.")
 
     st.divider()
 
-    # ── Track selections ─────────────────────────────────────────────────
-    selected_ids: list[str] = []
+    # ── Progress header (same style as Payroll Processing) ────────────────
+    _pct_ps = int(len(done_filtered) / len(done_filtered + pending_filtered) * 100) if (done_filtered or pending_filtered) else 0
+    st.markdown(
+        f'<div style="display:flex;align-items:center;justify-content:space-between;margin:0.5rem 0 0.5rem;">'
+        f'<div>'
+        f'<span class="gxp-page-label" style="margin:0;">PAYSLIPS</span>'
+        f'<span style="font-size:0.8125rem;color:var(--gxp-text3);margin-left:0.5rem;">'
+        f'{len(done_filtered)} of {len(done_filtered) + len(pending_filtered)} ready</span>'
+        f'</div>'
+        f'<span style="font-size:0.8125rem;font-weight:700;color:var(--gxp-accent);">{_pct_ps}%</span>'
+        f'</div>'
+        f'<div style="height:4px;background:var(--gxp-border);border-radius:9999px;margin-bottom:0.75rem;">'
+        f'<div style="height:4px;width:{_pct_ps}%;background:var(--gxp-accent);border-radius:9999px;'
+        f'transition:width 0.3s ease;"></div></div>',
+        unsafe_allow_html=True,
+    )
 
-    # ── Done column ───────────────────────────────────────────────────────
-    col_done, col_pending = st.columns(2)
+    # ── Photo URLs ────────────────────────────────────────────────────────
+    _ps_photos = _load_pr_photo_urls(_cid=get_company_id())
 
-    with col_done:
-        st.markdown(
-            '<div style="background:var(--gxp-success-bg);color:var(--gxp-success-fg);'
-            'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;'
-            'padding:4px 10px;border-radius:4px;margin-bottom:8px;display:inline-block;">'
-            f'Done ({len(done_filtered)})</div>',
-            unsafe_allow_html=True,
-        )
-        for emp in done_filtered:
-            entry = entries[emp["id"]]
-            emp_key = f"ps_chk_{emp['id']}"
-            # Pre-set state before widget instantiation to avoid the
-            # "default value + Session State API" conflict warning.
-            if select_all:
-                st.session_state[emp_key] = True
+    # ── Card grid grouped by department (4 columns) ───────────────────────
+    all_filtered = done_filtered + pending_filtered
+    all_filtered = sorted(all_filtered, key=lambda e: (e.get("department") or "Unassigned").upper())
+    _prev_dept_ps = None
+    _col_buf_ps: list = []
 
-            row_c1, row_c2, row_c3 = st.columns([0.4, 3, 2])
-            with row_c1:
-                is_checked = st.checkbox("", key=emp_key, label_visibility="collapsed")
-            with row_c2:
-                emp_no   = emp.get("employee_no") or ""
-                name     = f"{emp.get('last_name', '')}, {emp.get('first_name', '')}"
-                position = emp.get("position") or ""
-                dept     = emp.get("department") or ""
-                sub_line = " · ".join(filter(None, [position, dept]))
-                st.markdown(
-                    f'<div style="padding:2px 0;">'
-                    f'<div style="font-size:10px;color:var(--gxp-text2);">{emp_no}</div>'
-                    f'<div style="font-size:13px;font-weight:600;color:var(--gxp-text);">{name}</div>'
-                    f'<div style="font-size:11px;color:var(--gxp-text2);">{sub_line}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-            with row_c3:
-                net = entry.get("net_pay", 0)
-                st.markdown(
-                    f'<div style="text-align:right;padding:2px 0;">'
-                    f'<div style="font-size:13px;font-weight:600;color:var(--gxp-success);">'
-                    f'₱{net/100:,.2f}</div>'
-                    f'<div style="font-size:11px;color:var(--gxp-text2);">Net Pay</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+    def _flush_ps_cols():
+        if not _col_buf_ps:
+            return
+        gcols = st.columns(4)
+        for ci, (_emp, _is_done) in enumerate(_col_buf_ps):
+            with gcols[ci]:
+                _render_payslip_card(_emp, _is_done, entries, _ps_photos, company, period, select_all)
+        _col_buf_ps.clear()
 
-            if is_checked:
-                selected_ids.append(emp["id"])
-
-            # Individual download
-            pdf_bytes = generate_payslip_pdf(company, emp, period, entry)
-            st.download_button(
-                label="Download",
-                data=pdf_bytes,
-                file_name=f"payslip_{emp['employee_no']}_{period['period_start']}.pdf",
-                mime="application/pdf",
-                key=f"ps_dl_{emp['id']}",
-                use_container_width=True,
-                icon="⬇️",
-            )
-            st.markdown("<hr style='border:none;border-top:1px solid var(--gxp-border);margin:4px 0;'>", unsafe_allow_html=True)
-
-    with col_pending:
-        if pending_filtered:
+    for emp in all_filtered:
+        _dept = (emp.get("department") or "Unassigned").upper()
+        if _dept != _prev_dept_ps:
+            _flush_ps_cols()
+            _dept_total = sum(1 for e in all_filtered if (e.get("department") or "Unassigned").upper() == _dept)
+            _dept_done = sum(1 for e in all_filtered if (e.get("department") or "Unassigned").upper() == _dept and e["id"] in entries)
             st.markdown(
-                '<div style="background:var(--gxp-warning-bg);color:var(--gxp-warning-fg);'
-                'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;'
-                'padding:4px 10px;border-radius:4px;margin-bottom:8px;display:inline-block;">'
-                f'Pending ({len(pending_filtered)})</div>',
+                f"<div style='font-size:11px;font-weight:700;color:#727784;"
+                f"text-transform:uppercase;letter-spacing:0.08em;"
+                f"padding:8px 0 2px;border-bottom:1px solid #ebeef0;"
+                f"margin-bottom:4px;display:flex;justify-content:space-between;'>"
+                f"<span>{_dept} ({_dept_total})</span>"
+                f"<span style='color:{'#155724' if _dept_done == _dept_total else '#856404'};'>"
+                f"{_dept_done}/{_dept_total} ready</span>"
+                f"</div>",
                 unsafe_allow_html=True,
             )
-            for emp in pending_filtered:
-                name = f"{emp.get('last_name', '')}, {emp.get('first_name', '')}"
-                dept = emp.get("department") or ""
-                st.markdown(
-                    f'<div style="padding:6px 0;border-bottom:1px solid var(--gxp-border);">'
-                    f'<div style="font-size:13px;color:var(--gxp-text2);">{name}</div>'
-                    f'<div style="font-size:11px;color:var(--gxp-text3);">{dept} — Not yet computed</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.markdown(
-                '<div style="color:var(--gxp-text3);font-size:13px;text-align:center;'
-                'padding:24px 0;">All employees computed</div>',
-                unsafe_allow_html=True,
-            )
+            _prev_dept_ps = _dept
+        _is_done = emp["id"] in entries
+        _col_buf_ps.append((emp, _is_done))
+        if len(_col_buf_ps) == 4:
+            _flush_ps_cols()
+    _flush_ps_cols()
 
-    # ── Generate Selected ─────────────────────────────────────────────────
-    if gen_selected:
-        if not selected_ids:
-            st.warning("No employees selected. Check the boxes on the left.")
-        else:
-            sel_emps = [e for e in done_emps if e["id"] in selected_ids]
-            pdf_bytes = generate_all_payslips_pdf(company, sel_emps, period, entries)
-            st.download_button(
-                label=f"Download {len(sel_emps)} Payslip(s) (PDF)",
-                data=pdf_bytes,
-                file_name=f"payslips_selected_{period['period_start']}.pdf",
-                mime="application/pdf",
-                type="primary",
-                use_container_width=True,
-                key="ps_dl_selected_result",
-            )
+    # ── Wire swipe action clicks to hidden Streamlit widgets ─────────────
+    import streamlit.components.v1 as _ps_components
+    _ps_components.html("""
+    <script>
+    (function(){
+        const pd = window.parent.document;
+        pd.querySelectorAll('.ps-swipe-act[data-ps-action]').forEach(el => {
+            if (el.dataset.gxpWired) return;
+            el.dataset.gxpWired = '1';
+            el.addEventListener('click', e => {
+                e.stopPropagation();
+                const action = el.dataset.psAction;
+                if (action.startsWith('dl_')) {
+                    const btn = pd.querySelector('[class*="st-key-ps_dl_' + action.slice(3) + '"] button');
+                    if (btn) btn.click();
+                }
+            });
+        });
+    })();
+    </script>
+    """, height=0)
+
 
 
 def render():
@@ -1858,4 +2025,5 @@ def render():
 
     with tab_payslips:
         _render_payslips_tab()
+
 

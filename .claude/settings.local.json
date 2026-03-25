@@ -1,4 +1,7 @@
 {
+  "env": {
+    "MAX_MCP_OUTPUT_TOKENS": "50000"
+  },
   "permissions": {
     "allow": [
       "Bash(python -m pytest tests/test_payroll.py -v)",
@@ -304,7 +307,13 @@
       "Bash(sed -i -e 's/= _load_employees\\(\\)/= _load_employees\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_schedules\\(\\)/= _load_schedules\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_employee_profiles\\(\\)/= _load_employee_profiles\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_dept_names_from_table\\(\\)/= _load_dept_names_from_table\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_employee_map\\(\\)/= _load_employee_map\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_company\\(\\)/= _load_company\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_departments_map\\(\\)/= _load_departments_map\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_pay_periods\\(\\)/= _load_pay_periods\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_all_pay_periods\\(\\)/= _load_all_pay_periods\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_templates\\(\\)/= _load_templates\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_locations\\(\\)/= _load_locations\\(_cid=get_company_id\\(\\)\\)/g' -e 's/= _load_departments\\(\\)/= _load_departments\\(_cid=get_company_id\\(\\)\\)/g' \"$f\")",
       "Bash(echo \"Fixed $f\")",
       "Bash(echo -n \"$f: \")",
-      "Bash(grep -l \"gxp-page-label\\\\|gxp-editorial-heading\" I:SaaSPaySysgenxcript-saasapppages*.py)"
+      "Bash(grep -l \"gxp-page-label\\\\|gxp-editorial-heading\" I:SaaSPaySysgenxcript-saasapppages*.py)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/pages/_employees.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/styles.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/pages/_payroll_run.py'', doraise=True\\); py_compile.compile\\(''app/styles.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/pages/_payroll_run.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(ls -la app/*.py)",
+      "Bash(wc -l /i/SaaS/PaySys/genxcript-saas/app/pages/*.py)"
     ]
   }
 }

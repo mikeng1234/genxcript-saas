@@ -1195,8 +1195,16 @@ def _render_stat_cards(active_count: int, total_count: int,
     for i, (col, card) in enumerate(zip(cols, cards)):
         with col:
             trend_content = card["trend"] if card["trend"] else "&nbsp;"
+            _accent = card.get("accent", "#005bc1")
             html = (
-                f'<div class="gxp-stat-card">'
+                f'<div class="gxp-stat-swipe">'
+                # Action tray (behind card, at bottom)
+                f'<div class="gxp-stat-actions" style="background:linear-gradient(135deg,{card["icon_bg"]},{card["icon_bg"]});">'
+                f'<div class="gxp-stat-action-btn" data-stat-action="stat_card_{i}" '
+                f'style="background:{_accent};color:#fff;border:none;">{card["pill_lbl"]}</div>'
+                f'</div>'
+                # Card (slides up on hover)
+                f'<div class="gxp-stat-card gxp-stat-card-inner">'
                 f'<div class="gxp-stat-icon" style="background:{card["icon_bg"]};color:{card["icon_color"]}">'
                 f'{card["svg"]}</div>'
                 f'<div class="gxp-stat-label">{card["label"]}</div>'
@@ -1204,9 +1212,10 @@ def _render_stat_cards(active_count: int, total_count: int,
                 f'<div class="gxp-stat-trend-row">{trend_content}</div>'
                 f'<div class="gxp-stat-sub">{card["sub"]}</div>'
                 f'</div>'
+                f'</div>'
             )
             st.markdown(html, unsafe_allow_html=True)
-            # Pill button — label fades in on hover, glows with card accent color
+            # Hidden button (wired via JS)
             if st.button(card["pill_lbl"], key=f"stat_card_{i}", use_container_width=True):
                 dlg = card["dialog"]
                 if dlg == "employees":
@@ -1505,23 +1514,25 @@ def _build_calendar_events(periods: list[dict], deadlines: list[dict]) -> dict:
             d = h.get("observed_date") or h.get("holiday_date")
             if d and d.month == month and d.year == year:
                 htype = h.get("type", "regular")
-                color = "#e53935" if "regular" in htype.lower() else "#ff9800"
-                events[d.isoformat()].append({"label": h["name"], "color": color})
+                is_regular = "regular" in htype.lower()
+                color = "#e53935" if is_regular else "#ff9800"
+                etype = "holiday" if is_regular else "special"
+                events[d.isoformat()].append({"label": h["name"], "color": color, "type": etype})
     except Exception:
         pass
 
     # 2. Pay period key dates (start, end, payment_date)
     for p in (periods or []):
-        for field, label, color in [
-            ("start_date", "Pay period start", "#2196f3"),
-            ("end_date",   "Pay period end",   "#2196f3"),
-            ("payment_date", f"Pay day ({p.get('status','')})", "#4caf50"),
+        for field, label, color, etype in [
+            ("start_date", "Pay period start", "#2196f3", "period"),
+            ("end_date",   "Pay period end",   "#2196f3", "period"),
+            ("payment_date", f"Pay day ({p.get('status','')})", "#4caf50", "payday"),
         ]:
             val = p.get(field)
             if val:
                 d = date.fromisoformat(val) if isinstance(val, str) else val
                 if d.month == month and d.year == year:
-                    events[d.isoformat()].append({"label": label, "color": color})
+                    events[d.isoformat()].append({"label": label, "color": color, "type": etype})
 
     # 3. Government deadlines
     for dl in (deadlines or []):
@@ -1532,6 +1543,7 @@ def _build_calendar_events(periods: list[dict], deadlines: list[dict]) -> dict:
                 events[d.isoformat()].append({
                     "label": dl.get("label", dl.get("agency", "Deadline")),
                     "color": "#ff6f00",
+                    "type": "deadline",
                 })
 
     return dict(events)
@@ -1586,6 +1598,15 @@ def _render_mini_calendar(events: dict):
         color:#005bc1; font-weight:800; font-size:15px;
         text-shadow:0 0 8px rgba(0,91,193,0.45), 0 0 16px rgba(0,91,193,0.2);
       }}
+      .cal-day.evt-holiday {{ color:#e53935; font-weight:700; font-size:12px; }}
+      .cal-day.evt-special {{ color:#ff9800; font-weight:700; font-size:12px; }}
+      .cal-day.evt-payday  {{ color:#4caf50; font-weight:700; font-size:12px; }}
+      .cal-day.evt-deadline {{ color:#ff6f00; font-weight:700; font-size:12px; }}
+      .cal-day.evt-period  {{ color:#2196f3; font-weight:600; }}
+      .cal-day.today.evt-holiday {{ color:#e53935; font-size:15px; }}
+      .cal-day.today.evt-payday  {{ color:#4caf50; font-size:15px; }}
+      .cal-day.today.evt-special {{ color:#ff9800; font-size:15px; }}
+      .cal-day.today.evt-deadline {{ color:#ff6f00; font-size:15px; }}
       .cal-day.empty {{ pointer-events:none; }}
       .cal-dots {{
         display:flex; gap:2px; justify-content:center;
@@ -1644,9 +1665,17 @@ def _render_mini_calendar(events: dict):
 
           var dayEvents = events[iso];
           if (dayEvents && dayEvents.length > 0) {{
+            // Apply color class by priority: holiday > payday > deadline > special > period
+            var prio = ['holiday','payday','deadline','special','period'];
+            var types = dayEvents.map(function(e){{ return e.type || ''; }});
+            for (var p=0; p<prio.length; p++) {{
+              if (types.indexOf(prio[p]) !== -1) {{
+                cell.classList.add('evt-' + prio[p]);
+                break;
+              }}
+            }}
             var dots = document.createElement('div');
             dots.className = 'cal-dots';
-            // Show max 3 dots
             dayEvents.slice(0,3).forEach(function(ev){{
               var dot = document.createElement('span');
               dot.className = 'cal-dot';
@@ -1907,6 +1936,24 @@ def render():
         });
       }
       wireAlerts();
+
+      // ── Stat card swipe-up action buttons ──
+      function wireStatActions(){
+        pd.querySelectorAll('.gxp-stat-action-btn[data-stat-action]').forEach(function(el){
+          if(el.dataset.gxpWired) return;
+          el.dataset.gxpWired='1';
+          el.addEventListener('click',function(e){
+            e.stopPropagation();
+            var key=el.getAttribute('data-stat-action');
+            if(!key) return;
+            var btn=pd.querySelector('div[class*="st-key-'+key+'"] button');
+            if(btn) btn.click();
+          });
+        });
+      }
+      wireStatActions();
+      setTimeout(wireStatActions,500);
+      setTimeout(wireStatActions,1500);
 
       /* ── Counting number animation ─────────────────────────── */
       function animateCounts(){

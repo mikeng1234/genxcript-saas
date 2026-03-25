@@ -151,19 +151,18 @@ def render():
     _all_employees = _load_employees(_cid=get_company_id())
     _positions = sorted({e.get("position") or "" for e in _all_employees.values() if e.get("position")})
 
-    # ── Filters ────────────────────────────────────────────────
-    with st.expander("Filter & Sort", expanded=False):
-        fpc1, fpc2 = st.columns(2)
-        with fpc1:
-            pc_f_name = st.text_input("Employee name or ID", key="pc_f_name", placeholder="Search…")
-        with fpc2:
-            _pos_opts = [""] + _positions
-            pc_f_pos = st.selectbox(
-                "Position",
-                options=_pos_opts,
-                format_func=lambda x: "All positions" if x == "" else x,
-                key="pc_f_pos",
-            )
+    # ── Compact inline filters ────────────────────────────────
+    _cf1, _cf2 = st.columns(2)
+    with _cf1:
+        pc_f_name = st.text_input("Employee", key="pc_f_name", placeholder="🔍 Search name or ID…",
+                                  label_visibility="collapsed")
+    with _cf2:
+        _pos_opts = [""] + _positions
+        pc_f_pos = st.selectbox(
+            "Position", options=_pos_opts,
+            format_func=lambda x: "All positions" if x == "" else x,
+            key="pc_f_pos", label_visibility="collapsed",
+        )
 
     # ------------------------------------------------------------------
     # Load periods — need at least 2 finalized to compare

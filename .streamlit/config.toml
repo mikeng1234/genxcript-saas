@@ -7,4 +7,5 @@ showSidebarNavigation  = false
 
 [server]
 enableStaticServing    = true
+maxUploadSize          = 5
 

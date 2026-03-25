@@ -1,6 +1,6 @@
 # GenXcript Payroll — Product Roadmap
 
-> Last updated: 2026-03-21
+> Last updated: 2026-03-25
 > Strategy: Payroll-first → HR Compliance → Attendance → Advanced Payroll → Portal → BI → Scale
 > Each phase unlocks the next. Features within a phase are ordered by dependency.
 
@@ -29,6 +29,13 @@
 - [x] **Employee Portal UX** — custom topbar; checkbox highlight fix; permanent address redesign; People Search with org chart; Leaflet clock-in map (pulsing dot + geofence + Inside/Outside badge)
 - [x] **Dashboard Performance** — N+1 → batch query; @st.cache_data(ttl=120); skeleton shimmer loading; counting number animations; card entrance animations (fade-in + staggered slide-up)
 - [x] **RLS Hardening** — user_preferences + audit_logs RLS enabled (migrations 023, 024)
+- [x] **Employee Cards Redesign** — compact single-row cards with swipe-right-to-reveal action buttons (Edit/Print/Deactivate); department grouping with headers; photo integration from Supabase Storage; `on_click` callbacks for instant dialog open (no stale data flash); skeleton loading on edit dialog
+- [x] **Dashboard Stat Cards** — swipe-up-to-reveal action buttons (matching employee card pattern); counting number animations; skeleton shimmer loading; company switch data refresh fix
+- [x] **Dashboard Mini Calendar** — event date coloring (green for paydays, red for holidays); upcoming events sidebar
+- [x] **Payroll Processing Redesign** — employee cards with photo avatars grouped by department; 4-column grid; popup dialog for earnings computation (replaces expand/collapse); collapsible filter bar matching employee directory pattern
+- [x] **Gross Pay Composition** — fixed to show percentages instead of peso amounts in Payroll History analytics
+- [x] **Systematic Caching** — `@st.cache_data` with `_cid` keying across all pages (~35 cached functions); `on_click` callback pattern for buttons to prevent stale dialog rendering
+- [x] **7 Custom Skills** — PH Labor Law, PH Tax & Contributions, Payroll Best Practices, Code Quality, Security & Privacy Auditor, Supabase Patterns, GitHub Workflow
 
 ---
 

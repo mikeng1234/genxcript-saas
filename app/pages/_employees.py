@@ -248,7 +248,8 @@ def _clear_dialog_state(emp_id: str) -> None:
     """Remove all edit-dialog session state keys for a given employee ID."""
     prefix_keys = [
         k for k in list(st.session_state.keys())
-        if (k.startswith("d_") or k.startswith("_dp_")) and k.endswith(f"_{emp_id}")
+        if (k.startswith("d_") or k.startswith("_dp_") or k.startswith("_edit_ready_"))
+        and emp_id in k
     ]
     for k in prefix_keys:
         st.session_state.pop(k, None)
@@ -1304,14 +1305,17 @@ def _render_leave_balances_tab():
     if _dept_names_structured:
         all_depts = _dept_names_structured
 
-    # ── Collapsible filter bar ─────────────────────────────────────────────────
-    with st.expander("Filters", expanded=False):
-        fcol, _ = st.columns([2, 5])
-        with fcol:
-            lb_sel_dept = st.multiselect("Department", all_depts,     key="lb_f_dept", placeholder="All departments")
-            lb_sel_pos  = st.multiselect("Position",   all_positions, key="lb_f_pos",  placeholder="All positions")
-            lb_search   = st.text_input("Employee",    placeholder="Name or employee no…",
-                                        label_visibility="visible",   key="lb_search")
+    # ── Compact inline filters ─────────────────────────────────────────────────
+    _lf1, _lf2, _lf3 = st.columns([1.5, 1.5, 2])
+    with _lf1:
+        lb_sel_dept = st.multiselect("Department", all_depts, key="lb_f_dept",
+                                     placeholder="All departments", label_visibility="collapsed")
+    with _lf2:
+        lb_sel_pos  = st.multiselect("Position", all_positions, key="lb_f_pos",
+                                     placeholder="All positions", label_visibility="collapsed")
+    with _lf3:
+        lb_search   = st.text_input("Employee", placeholder="🔍 Search name or no…",
+                                    label_visibility="collapsed", key="lb_search")
 
     # ── Build rows ─────────────────────────────────────────────────────────────
     rows = []
@@ -1587,6 +1591,32 @@ def _edit_employee_dialog(emp_id: str):
     and personal profile (portal fields) in one tabbed dialog.
     Saves both the `employees` table and `employee_profiles` in one submit.
     """
+    # ── Show loading skeleton on first open ─────────────────────────────────
+    _first_open_key = f"_edit_ready_{emp_id}"
+    if not st.session_state.get(_first_open_key):
+        st.markdown(
+            "<div style='text-align:center;padding:48px 0;'>"
+            "<div style='width:80px;height:80px;border-radius:50%;"
+            "background:#e8ecf0;margin:0 auto 16px;"
+            "animation:gxp-skeleton-pulse 1.2s ease-in-out infinite;'></div>"
+            "<div style='width:160px;height:14px;border-radius:8px;"
+            "background:#e8ecf0;margin:0 auto 10px;"
+            "animation:gxp-skeleton-pulse 1.2s ease-in-out infinite;'></div>"
+            "<div style='width:120px;height:10px;border-radius:8px;"
+            "background:#e8ecf0;margin:0 auto;"
+            "animation:gxp-skeleton-pulse 1.2s ease-in-out infinite;'></div>"
+            "<div style='display:flex;gap:12px;justify-content:center;margin-top:24px;'>"
+            "<div style='width:45%;height:32px;border-radius:8px;"
+            "background:#e8ecf0;animation:gxp-skeleton-pulse 1.2s ease-in-out infinite;'></div>"
+            "<div style='width:45%;height:32px;border-radius:8px;"
+            "background:#e8ecf0;animation:gxp-skeleton-pulse 1.2s ease-in-out infinite;'></div>"
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        st.session_state[_first_open_key] = True
+        st.rerun()
+
     # ── Load data ─────────────────────────────────────────────────────────────
     emp     = _load_single_employee(emp_id)
     profile = _load_employee_profile(emp_id)
@@ -1627,52 +1657,64 @@ def _edit_employee_dialog(emp_id: str):
             st.session_state[dep_key]  = _NEW_DEPT_SENTINEL
             st.session_state[depn_key] = emp.get("department", "")
 
-    # ── Photo upload (top of dialog) ─────────────────────────────────────────
-    _photo_col_left, _photo_col_right = st.columns([1, 4])
-    with _photo_col_left:
-        current_photo = p.get("photo_url") or ""
-        initials = ((emp.get("first_name") or "?")[0] + (emp.get("last_name") or "?")[0]).upper()
+    # ── Photo error display (top of dialog) ──────────────────────────────────
+    _photo_err = st.session_state.pop("_photo_error", None)
+    _photo_ok  = st.session_state.pop("_photo_success", None)
+    if _photo_err:
+        st.error(_photo_err)
+    if _photo_ok:
+        st.success(_photo_ok)
+
+    # ── Photo upload (compact: photo + icon buttons) ─────────────────────────
+    current_photo = p.get("photo_url") or ""
+    initials = ((emp.get("first_name") or "?")[0] + (emp.get("last_name") or "?")[0]).upper()
+
+    _ph_spacer_l, _ph_center, _ph_spacer_r = st.columns([2, 1, 2])
+    with _ph_center:
         if current_photo:
             st.markdown(
-                f'<div style="width:80px;height:80px;border-radius:50%;overflow:hidden;'
-                f'border:2px solid #e7e8e9;margin:0 auto;">'
+                f'<div style="width:100px;height:100px;border-radius:16px;overflow:hidden;'
+                f'border:2px dashed #c0c6d0;margin:0 auto;">'
                 f'<img src="{current_photo}" style="width:100%;height:100%;object-fit:cover;" '
                 f'onerror="this.style.display=\'none\';this.parentElement.innerHTML='
                 f'\'<div style=&quot;width:100%;height:100%;display:flex;align-items:center;'
-                f'justify-content:center;background:#005bc1;color:#fff;font-size:24px;'
+                f'justify-content:center;background:#005bc1;color:#fff;font-size:28px;'
                 f'font-weight:700;&quot;>{initials}</div>\';"></div>',
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
-                f'<div style="width:80px;height:80px;border-radius:50%;'
-                f'background:#005bc1;color:#fff;font-size:24px;font-weight:700;'
+                f'<div style="width:100px;height:100px;border-radius:16px;'
+                f'background:#f0f2f5;color:#727784;font-size:28px;font-weight:700;'
                 f'display:flex;align-items:center;justify-content:center;'
-                f'margin:0 auto;border:2px solid #e7e8e9;">{initials}</div>',
+                f'margin:0 auto;border:2px dashed #c0c6d0;">{initials}</div>',
                 unsafe_allow_html=True,
             )
-    with _photo_col_right:
+        # File uploader below photo
         uploaded_photo = st.file_uploader(
             "Upload Photo",
             type=["jpg", "jpeg", "png"],
             key=f"d_photo_{emp_id}",
+            label_visibility="collapsed",
             help="Max 5 MB. JPEG or PNG. Will be compressed to 200px for display.",
         )
+
+        # Remove button below uploader (only if photo exists)
         if current_photo:
-            if st.button("Remove Photo", key=f"d_photo_rm_{emp_id}", type="tertiary"):
+            if st.button("Remove Photo", key=f"d_photo_rm_{emp_id}",
+                         width="stretch"):
                 try:
-                    # Delete from storage
                     old_path = current_photo.split("/employee-photos/")[-1] if "/employee-photos/" in current_photo else ""
                     if old_path:
                         get_db().storage.from_("employee-photos").remove([old_path])
-                    # Clear from profile
                     get_db().table("employee_profiles").update(
                         {"photo_url": None}
                     ).eq("employee_id", emp_id).execute()
-                    st.success("Photo removed.")
+                    st.session_state["_photo_success"] = "Photo removed."
                     st.rerun()
                 except Exception as ex:
-                    st.error(f"Failed to remove photo: {ex}")
+                    st.session_state["_photo_error"] = f"Failed to remove photo: {ex}"
+                    st.rerun()
 
     # ── Tabs ──────────────────────────────────────────────────────────────────
     tab_emp, tab_profile_tab = st.tabs(["📋 Employment Details", "👤 Personal Profile"])
@@ -2165,7 +2207,7 @@ def _edit_employee_dialog(emp_id: str):
             try:
                 _photo_bytes = _photo_file.getvalue()
                 if len(_photo_bytes) > 5 * 1024 * 1024:
-                    st.error("Photo must be under 5 MB.")
+                    st.session_state["_photo_error"] = "Photo must be under 5 MB."
                     return
                 _photo_bytes = _compress_employee_photo(_photo_bytes)
                 _photo_ext = "jpg"
@@ -2184,7 +2226,7 @@ def _edit_employee_dialog(emp_id: str):
                 _photo_url += f"?v={int(__import__('time').time())}"
                 profile_data["photo_url"] = _photo_url
             except Exception as _pex:
-                st.warning(f"Photo upload failed: {_pex}. Other data will still save.")
+                st.session_state["_photo_error"] = f"Photo upload failed: {_pex}. Other data will still save."
 
         # ── Handle email change — unlink old auth user ─────────────────────────
         old_email = (emp.get("email") or "").strip().lower()
@@ -2244,12 +2286,14 @@ def _render_employees_tab(show_salary_toggle: bool = True):
     # — if so, clear editing_id since the user interacted with something else.
     _edit_id = st.session_state.get("editing_id")
     if _edit_id:
-        # Only open dialog if we're not processing another button click
-        # The dialog decorator handles its own open/close state internally
+        # If switching to a different employee, clear stale widget state from previous
+        _prev_edit = st.session_state.get("_prev_editing_id")
+        if _prev_edit and _prev_edit != _edit_id:
+            _clear_dialog_state(_prev_edit)
+        st.session_state["_prev_editing_id"] = _edit_id
         try:
             _edit_employee_dialog(_edit_id)
         except Exception:
-            # Dialog was closed by user (X button) or conflict — clear state
             st.session_state.pop("editing_id", None)
             _clear_dialog_state(_edit_id)
 
@@ -2335,20 +2379,24 @@ def _render_employees_tab(show_salary_toggle: bool = True):
     else:
         _avail_depts = _all_depts_full
 
-    # ── Filters (left) + Stats (right) side by side ─────────────
-    col_filters, col_stats = st.columns([1, 1], gap="large")
+    # ── Compact inline filters ─────────────────────────────────
+    _ef1, _ef2, _ef3 = st.columns([1.5, 1.5, 2])
+    with _ef1:
+        sel_dept = st.multiselect("Department", _avail_depts, key="emp_f_dept",
+                                  placeholder="All departments", label_visibility="collapsed")
+    with _ef2:
+        sel_pos  = st.multiselect("Position", _avail_positions, key="emp_f_pos",
+                                  placeholder="All positions", label_visibility="collapsed")
+    with _ef3:
+        search   = st.text_input("Employee", placeholder="🔍 Search name or no…",
+                                 label_visibility="collapsed", key="emp_search")
+    _ec1, _ec2, _ = st.columns([1, 1, 3])
+    with _ec1:
+        st.checkbox("Show inactive", key="emp_show_inactive")
+    with _ec2:
+        st.checkbox("Incomplete only", key="emp_incomplete")
 
-    with col_filters:
-        with st.expander("Filters", expanded=False):
-            sel_dept = st.multiselect("Department", _avail_depts, key="emp_f_dept", placeholder="All departments")
-            sel_pos  = st.multiselect("Position", _avail_positions, key="emp_f_pos", placeholder="All positions")
-            search   = st.text_input("Employee", placeholder="Name or employee number…",
-                                     label_visibility="visible", key="emp_search")
-            c_chk1, c_chk2 = st.columns(2)
-            with c_chk1:
-                st.checkbox("Show inactive", key="emp_show_inactive")
-            with c_chk2:
-                st.checkbox("Incomplete Profile only", key="emp_incomplete")
+    # ── Stat cards ─────────────────────────────────────────────
 
     # --- Apply filters first so stats reflect filtered data ---
     filtered = employees
@@ -2393,7 +2441,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
     elif _card_filter == "incomplete":
         filtered = [e for e in filtered if _onboarding_status(e)[0] < len(ONBOARDING_FIELDS)]
 
-    with col_stats:
+    if True:  # stat cards section (was col_stats)
         if sel_dept:
             st.caption(f"Showing in {', '.join(sel_dept)}")
         else:
@@ -2417,15 +2465,18 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                     f'{value:,}</div></div>',
                     unsafe_allow_html=True,
                 )
-                if st.button(
-                    "\u200b", key=f"_sf_{key_val}",
-                    help=f"Filter to {label.lower()}" if not is_active else "Clear filter",
-                ):
-                    if is_active:
+                def _on_sf_click(_kv, _active):
+                    st.session_state.pop("editing_id", None)
+                    if _active:
                         st.session_state.pop("emp_card_filter", None)
                     else:
-                        st.session_state["emp_card_filter"] = key_val
-                    st.rerun()
+                        st.session_state["emp_card_filter"] = _kv
+
+                st.button(
+                    "\u200b", key=f"_sf_{key_val}",
+                    help=f"Filter to {label.lower()}" if not is_active else "Clear filter",
+                    on_click=_on_sf_click, args=(key_val, is_active),
+                )
 
         _render_stat_btn(_r1c1, "Total",         _total,     "total",        "#eff6ff", "#bfdbfe", "#005bc1")
         _render_stat_btn(_r1c2, "Active",        _active,    "active",       "#f0fdf4", "#bbf7d0", "#16a34a")
@@ -2474,6 +2525,34 @@ def _render_employees_tab(show_salary_toggle: bool = True):
       wire();
       setTimeout(wire, 500);
       setTimeout(wire, 1500);
+
+      // ── Wire swipe action button clicks to hidden Streamlit buttons ──
+      function wireActions(){
+        pd.querySelectorAll('.emp-act[data-emp-action]').forEach(function(el){
+          if(el._actWired) return;
+          el._actWired = true;
+          el.addEventListener('click', function(e){
+            e.stopPropagation();
+            var confirmMsg = el.getAttribute('data-emp-confirm');
+            if(confirmMsg && !confirm(confirmMsg)) return;
+            var key = el.getAttribute('data-emp-action');
+            if(!key) return;
+            var btn = pd.querySelector('div[class*="st-key-' + key + '"] button');
+            if(btn) btn.click();
+          });
+        });
+      }
+
+      // Use MutationObserver to wire cards as Streamlit renders them (debounced)
+      wireActions();
+      var _empTimer = null;
+      var _empObs = new MutationObserver(function(){
+        if(_empTimer) clearTimeout(_empTimer);
+        _empTimer = setTimeout(function(){ wireActions(); }, 150);
+      });
+      _empObs.observe(pd.body || pd.documentElement, {childList:true, subtree:true});
+      // Safety stop after 30s
+      setTimeout(function(){ _empObs.disconnect(); }, 30000);
     })();
     </script>""", height=0)
 
@@ -2522,16 +2601,17 @@ def _render_employees_tab(show_salary_toggle: bool = True):
         salary_visible = st.session_state.get("emp_salary_visible", False)
         cap_col, tog_col = st.columns([8, 2])
         cap_col.caption(f"Showing {len(filtered)} employee{'s' if len(filtered) != 1 else ''}")
+        def _on_salary_toggle():
+            st.session_state.pop("editing_id", None)
+            st.session_state.emp_salary_visible = not st.session_state.get("emp_salary_visible", False)
+
         with tog_col:
-            if st.button(
+            st.button(
                 "Show Salary" if not salary_visible else "Hide Salary",
                 key="toggle_salary",
                 icon="👁️" if not salary_visible else "🙈",
-            ):
-                st.session_state.pop("editing_id", None)
-                st.session_state.pop("emp_card_filter", None)
-                st.session_state.emp_salary_visible = not salary_visible
-                st.rerun()
+                on_click=_on_salary_toggle,
+            )
     else:
         salary_visible = False
         st.caption(f"Showing {len(filtered)} employee{'s' if len(filtered) != 1 else ''}")
@@ -2557,8 +2637,24 @@ def _render_employees_tab(show_salary_toggle: bool = True):
         ("PI",  "pagibig_no"), ("TIN", "tin_no"),
     ]
 
-    # 3-column card grid
+    # Sort by department for grouping, then 3-column card grid with dept headers
+    filtered = sorted(filtered, key=lambda e: (e.get("department") or "Unassigned").upper())
+    _prev_dept = None
+
     for row_start in range(0, len(filtered), 3):
+        # Department header when group changes
+        _first_dept = (filtered[row_start].get("department") or "Unassigned").upper()
+        if _first_dept != _prev_dept:
+            _dept_count = sum(1 for e in filtered if (e.get("department") or "Unassigned").upper() == _first_dept)
+            st.markdown(
+                f"<div style='font-size:11px;font-weight:700;color:#727784;"
+                f"text-transform:uppercase;letter-spacing:0.08em;"
+                f"padding:10px 0 2px;border-bottom:1px solid #ebeef0;"
+                f"margin-bottom:4px;'>{_first_dept} ({_dept_count})</div>",
+                unsafe_allow_html=True,
+            )
+            _prev_dept = _first_dept
+
         row_emps = filtered[row_start:row_start + 3]
         gcols = st.columns(3)
         for col_idx, emp in enumerate(row_emps):
@@ -2631,95 +2727,94 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                         f"font-family:\"Plus Jakarta Sans\",system-ui,sans-serif;'>{initials}</div>"
                     )
 
+                # Active status dot (visual indicator on avatar)
+                _is_active = emp.get("is_active", True)
+                _act_color = "#4caf50" if _is_active else "#bdbdbd"
+                _act_key = f"deact_{emp['id']}" if _is_active else f"react_{emp['id']}"
+                _act_label = "Deactivate" if _is_active else "Activate"
+                _act_icon = "&#9899;" if _is_active else "&#9898;"
+                active_dot_html = (
+                    f"<span style='width:11px;height:11px;border-radius:50%;background:{_act_color};"
+                    f"border:2px solid #fff;display:inline-block;"
+                    f"box-shadow:0 0 0 1px {_act_color}55;'></span>"
+                )
+
+                # Build swipe action tray (Edit, Deactivate/Activate, Print)
+                _eid = emp["id"]
+                _deact_bg = '#ef5350' if _is_active else '#4caf50'
+                _swipe_actions = (
+                    f"<div class='emp-act' data-emp-action='edit_{_eid}' "
+                    f"style='background:#005bc1;' title='Edit'>"
+                    f"&#9998;<span>Edit</span></div>"
+                    f"<div class='emp-act' data-emp-action='print201_{_eid}' "
+                    f"style='background:#ff9800;' title='Print 201'>"
+                    f"&#128424;<span>Print</span></div>"
+                    f"<div class='emp-act emp-act-sm' data-emp-action='{_act_key}' "
+                    f"data-emp-confirm='{_act_label} this employee?' "
+                    f"style='background:{_deact_bg};' title='{_act_label}'>"
+                    f"<span>{_act_label}</span></div>"
+                )
+
                 st.markdown(
-                    f"<div class='gxp-emp-card' style='opacity:{opacity};background:#ffffff;border-radius:16px;"
-                    f"padding:22px 22px 14px;margin-bottom:4px;"
+                    f"<div class='emp-swipe-wrap'>"
+                    # Action tray (behind card)
+                    f"<div class='emp-swipe-actions'>{_swipe_actions}</div>"
+                    # Card (slides right on hover)
+                    f"<div class='emp-swipe-card gxp-emp-card' style='opacity:{opacity};"
+                    f"background:#ffffff;border-radius:16px;"
+                    f"padding:14px 16px;"
                     f"box-shadow:0px 20px 40px rgba(45,51,53,0.06);"
-                    f"display:flex;flex-direction:column;gap:13px;"
-                    f"transition:transform 0.18s cubic-bezier(.34,1.56,.64,1),box-shadow 0.18s ease;"
-                    f"cursor:pointer;'>"
-                    f"<div style='display:flex;justify-content:space-between;align-items:flex-start;'>"
+                    f"display:flex;gap:14px;align-items:center;'>"
+                    # Left: avatar + active dot
+                    f"<div style='position:relative;flex-shrink:0;'>"
                     f"{avatar_html}"
-                    f"<div style='background:#ebeef0;padding:3px 10px;border-radius:9999px;"
-                    f"font-size:10px;font-weight:700;text-transform:uppercase;"
-                    f"letter-spacing:0.07em;color:#424753;max-width:120px;"
-                    f"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>{dept}</div>"
+                    f"<div style='position:absolute;bottom:-2px;right:-2px;'>{active_dot_html}</div>"
                     f"</div>"
-                    f"<div>"
-                    f"<div style='font-size:15px;font-weight:700;color:#191c1d;line-height:1.3;'>"
+                    # Right: info block
+                    f"<div style='flex:1;min-width:0;'>"
+                    # Row 1: name + dept badge
+                    f"<div style='display:flex;justify-content:space-between;align-items:center;gap:6px;'>"
+                    f"<div style='font-size:14px;font-weight:700;color:#191c1d;line-height:1.3;"
+                    f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"
                     f"{name}{portal_badge}</div>"
+                    f"<div style='background:#ebeef0;padding:2px 8px;border-radius:9999px;"
+                    f"font-size:9px;font-weight:700;text-transform:uppercase;"
+                    f"letter-spacing:0.07em;color:#424753;white-space:nowrap;flex-shrink:0;'>{dept}</div>"
+                    f"</div>"
                     f"{inactive_tag}"
-                    f"<div style='font-size:12px;color:#424753;margin-top:2px;'>"
-                    f"{emp['employee_no']} &middot; {position}</div>"
+                    # Row 2: employee no + position + salary
+                    f"<div style='font-size:11px;color:#424753;margin-top:2px;'>"
+                    f"{emp['employee_no']} &middot; {position}"
+                    f"&nbsp;&nbsp;{salary_html}</div>"
+                    # Row 3: active dot + gov pills + type badge
+                    f"<div style='display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:6px;'>"
+                    f"{gov_pills}"
+                    f"<span style='font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;"
+                    f"background:{tb_bg};color:{tb_fg};margin-left:auto;'>{emp_type.title()}</span>"
                     f"</div>"
-                    f"<div style='display:flex;justify-content:space-between;align-items:center;"
-                    f"padding-top:10px;border-top:1px solid #f3f4f5;'>"
-                    f"{salary_html}"
-                    f"<span style='font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;"
-                    f"background:{tb_bg};color:{tb_fg};'>{emp_type.title()}</span>"
                     f"</div>"
-                    f"<div style='display:flex;gap:5px;flex-wrap:wrap;'>{gov_pills}</div>"
-                    f"</div>",
+                    f"</div></div>",
                     unsafe_allow_html=True,
                 )
 
-                # ── Action buttons ─────────────────────────────────────────
-                b1, b2, b3, b4, b5 = st.columns(5)
-                with b1:
-                    if st.button("", key=f"edit_{emp['id']}", width="stretch",
-                                 type="primary", icon="✏️", help="Edit employee"):
-                        st.session_state.editing_id = emp["id"]
-                        st.rerun()
-                with b2:
-                    if not emp.get("email"):
-                        st.markdown(
-                            "<div style='text-align:center;color:#aaa;padding-top:8px;font-size:12px;'"
-                            " title='Add email to enable portal invite'>—</div>",
-                            unsafe_allow_html=True,
-                        )
-                    elif not emp.get("user_id"):
-                        if st.button("", key=f"invite_{emp['id']}", width="stretch",
-                                     icon="📧",
-                                     help=f"Send portal invite to {emp['email']}"):
-                            st.session_state[f"invite_confirm_{emp['id']}"] = True
-                    else:
-                        if st.button("", key=f"invite_{emp['id']}", width="stretch",
-                                     icon="🔄",
-                                     help=f"Resend portal access to {emp['email']}"):
-                            st.session_state[f"invite_confirm_{emp['id']}"] = True
-                with b3:
-                    if emp.get("email") and emp.get("user_id"):
-                        if st.button("", key=f"resetpwd_{emp['id']}", width="stretch",
-                                     icon="🔑",
-                                     help=f"Send password reset to {emp['email']}"):
-                            from app.auth import send_password_reset
-                            ok, err = send_password_reset(emp["email"])
-                            st.session_state["_invite_toast"] = (
-                                ("success", f"Password reset email sent to **{emp['email']}**.")
-                                if ok else ("error", err)
-                            )
-                            st.rerun()
-                    else:
-                        st.markdown(
-                            "<div style='text-align:center;color:#aaa;padding-top:8px;font-size:12px;'"
-                            " title='Link portal first to enable password reset'>—</div>",
-                            unsafe_allow_html=True,
-                        )
-                with b4:
-                    if emp.get("is_active", True):
-                        st.button("", key=f"deact_{emp['id']}", width="stretch",
-                                  icon="🟢",
-                                  help="Deactivate this employee",
-                                  on_click=_update_employee, args=(emp["id"], {"is_active": False}))
-                    else:
-                        st.button("", key=f"react_{emp['id']}", width="stretch",
-                                  icon="⚪",
-                                  help="Reactivate this employee",
-                                  on_click=_update_employee, args=(emp["id"], {"is_active": True}))
-                with b5:
-                    if st.button("", key=f"print201_{emp['id']}", width="stretch",
-                                 icon="🖨️", help="Print Employee 201 File"):
-                        st.session_state["print201_id"] = emp["id"]
+                # ── Hidden Streamlit buttons (wired via JS from swipe actions) ──
+                def _on_edit_click(_eid=emp["id"]):
+                    """on_click runs BEFORE page re-renders, so dialog sees new ID immediately."""
+                    _prev = st.session_state.get("editing_id")
+                    if _prev and _prev != _eid:
+                        _clear_dialog_state(_prev)
+                    st.session_state.pop(f"_edit_ready_{_eid}", None)
+                    st.session_state["editing_id"] = _eid
+                    st.session_state["_prev_editing_id"] = _eid
+                st.button("_", key=f"edit_{emp['id']}", on_click=_on_edit_click)
+                if emp.get("is_active", True):
+                    st.button("_", key=f"deact_{emp['id']}",
+                              on_click=_update_employee, args=(emp["id"], {"is_active": False}))
+                else:
+                    st.button("_", key=f"react_{emp['id']}",
+                              on_click=_update_employee, args=(emp["id"], {"is_active": True}))
+                if st.button("_", key=f"print201_{emp['id']}"):
+                    st.session_state["print201_id"] = emp["id"]
 
                 # ── Invite confirmation ────────────────────────────────────
                 if st.session_state.get(f"invite_confirm_{emp['id']}"):

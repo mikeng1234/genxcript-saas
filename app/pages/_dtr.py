@@ -296,14 +296,17 @@ def _render_daily_entry():
     else:
         _de_avail_dept = _all_dept_full
 
-    # ── Collapsible filter bar ────────────────────────────────
-    with st.expander("Filters", expanded=False):
-        fcol, _ = st.columns([3, 2])
-        with fcol:
-            de_sel_dept = st.multiselect("Department", _de_avail_dept, key="de_f_dept", placeholder="All departments")
-            de_sel_pos  = st.multiselect("Position",   _de_avail_pos,  key="de_f_pos",  placeholder="All positions")
-            de_search   = st.text_input("Employee",    placeholder="Name or employee no…",
-                                        label_visibility="visible", key="de_search")
+    # ── Compact inline filters ────────────────────────────────
+    _df1, _df2, _df3 = st.columns([1.5, 1.5, 2])
+    with _df1:
+        de_sel_dept = st.multiselect("Department", _de_avail_dept, key="de_f_dept",
+                                     placeholder="All departments", label_visibility="collapsed")
+    with _df2:
+        de_sel_pos  = st.multiselect("Position", _de_avail_pos, key="de_f_pos",
+                                     placeholder="All positions", label_visibility="collapsed")
+    with _df3:
+        de_search   = st.text_input("Employee", placeholder="🔍 Search name or no…",
+                                    label_visibility="collapsed", key="de_search")
 
     def _de_match(emp):
         if de_search:
@@ -545,13 +548,17 @@ def _render_summary():
     else:
         _sm_avail_dept = _sm_dept_full
 
-    # ── Filter bar (vertical) ─────────────────────────────────
-    fcol, _ = st.columns([2, 5])
-    with fcol:
-        sm_sel_dept = st.multiselect("Department", _sm_avail_dept, key="sm_f_dept", placeholder="All departments")
-        sm_sel_pos  = st.multiselect("Position",   _sm_avail_pos,  key="sm_f_pos",  placeholder="All positions")
-        sm_search   = st.text_input("Employee",    placeholder="Name or employee no…",
-                                    label_visibility="visible",   key="sm_search")
+    # ── Compact inline filters ─────────────────────────────────
+    _sf1, _sf2, _sf3 = st.columns([1.5, 1.5, 2])
+    with _sf1:
+        sm_sel_dept = st.multiselect("Department", _sm_avail_dept, key="sm_f_dept",
+                                     placeholder="All departments", label_visibility="collapsed")
+    with _sf2:
+        sm_sel_pos  = st.multiselect("Position", _sm_avail_pos, key="sm_f_pos",
+                                     placeholder="All positions", label_visibility="collapsed")
+    with _sf3:
+        sm_search   = st.text_input("Employee", placeholder="🔍 Search name or no…",
+                                    label_visibility="collapsed", key="sm_search")
 
     # Aggregate per employee
     from collections import defaultdict

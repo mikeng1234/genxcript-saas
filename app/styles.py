@@ -1074,91 +1074,64 @@ def inject_css():
         pointer-events: none !important;
     }
 
-    /* ── Stat card action button — slim glowing pill with label ───────────── */
-    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
-        [data-testid="stColumn"]
-        [data-testid="stButton"] button {
-        height:        10px  !important;
-        min-height:    0     !important;
-        padding:       0 8px !important;
-        font-size:     0     !important;
-        color:         rgba(255,255,255,0) !important;
-        border:        none  !important;
-        border-radius: 99px  !important;
-        background:    var(--gxp-border) !important;
-        box-shadow:    none  !important;
-        cursor:        pointer !important;
-        margin-top:    8px   !important;
-        overflow:      hidden !important;
-        letter-spacing: 0.3px !important;
-        font-weight:   600   !important;
-        transition:    background  0.2s ease,
-                       box-shadow  0.2s ease,
-                       height      0.18s ease,
-                       color       0.15s ease !important;
+    /* ── Stat card swipe-up-to-reveal ─────────────────────────────────────── */
+    .gxp-stat-swipe {
+        position: relative !important;
+        overflow: hidden !important;
+        border-radius: 1rem !important;
+        /* Fixed height prevents layout shift on hover */
+        height: auto !important;
     }
-    /* Per-card hover — expand pill, reveal label, glow with card's accent color */
-    /* col 1: blue (Employees Paid) */
-    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
-        [data-testid="stColumn"]:nth-child(1):hover
-        [data-testid="stButton"] button {
-        height:     26px  !important;
-        font-size:  9px   !important;
-        color:      rgba(255,255,255,0.88) !important;
-        background: #2563eb !important;
-        box-shadow: 0 0 0 3px rgba(37,99,235,0.22),
-                    0 0 14px 4px rgba(37,99,235,0.40) !important;
+    /* Prevent parent column from shifting width during hover */
+    div[data-testid="stColumn"]:has(.gxp-stat-swipe) {
+        min-width: 0 !important;
     }
-    /* col 2: green (Gross Pay) */
-    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
-        [data-testid="stColumn"]:nth-child(2):hover
-        [data-testid="stButton"] button {
-        height:     26px  !important;
-        font-size:  9px   !important;
-        color:      rgba(255,255,255,0.88) !important;
-        background: #059669 !important;
-        box-shadow: 0 0 0 3px rgba(5,150,105,0.22),
-                    0 0 14px 4px rgba(5,150,105,0.40) !important;
+    .gxp-stat-actions {
+        position: absolute !important;
+        left: 0 !important; right: 0 !important; bottom: 0 !important;
+        height: 46px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 12px !important;
+        border-radius: 0 0 1rem 1rem !important;
+        z-index: 0 !important;
     }
-    /* col 3: purple (Net Pay) */
-    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
-        [data-testid="stColumn"]:nth-child(3):hover
-        [data-testid="stButton"] button {
-        height:     26px  !important;
-        font-size:  9px   !important;
-        color:      rgba(255,255,255,0.88) !important;
-        background: #7c3aed !important;
-        box-shadow: 0 0 0 3px rgba(124,58,237,0.22),
-                    0 0 14px 4px rgba(124,58,237,0.40) !important;
+    .gxp-stat-card-inner {
+        position: relative !important;
+        z-index: 1 !important;
+        transition: transform 0.25s cubic-bezier(.4,0,.2,1) !important;
     }
-    /* col 4: amber (Employer Cost) */
-    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
-        [data-testid="stColumn"]:nth-child(4):hover
-        [data-testid="stButton"] button {
-        height:     26px  !important;
-        font-size:  9px   !important;
-        color:      rgba(255,255,255,0.88) !important;
-        background: #d97706 !important;
-        box-shadow: 0 0 0 3px rgba(217,119,6,0.22),
-                    0 0 14px 4px rgba(217,119,6,0.40) !important;
-    }
-    /* col 5: pink (YTD) */
-    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
-        [data-testid="stColumn"]:nth-child(5):hover
-        [data-testid="stButton"] button {
-        height:     26px  !important;
-        font-size:  9px   !important;
-        color:      rgba(255,255,255,0.88) !important;
-        background: #db2777 !important;
-        box-shadow: 0 0 0 3px rgba(219,39,119,0.22),
-                    0 0 14px 4px rgba(219,39,119,0.40) !important;
-    }
-    /* Hover lift — card floats up on column hover */
-    [data-testid="stHorizontalBlock"]:has(.gxp-stat-card)
-        [data-testid="stColumn"]:hover
-        .gxp-stat-card {
+    .gxp-stat-swipe:hover .gxp-stat-card-inner {
+        transform: translateY(-46px) !important;
         box-shadow: 0 12px 32px rgba(0,0,0,0.13) !important;
-        transform:  translateY(-7px) !important;
+    }
+    .gxp-stat-action-btn {
+        border-radius: 8px !important;
+        padding: 6px 14px !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        cursor: pointer !important;
+        text-align: center !important;
+        width: 100% !important;
+        transition: transform 0.12s, box-shadow 0.12s !important;
+    }
+    .gxp-stat-action-btn:hover {
+        transform: scale(1.03) !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+    }
+    .gxp-stat-action-btn:active {
+        transform: scale(0.97) !important;
+    }
+    /* Hide the Streamlit buttons behind stat cards */
+    div[class*="st-key-stat_card_"] {
+        position: absolute !important;
+        width: 1px !important; height: 1px !important;
+        overflow: hidden !important;
+        clip: rect(0,0,0,0) !important;
+        white-space: nowrap !important;
+        border: 0 !important;
+        padding: 0 !important; margin: -1px !important;
     }
 
     /* ── Skeleton shimmer animation ────────────────────────────────── */
@@ -1709,24 +1682,178 @@ def inject_css():
            UNIFIED INTERACTION SYSTEM — 3 tiers, consistent everywhere
            ══════════════════════════════════════════════════════════ */
 
-        /* ── Tier 1: Large cards (bento, employee cards) ── */
+        /* ── Tier 1: Large cards (bento, hero cards) ── */
         .gxp-hover-lg,
-        .gxp-emp-card,
         .gxp-bento-hero-card {{
             transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.18s ease !important;
             cursor: pointer !important;
+            will-change: transform !important;
+            backface-visibility: hidden !important;
         }}
         .gxp-hover-lg:hover,
-        .gxp-emp-card:hover,
         .gxp-bento-hero-card:hover {{
             transform: translateY(-4px) !important;
             box-shadow: 0 8px 28px rgba(0,0,0,0.12) !important;
         }}
         .gxp-hover-lg:active,
-        .gxp-emp-card:active,
         .gxp-bento-hero-card:active {{
-            transform: scale(0.97) !important;
+            transform: translateY(-2px) scale(0.98) !important;
             transition-duration: 0.08s !important;
+        }}
+        /* Employee cards — no hover lift, cursor default (swipe only) */
+        .gxp-emp-card {{
+            cursor: default !important;
+        }}
+
+        /* ── Hidden employee card action buttons (triggered via swipe JS) ── */
+        div[class*="st-key-edit_"],
+        div[class*="st-key-deact_"],
+        div[class*="st-key-react_"],
+        div[class*="st-key-print201_"],
+        div[class*="st-key-inv_yes_"],
+        div[class*="st-key-inv_no_"],
+        div[class*="st-key-invite_confirm_"] {{
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            overflow: hidden !important;
+            clip: rect(0,0,0,0) !important;
+            white-space: nowrap !important;
+            margin: -1px !important;
+            padding: 0 !important;
+            border: 0 !important;
+        }}
+
+        /* ── Employee card swipe-to-reveal (mirrors gxp-remind-swipe pattern) ── */
+        .emp-swipe-wrap {{
+            position: relative !important;
+            overflow: hidden !important;
+            border-radius: 14px !important;
+            margin-bottom: 6px !important;
+        }}
+        /* Reduce Streamlit default row gap between employee card rows */
+        .emp-swipe-wrap .emp-swipe-card {{
+            background: var(--gxp-surface, #fff) !important;
+        }}
+        /* Reduce vertical gap between employee card rows — only target inner column block */
+        div[data-testid="stColumn"]:has(.emp-swipe-wrap) > div > div > div[data-testid="stVerticalBlock"] {{
+            gap: 0 !important;
+        }}
+        .emp-swipe-actions {{
+            position: absolute !important;
+            top: 0 !important; left: 0 !important; bottom: 0 !important;
+            width: 110px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            justify-content: stretch !important;
+            gap: 0 !important;
+            padding: 0 !important;
+            border-radius: 16px 0 0 16px !important;
+            z-index: 0 !important;
+            overflow: hidden !important;
+            background: linear-gradient(135deg, #e3e8ef, #dfe4ec) !important;
+        }}
+        .emp-swipe-card {{
+            position: relative !important;
+            z-index: 1 !important;
+            transition: transform 0.25s cubic-bezier(.4,0,.2,1) !important;
+        }}
+        .emp-swipe-wrap:hover .emp-swipe-card {{
+            transform: translateX(110px) !important;
+        }}
+        .emp-act {{
+            position: relative !important;
+            overflow: hidden !important;
+            border-radius: 0 !important;
+            padding: 0 6px !important;
+            font-size: 14px !important;
+            cursor: pointer !important;
+            width: 100% !important;
+            flex: 1 !important;
+            text-align: center !important;
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 5px !important;
+            color: #fff !important;
+            transition: filter 0.12s !important;
+            user-select: none !important;
+        }}
+        .emp-act span {{
+            font-size: 10px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.03em !important;
+        }}
+        .emp-act:hover {{
+            filter: brightness(1.1) !important;
+        }}
+        .emp-act:active {{
+            filter: brightness(0.9) !important;
+        }}
+        .emp-act-sm {{
+            flex: 0 0 32px !important;
+            font-size: 11px !important;
+            opacity: 0.85 !important;
+        }}
+
+        /* ── Payslip swipe cards ── */
+        .ps-swipe-wrap {{
+            position: relative !important;
+            overflow: hidden !important;
+            border-radius: 14px !important;
+            margin-bottom: 6px !important;
+        }}
+        .ps-swipe-actions {{
+            position: absolute !important;
+            top: 0 !important; left: 0 !important; bottom: 0 !important;
+            width: 90px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            justify-content: stretch !important;
+            gap: 0 !important;
+            padding: 0 !important;
+            border-radius: 14px 0 0 14px !important;
+            z-index: 0 !important;
+            overflow: hidden !important;
+            background: linear-gradient(135deg, #e3e8ef, #dfe4ec) !important;
+        }}
+        .ps-swipe-act {{
+            flex: 1 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            cursor: pointer !important;
+            transition: filter 0.12s !important;
+            user-select: none !important;
+            line-height: 1.2 !important;
+        }}
+        .ps-swipe-act:hover {{
+            filter: brightness(1.1) !important;
+        }}
+        .ps-swipe-card {{
+            position: relative !important;
+            z-index: 1 !important;
+            transition: transform 0.25s cubic-bezier(.4,0,.2,1) !important;
+        }}
+        .ps-swipe-wrap:hover .ps-swipe-card {{
+            transform: translateX(90px) !important;
+        }}
+        /* Hide the checkbox + download button Streamlit widgets */
+        div[data-testid="stColumn"]:has(.ps-swipe-wrap) > div > div > div[data-testid="stVerticalBlock"] {{
+            gap: 0 !important;
+        }}
+        [class*="st-key-ps_chk_"],
+        [class*="st-key-ps_dl_"]:not([class*="st-key-ps_dl_all"]) {{
+            position: absolute !important;
+            width: 1px !important; height: 1px !important;
+            overflow: hidden !important;
+            clip: rect(0,0,0,0) !important;
+            white-space: nowrap !important;
+            border: 0 !important;
         }}
 
         /* ── Tier 2: Medium cards (filter cards, calendar cells, action buttons) ── */
@@ -1771,6 +1898,15 @@ def inject_css():
             overflow: hidden !important;
             margin: 0 !important;
             padding: 0 !important;
+        }}
+
+        /* ── Payroll employee card open buttons — hide visually ── */
+        [class*="st-key-_pr_open_"] {{
+            position: absolute !important;
+            width: 1px !important; height: 1px !important;
+            overflow: hidden !important;
+            clip: rect(0,0,0,0) !important;
+            border: 0 !important;
         }}
 
         /* ── DTR selectable rows — hide trigger buttons visually but keep clickable ── */
