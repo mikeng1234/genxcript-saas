@@ -1146,6 +1146,120 @@ def inject_css():
         border-radius: 12px;
     }
 
+    /* ── Individual team tile hover lift ───────────────────────────────── */
+    .gxp-team-tile {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .gxp-team-tile:hover {
+        transform: translateY(-4px);
+    }
+    .gxp-team-tile:active {
+        transform: translateY(-2px) scale(0.97);
+        transition-duration: 0.08s;
+    }
+    /* Avatar-colored hover shadows */
+    .gxp-tile-c0:hover { box-shadow: 0 8px 24px rgba(37,99,235,0.30); }
+    .gxp-tile-c1:hover { box-shadow: 0 8px 24px rgba(217,119,6,0.30); }
+    .gxp-tile-c2:hover { box-shadow: 0 8px 24px rgba(5,150,105,0.30); }
+    .gxp-tile-c3:hover { box-shadow: 0 8px 24px rgba(124,58,237,0.30); }
+    .gxp-tile-c4:hover { box-shadow: 0 8px 24px rgba(71,85,105,0.30); }
+    .gxp-tile-c5:hover { box-shadow: 0 8px 24px rgba(190,24,93,0.30); }
+    .gxp-tile-c6:hover { box-shadow: 0 8px 24px rgba(67,56,202,0.30); }
+    .gxp-tile-c7:hover { box-shadow: 0 8px 24px rgba(161,98,7,0.30); }
+
+    /* Loading overlay for 201 dialog */
+    .gxp-loading-overlay {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(255,255,255,0.6);
+        backdrop-filter: blur(2px);
+        z-index: 99999;
+        display: flex; align-items: center; justify-content: center;
+        transition: opacity 0.2s;
+    }
+    .gxp-loading-spinner {
+        width: 36px; height: 36px;
+        border: 3px solid #e5e7eb;
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: gxp-spin 0.7s linear infinite;
+    }
+    @keyframes gxp-spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* ── Pure HTML 201 Modal (instant, no Streamlit rerun) ── */
+    .gxp-201-overlay {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.45);
+        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        z-index: 99999;
+        display: flex; align-items: center; justify-content: center;
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.2s ease;
+    }
+    .gxp-201-overlay.gxp-201-open {
+        opacity: 1; pointer-events: auto;
+    }
+    .gxp-201-modal {
+        background: #fff; border-radius: 18px;
+        width: 96vw; max-width: 1400px; max-height: 92vh;
+        overflow-y: auto; padding: 36px 48px 32px;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.22);
+        transform: translateY(12px) scale(0.97);
+        transition: transform 0.25s ease;
+    }
+    .gxp-201-open .gxp-201-modal {
+        transform: translateY(0) scale(1);
+    }
+    .gxp-201-close {
+        position: absolute; top: 18px; right: 24px;
+        width: 36px; height: 36px; border-radius: 50%;
+        border: none; background: #f1f5f9; color: #475569;
+        font-size: 20px; cursor: pointer; display: flex;
+        align-items: center; justify-content: center;
+        transition: background 0.15s;
+    }
+    .gxp-201-close:hover { background: #e2e8f0; }
+    .gxp-201-hdr {
+        display: flex; align-items: center; gap: 20px; margin-bottom: 24px;
+    }
+    .gxp-201-avatar {
+        width: 80px; height: 80px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; overflow: hidden;
+        background-size: cover; background-position: center;
+    }
+    .gxp-201-avatar span { color: #fff; font-weight: 700; font-size: 28px; }
+    .gxp-201-name { font-size: 24px; font-weight: 800; color: #191c1d; }
+    .gxp-201-sub { font-size: 14px; color: #727784; margin-top: 4px; }
+    .gxp-201-badge {
+        display: inline-block; padding: 4px 14px; border-radius: 9999px;
+        font-size: 12px; font-weight: 700; margin-top: 8px;
+    }
+    .gxp-201-divider {
+        height: 1px; background: #e2e8f0; margin: 20px 0;
+    }
+    .gxp-201-grid {
+        display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px;
+    }
+    .gxp-201-section-title {
+        font-size: 12px; font-weight: 800; color: #191c1d;
+        text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px;
+    }
+    .gxp-201-field {
+        font-size: 13.5px; color: #727784; margin-bottom: 6px; line-height: 1.5;
+    }
+    .gxp-201-field b { color: #191c1d; font-weight: 700; }
+    .gxp-201-gov-grid {
+        display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px;
+    }
+
+    /* ── Hide stale content inside tabs to prevent previous-tab flash ── */
+    [role="tabpanel"] [data-stale="true"] {
+        opacity: 0 !important;
+        transition: none !important;
+    }
+
     /* ── Card entrance animation — fade-in + slide-up ─────────────── */
     @keyframes gxp-card-in {
         from { opacity: 0; transform: translateY(20px); }
@@ -1691,12 +1805,12 @@ def inject_css():
             backface-visibility: hidden !important;
         }}
         .gxp-hover-lg:hover,
-        .gxp-bento-hero-card:hover {{
+        .gxp-bento-hero-card:not(:has(.gxp-team-tile)):hover {{
             transform: translateY(-4px) !important;
             box-shadow: 0 8px 28px rgba(0,0,0,0.12) !important;
         }}
         .gxp-hover-lg:active,
-        .gxp-bento-hero-card:active {{
+        .gxp-bento-hero-card:not(:has(.gxp-team-tile)):active {{
             transform: translateY(-2px) scale(0.98) !important;
             transition-duration: 0.08s !important;
         }}

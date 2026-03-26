@@ -406,53 +406,51 @@ def _render_signin():
         subtitle = "Sign in to your account to continue."
     st.markdown(f'<p class="login-subtitle">{subtitle}</p>', unsafe_allow_html=True)
 
-    # ── Inputs ─────────────────────────────────────────────────────
-    identifier = st.text_input(
-        "Employee ID or Email",
-        value=remembered_id,
-        placeholder="e.g. GX-12345",
-    )
-    _gap(4)
-    password = st.text_input("Password", type="password", placeholder="••••••••")
+    # ── Form wrapper prevents widget reruns during login ─────────
+    with st.form("signin_form"):
+        identifier = st.text_input(
+            "Employee ID or Email",
+            value=remembered_id,
+            placeholder="e.g. GX-12345",
+        )
+        _gap(4)
+        password = st.text_input("Password", type="password", placeholder="••••••••")
 
-    _gap(4)
+        _gap(4)
 
-    # ── Remember Me ────────────────────────────────────────────────
-    remember_me = st.checkbox(
-        "Remember me",
-        value=bool(remembered_id),
-        help="Saves your Employee ID/email and company for 30 days. Never saves your password.",
-    )
+        # ── Remember Me ────────────────────────────────────────────────
+        remember_me = st.checkbox(
+            "Remember me",
+            value=bool(remembered_id),
+            help="Saves your Employee ID/email and company for 30 days. Never saves your password.",
+        )
 
-    _gap(8)
+        _gap(8)
 
-    # ── Primary CTA ────────────────────────────────────────────────
-    signin_clicked = st.button("Sign In", type="primary", use_container_width=True, key="signin_btn")
+        # ── Primary CTA ────────────────────────────────────────────────
+        signin_clicked = st.form_submit_button("Sign In", type="primary", use_container_width=True)
 
     if signin_clicked:
         if not identifier.strip() or not password:
             st.error("Please fill in both fields.")
         else:
-            # JS: change button text to dot-dot-dot loading animation
+            # Show spinner on the button via JS
             import streamlit.components.v1 as _stc_login
             _stc_login.html("""<script>
             (function(){
               var pd = window.parent.document;
-              var btn = pd.querySelector('.st-key-signin_btn button[kind="primary"]');
+              var btn = pd.querySelector('[data-testid="stFormSubmitButton"] button');
               if(!btn) return;
               btn.disabled = true;
               btn.style.opacity = '0.7';
               btn.style.pointerEvents = 'none';
-              var span = btn.querySelector('span span') || btn.querySelector('div span') || btn;
-              if(span.querySelector('p')) span = span.querySelector('p');
-              span.textContent = '';
-              var dots = 0;
-              var iv = setInterval(function(){
-                dots = (dots % 3) + 1;
-                span.textContent = 'Signing in' + '.'.repeat(dots);
-              }, 400);
-              // Auto-clear after 10s safety
-              setTimeout(function(){ clearInterval(iv); }, 10000);
+              var span = btn.querySelector('p') || btn.querySelector('span span') || btn;
+              span.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" style="animation:gxp-spin 0.8s linear infinite;vertical-align:middle;margin-right:6px"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="30 70" stroke-linecap="round"/></svg> Signing in';
+              if(!pd.getElementById('gxp-spin-css')){
+                var s=pd.createElement('style');s.id='gxp-spin-css';
+                s.textContent='@keyframes gxp-spin{to{transform:rotate(360deg)}}';
+                pd.head.appendChild(s);
+              }
             })();
             </script>""", height=0)
 

@@ -11,6 +11,7 @@ import streamlit as st
 from datetime import date, datetime, time, timedelta, timezone
 from app.db_helper import get_db, get_company_id, log_action
 from app.styles import inject_css
+from app.auth import is_supervisor, get_supervisor_employee_ids
 from backend.dtr import (
     compute_dtr, compute_nsd_hours, resolve_schedule_for_date, schedule_expected_hours,
     nearest_location, haversine_distance_m, _parse_time,
@@ -178,15 +179,26 @@ _AVATAR_COLORS = [
     ("#7c4f00","#ffe8b0"), ("#444444","#e1e3e4"),
 ]
 
-def _dtr_avatar(name: str, idx: int = 0, size: int = 34) -> str:
+def _dtr_avatar(name: str, idx: int = 0, size: int = 34, emp_id: str | None = None) -> str:
     initials = "".join(p[0].upper() for p in name.split()[:2] if p)
     fg, bg = _AVATAR_COLORS[idx % len(_AVATAR_COLORS)]
-    return (
+    _circle = (
         f'<div style="width:{size}px;height:{size}px;border-radius:50%;'
         f'background:{bg};color:{fg};display:inline-flex;align-items:center;'
         f'justify-content:center;font-size:{size//3}px;font-weight:700;'
-        f'flex-shrink:0;margin-right:6px;">{initials}</div>'
+        f'flex-shrink:0;">{initials}</div>'
     )
+    if emp_id:
+        from app.ui_helpers import hierarchy_badge_html
+        from app.db_helper import get_company_id
+        _badge = hierarchy_badge_html(emp_id, get_company_id())
+        return (
+            f'<div style="position:relative;flex-shrink:0;width:{size}px;height:{size}px;margin-right:6px;">'
+            f'{_circle}'
+            f'<div style="position:absolute;bottom:-2px;left:-2px;">{_badge}</div>'
+            f'</div>'
+        )
+    return f'<div style="margin-right:6px;">{_circle}</div>'
 
 def _status_html(status: str) -> str:
     mapping = {
@@ -228,7 +240,7 @@ def _fmt_mins(m: int) -> str:
 # Tab 1 — Daily Entry
 # ============================================================
 
-def _render_daily_entry():
+def _render_daily_entry(_readonly: bool = False, _team_ids: list | None = None):
     # ── Persistent save message (survives st.rerun) ───────────
     if "dtr_save_msg" in st.session_state:
         kind, msg = st.session_state.pop("dtr_save_msg")
@@ -248,7 +260,10 @@ def _render_daily_entry():
     def _jump_today():
         st.session_state["dtr_date_picker"] = date.today()
 
-    col_date, col_today, col_spacer, col_save = st.columns([2, 1, 4, 1])
+    if not _readonly:
+        col_date, col_today, col_spacer, col_save = st.columns([2, 1, 4, 1])
+    else:
+        col_date, col_today, col_spacer = st.columns([2, 1, 5])
     with col_date:
         work_date = st.date_input(
             "Date",
@@ -257,13 +272,18 @@ def _render_daily_entry():
         )
     with col_today:
         st.button("Today", key="dtr_today", help="Jump to today", on_click=_jump_today)
-    with col_save:
-        save_all_top = st.button("Save All", type="primary", key="dtr_save_all_top", width="stretch")
+    if not _readonly:
+        with col_save:
+            save_all_top = st.button("Save All", type="primary", key="dtr_save_all_top", width="stretch")
+    else:
+        save_all_top = False
 
     st.caption(f"**{work_date.strftime('%A, %B %d, %Y')}**")
 
     # ── Load data ─────────────────────────────────────────────
     employees = _load_employees(_cid=get_company_id())
+    if _team_ids:
+        employees = [e for e in employees if e["id"] in _team_ids]
     schedules = _load_schedules(_cid=get_company_id())
     overrides = _load_overrides_for_date(work_date)
     existing  = _load_time_logs_for_date(work_date)
@@ -349,7 +369,7 @@ def _render_daily_entry():
         log   = entry["log"]
         eid   = emp["id"]
         name  = _employee_display_name(emp)
-        avatar_html = _dtr_avatar(name, i_entry)
+        avatar_html = _dtr_avatar(name, i_entry, emp_id=eid)
 
         # If rest day or no schedule — show greyed row
         if sched is None:
@@ -395,10 +415,12 @@ def _render_daily_entry():
 
         with row[2]:
             t_in = st.time_input("In", value=existing_in or time(8, 0),
-                                 key=f"dtr_in_{eid}", label_visibility="collapsed")
+                                 key=f"dtr_in_{eid}", label_visibility="collapsed",
+                                 disabled=_readonly)
         with row[3]:
             t_out = st.time_input("Out", value=existing_out or time(17, 0),
-                                  key=f"dtr_out_{eid}", label_visibility="collapsed")
+                                  key=f"dtr_out_{eid}", label_visibility="collapsed",
+                                  disabled=_readonly)
 
         # Real-time DTR computation
         exp_hours    = schedule_expected_hours(sched)
@@ -462,9 +484,12 @@ def _render_daily_entry():
 
     # ── Save All button (below table) ────────────────────────
     st.divider()
-    sa1, _ = st.columns([1.5, 6.5])
-    with sa1:
-        save_all = st.button("Save All", type="primary", key="dtr_save_all", width="stretch")
+    if not _readonly:
+        sa1, _ = st.columns([1.5, 6.5])
+        with sa1:
+            save_all = st.button("Save All", type="primary", key="dtr_save_all", width="stretch")
+    else:
+        save_all = False
 
     if save_all or save_all_top:
         saved = 0
@@ -495,7 +520,7 @@ def _render_daily_entry():
 # Tab 2 — Attendance Summary
 # ============================================================
 
-def _render_summary():
+def _render_summary(_team_ids: list | None = None):
     today = date.today()
     month_start = today.replace(day=1)
 
@@ -517,6 +542,8 @@ def _render_summary():
         return
 
     employees = _load_employees(_cid=get_company_id())
+    if _team_ids:
+        employees = [e for e in employees if e["id"] in _team_ids]
     profiles  = _load_employee_profiles(_cid=get_company_id())
     logs      = _load_time_logs_range(range_start, range_end)
 
@@ -1097,7 +1124,7 @@ def _render_summary():
 # Tab 3 — Corrections
 # ============================================================
 
-def _render_corrections():
+def _render_corrections(_readonly: bool = False, _team_ids: list | None = None):
     col_filter, _ = st.columns([2, 5])
     with col_filter:
         status_filter = st.selectbox(
@@ -1107,6 +1134,8 @@ def _render_corrections():
         )
 
     corrections = _load_corrections(status_filter)
+    if _team_ids:
+        corrections = [c for c in corrections if c.get("employee_id") in _team_ids]
 
     if not corrections:
         st.info("No correction requests found.")
@@ -1147,7 +1176,7 @@ def _render_corrections():
                 f'box-shadow:0 4px 20px rgba(45,51,53,0.06);margin-bottom:4px;">'
                 f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">'
                 f'<div style="display:flex;align-items:center;gap:10px;">'
-                f'{_dtr_avatar(emp_name, i_corr, 44)}'
+                f'{_dtr_avatar(emp_name, i_corr, 44, emp_id=corr.get("employee_id"))}'
                 f'<div><div style="font-size:14px;font-weight:700;color:#191c1d;">{emp_name}</div>'
                 f'<div style="font-size:11px;color:#727784;">Requested {work_date_str}</div></div></div>'
                 f'<div style="display:flex;gap:8px;align-items:center;">'
@@ -1173,7 +1202,7 @@ def _render_corrections():
             if corr.get("admin_notes"):
                 st.caption(f"Admin notes: {corr['admin_notes']}")
 
-            if status == "pending":
+            if status == "pending" and not _readonly:
                 notes_key = f"corr_notes_{corr['id']}"
                 notes = st.text_input("Admin notes (optional)", key=notes_key,
                                        label_visibility="collapsed",
@@ -1245,9 +1274,21 @@ def _render_corrections():
 # ============================================================
 
 def render():
+    from app.auth import is_page_readonly
+    _readonly = is_page_readonly("Attendance")
+
+    # Supervisor team scoping
+    _is_supervisor = is_supervisor()
+    _team_ids = get_supervisor_employee_ids() if _is_supervisor else []
+    if _is_supervisor and not _team_ids:
+        inject_css()
+        st.title("Attendance")
+        st.info("No direct reports found. Ask your administrator to set up the reporting structure.")
+        return
+
     inject_css()
 
-    st.title("Attendance")
+    st.title("Team Attendance" if _is_supervisor else "Attendance")
     st.caption("Daily Time Record & Corrections")
 
     # ── Monthly KPI cards ─────────────────────────────────────
@@ -1299,10 +1340,10 @@ def render():
     ])
 
     with tab_entry:
-        _render_daily_entry()
+        _render_daily_entry(_readonly, _team_ids=_team_ids or None)
 
     with tab_summary:
-        _render_summary()
+        _render_summary(_team_ids=_team_ids or None)
 
     with tab_corrections:
-        _render_corrections()
+        _render_corrections(_readonly, _team_ids=_team_ids or None)

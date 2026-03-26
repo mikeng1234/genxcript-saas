@@ -140,7 +140,7 @@ BEGIN
   ) RETURNING id INTO d_sale;
 
   -- ────────────────────────────────────────────────────────
-  -- 3. EMPLOYEES  (inserted without manager_id first;
+  -- 3. EMPLOYEES  (inserted without reports_to first;
   --    reporting lines are set via UPDATE in step 4)
   -- ────────────────────────────────────────────────────────
 
@@ -349,31 +349,31 @@ BEGIN
   ) RETURNING id INTO e25;
 
   -- ────────────────────────────────────────────────────────
-  -- 4. REPORTING LINES  (manager_id)
+  -- 4. REPORTING LINES  (reports_to)
   -- ────────────────────────────────────────────────────────
   -- [L4] Emil → nobody (CEO)
   -- [L3] Direct reports to Emil
-  UPDATE employees SET manager_id = e01 WHERE id IN (e02, e03, e04);
+  UPDATE employees SET reports_to = e01 WHERE id IN (e02, e03, e04);
   -- [L3] Amara reports to Dominic (also L3, team lead role)
-  UPDATE employees SET manager_id = e02 WHERE id = e05;
+  UPDATE employees SET reports_to = e02 WHERE id = e05;
 
   -- [L2] Direct reports to Dominic
-  UPDATE employees SET manager_id = e02 WHERE id IN (e06, e09);
+  UPDATE employees SET reports_to = e02 WHERE id IN (e06, e09);
   -- [L2] Direct reports to Teresa
-  UPDATE employees SET manager_id = e03 WHERE id IN (e07, e08);
+  UPDATE employees SET reports_to = e03 WHERE id IN (e07, e08);
   -- [L2] Direct reports to Mateo
-  UPDATE employees SET manager_id = e04 WHERE id = e10;
+  UPDATE employees SET reports_to = e04 WHERE id = e10;
 
   -- [L1] Direct reports to Amara (dev team)
-  UPDATE employees SET manager_id = e05 WHERE id IN (e11, e12, e13, e14, e15);
+  UPDATE employees SET reports_to = e05 WHERE id IN (e11, e12, e13, e14, e15);
   -- [L1] Direct reports to Clarissa (sales team)
-  UPDATE employees SET manager_id = e10 WHERE id IN (e16, e17, e18, e19, e20);
+  UPDATE employees SET reports_to = e10 WHERE id IN (e16, e17, e18, e19, e20);
   -- [L1] Sophie & Gino report to Mateo
-  UPDATE employees SET manager_id = e04 WHERE id IN (e21, e22);
+  UPDATE employees SET reports_to = e04 WHERE id IN (e21, e22);
   -- [L1] Mariel reports to Teresa
-  UPDATE employees SET manager_id = e03 WHERE id = e23;
+  UPDATE employees SET reports_to = e03 WHERE id = e23;
   -- [L1] Leila & Ramon report to Gino
-  UPDATE employees SET manager_id = e22 WHERE id IN (e24, e25);
+  UPDATE employees SET reports_to = e22 WHERE id IN (e24, e25);
 
   -- ────────────────────────────────────────────────────────
   -- 5. EMPLOYEE PROFILES

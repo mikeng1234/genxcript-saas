@@ -130,6 +130,15 @@ def _initials(name: str) -> str:
     return "".join(p[0].upper() for p in parts[:2] if p)
 
 
+def _ot_badge_html(emp_id: str | None) -> str:
+    if not emp_id:
+        return ""
+    from app.ui_helpers import hierarchy_badge_html
+    from app.db_helper import get_company_id
+    badge = hierarchy_badge_html(emp_id, get_company_id())
+    return f'<div style="position:absolute;bottom:-2px;left:-2px;">{badge}</div>'
+
+
 def _metric_card(label: str, value: str, icon_bg: str, icon_color: str, icon: str) -> str:
     """Return HTML for an M3-styled metric card with icon badge."""
     return f'''
@@ -164,6 +173,7 @@ def _employee_row_html(
     secondary_label: str = "", secondary_value: str = "",
     accent_color: str = "#005bc1",
     is_top: bool = False,
+    emp_id: str | None = None,
 ) -> str:
     """Render a single row in the Top Contributors table as M3-styled HTML."""
     initials = _initials(name)
@@ -191,10 +201,11 @@ def _employee_row_html(
       <div style="font-size:14px;font-weight:{rank_weight};color:{rank_color};
                   text-align:center;">{rank:02d}</div>
       <div style="display:flex;align-items:center;gap:10px;">
+        <div style="position:relative;flex-shrink:0;width:32px;height:32px;">
         <div style="width:32px;height:32px;border-radius:50%;background:{avatar_bg};
                     color:#fff;font-size:11px;font-weight:700;
-                    display:flex;align-items:center;justify-content:center;
-                    flex-shrink:0;">{initials}</div>
+                    display:flex;align-items:center;justify-content:center;">{initials}</div>
+        {_ot_badge_html(emp_id)}</div>
         <div>
           <div style="font-size:13px;font-weight:600;color:#191c1d;">{name}</div>
           <div style="font-size:11px;color:#727784;">{dept} &middot; {shift}</div>
@@ -262,6 +273,7 @@ def _render_employee_table(
             secondary_value=sec_val,
             accent_color=accent,
             is_top=(i == 0),
+            emp_id=row.get("employee_id"),
         )
 
     import streamlit.components.v1 as _stc
@@ -423,6 +435,7 @@ def render() -> None:
                         "department": r["department"] or "\u2014",
                         "shift": r["shift"],
                         "hours": r["hours"],
+                        "employee_id": r.get("employee_id"),
                     })
 
                 _render_employee_table(
@@ -1166,6 +1179,7 @@ def render() -> None:
                     "shift": f"{row['real_days']} portal days" if row["real_days"] > 0 else "implied",
                     "avg_break": row["avg_break"],
                     "total_overbreak": int(row["total_overbreak"]),
+                    "employee_id": row.get("employee_id"),
                 })
 
             _render_employee_table(

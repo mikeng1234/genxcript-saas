@@ -17,7 +17,7 @@ _PREF_DEFAULTS: dict = {
     "gxp_theme":         DEFAULT_THEME,
     "gxp_date_format":   "MMM D, YYYY",
     "gxp_time_format":   "12h",
-    "gxp_week_start":    "Monday",
+    "gxp_week_start":    "Sunday",
     "gxp_currency_pos":  "prefix",       # prefix = ₱1,000  (only supported format)
     "gxp_table_density": "normal",        # compact | normal | relaxed
     "gxp_default_page":  "Dashboard",

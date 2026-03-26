@@ -206,7 +206,7 @@ _CALENDAR_CSS = """
     color: #424753;
 }
 .gxp-cal-cell {
-    min-height: 90px; padding: 6px 8px;
+    min-height: 81px; padding: 5px 7px;
     border-radius: 12px; display: flex;
     flex-direction: column; position: relative;
     transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
@@ -281,17 +281,37 @@ _DEADLINE_COLOR = {
 }
 
 
+_EVT_TYPE_META = {
+    "hol_reg":             {"color": "#dc2626", "bg": "#fef2f2", "icon": "🔴"},
+    "hol_spec":            {"color": "#d97706", "bg": "#fffbeb", "icon": "🟡"},
+    "payment":             {"color": "#065f46", "bg": "#d1fae5", "icon": "💰"},
+    "period_span":         {"color": "#1e40af", "bg": "#eff6ff", "icon": "📋"},
+    "deadline_sss":        {"color": "#5b21b6", "bg": "#ede9fe", "icon": "🟣"},
+    "deadline_philhealth": {"color": "#155e75", "bg": "#cffafe", "icon": "🔵"},
+    "deadline_pagibig":    {"color": "#9d174d", "bg": "#fce7f3", "icon": "🩷"},
+    "deadline_bir":        {"color": "#991b1b", "bg": "#fee2e2", "icon": "🔴"},
+}
+
 def _render_calendar_html(
     year: int, month: int, day_events: dict[date, list[dict]]
 ) -> str:
+    """Return calendar grid HTML only (no JS). Popup JS is in _render_calendar_popup_js."""
     today = date.today()
-    weeks = _cal.monthcalendar(year, month)
+
+    _week_pref = st.session_state.get("gxp_week_start", "Sunday")
+    _first_day = 6 if _week_pref == "Sunday" else 0
+    c = _cal.Calendar(firstweekday=_first_day)
+    weeks = c.monthdayscalendar(year, month)
+
+    _hdrs_sun = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    _hdrs_mon = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    _hdrs = _hdrs_sun if _week_pref == "Sunday" else _hdrs_mon
 
     parts = [_CALENDAR_CSS, '<div class="gxp-cal-wrap">']
 
     # Weekday header
     parts.append('<div class="gxp-cal-grid" style="margin-bottom:2px;">')
-    for h in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+    for h in _hdrs:
         parts.append(f'<div class="gxp-cal-hdr">{h}</div>')
     parts.append('</div>')
 
@@ -307,7 +327,7 @@ def _render_calendar_html(
             d    = date(year, month, day_num)
             evts = day_events.get(d, [])
 
-            is_weekend  = wi >= 5
+            is_weekend  = d.weekday() >= 5
             has_reg_hol = any(e["type"] == "hol_reg"  for e in evts)
             has_spec_hol = any(e["type"] == "hol_spec" for e in evts)
             in_period   = any(e["type"] == "period_span" for e in evts)
@@ -323,21 +343,18 @@ def _render_calendar_html(
             if in_period and not has_reg_hol and not has_spec_hol:
                 cls_parts.append("in-period")
 
-            # Left accent border for pay period
             style = ""
             period_evts = [e for e in evts if e["type"] == "period_span"]
             if period_evts:
                 style = f'border-left:3px solid {period_evts[0]["border"]};'
 
-            parts.append(f'<div class="{" ".join(cls_parts)}" style="{style}">')
+            parts.append(f'<div class="{" ".join(cls_parts)}" style="{style}" data-date="{d.isoformat()}">')
 
-            # Day number
             if d == today:
                 parts.append(f'<span class="gxp-cal-today">{day_num}</span>')
             else:
                 parts.append(f'<span class="gxp-cal-num">{day_num}</span>')
 
-            # Events area
             parts.append('<div class="gxp-cal-evts">')
             for e in evts:
                 t   = e["type"]
@@ -368,6 +385,141 @@ def _render_calendar_html(
     parts.append('</div>')  # grid
     parts.append('</div>')  # wrap
     return "".join(parts)
+
+
+def _render_calendar_popup_js(day_events: dict[date, list[dict]]) -> None:
+    """Render the day-click popup via components.html (JS runs in iframe, targets parent DOM)."""
+    import json as _json
+
+    _popup_data = {}
+    _day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    _month_names = ["January", "February", "March", "April", "May", "June",
+                    "July", "August", "September", "October", "November", "December"]
+    for d, evts in day_events.items():
+        visible = [e for e in evts if e.get("label")]
+        if visible:
+            _popup_data[d.isoformat()] = {
+                "label": f"{_day_names[d.weekday()]}, {_month_names[d.month-1]} {d.day}, {d.year}",
+                "events": [
+                    {
+                        "title": e["label"],
+                        "type": e["type"],
+                        "color": _EVT_TYPE_META.get(e["type"], {}).get("color", "#475569"),
+                        "bg": _EVT_TYPE_META.get(e["type"], {}).get("bg", "#f1f5f9"),
+                        "icon": _EVT_TYPE_META.get(e["type"], {}).get("icon", "📌"),
+                    }
+                    for e in visible
+                ],
+            }
+
+    _popup_json = _json.dumps(_popup_data)
+
+    _stc.html(f"""
+    <script>
+    (function(){{
+      var pd = window.parent.document;
+      var data = {_popup_json};
+
+      // ── Inject popup CSS into parent ──
+      if (!pd.getElementById('gxp-cal-popup-css')) {{
+        var s = pd.createElement('style');
+        s.id = 'gxp-cal-popup-css';
+        s.textContent = `
+          .gxp-cal-popup-overlay {{
+            display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+            background:rgba(0,0,0,0.35); backdrop-filter:blur(3px);
+            -webkit-backdrop-filter:blur(3px);
+            z-index:99999; align-items:center; justify-content:center;
+          }}
+          .gxp-cal-popup-overlay.open {{ display:flex; }}
+          .gxp-cal-popup {{
+            background:#fff; border-radius:16px; padding:24px 28px;
+            min-width:320px; max-width:420px; width:90%;
+            box-shadow:0 20px 60px rgba(0,0,0,0.18);
+            font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+            animation: gxp-cal-pop-in 0.18s ease-out;
+          }}
+          @keyframes gxp-cal-pop-in {{
+            from {{ transform:scale(0.95) translateY(8px); opacity:0; }}
+            to   {{ transform:scale(1) translateY(0); opacity:1; }}
+          }}
+          .gxp-cal-popup-title {{
+            font-size:16px; font-weight:800; color:#191c1d; margin-bottom:16px;
+          }}
+          .gxp-cal-popup-close {{
+            float:right; background:none; border:none; font-size:22px;
+            color:#9ca3af; cursor:pointer; padding:0 0 0 12px; line-height:1;
+          }}
+          .gxp-cal-popup-close:hover {{ color:#191c1d; }}
+          .gxp-cal-popup-item {{
+            display:flex; align-items:center; gap:10px;
+            padding:10px 12px; border-radius:10px; margin-bottom:6px;
+            transition:transform 0.12s ease;
+          }}
+          .gxp-cal-popup-item:hover {{ transform:translateX(3px); }}
+          .gxp-cal-popup-icon {{ font-size:16px; flex-shrink:0; }}
+          .gxp-cal-popup-label {{ font-size:13px; font-weight:600; }}
+          .gxp-cal-popup-empty {{
+            color:#9ca3af; font-size:13px; text-align:center; padding:20px 0;
+          }}
+        `;
+        pd.head.appendChild(s);
+      }}
+
+      // ── Inject popup overlay into parent body ──
+      var existing = pd.getElementById('gxpCalPopup');
+      if (existing) existing.remove();
+
+      var ov = pd.createElement('div');
+      ov.id = 'gxpCalPopup';
+      ov.className = 'gxp-cal-popup-overlay';
+      ov.innerHTML =
+        '<div class="gxp-cal-popup">' +
+        '<button class="gxp-cal-popup-close" id="gxpCalPopClose">&times;</button>' +
+        '<div class="gxp-cal-popup-title" id="gxpCalPopTitle"></div>' +
+        '<div id="gxpCalPopBody"></div>' +
+        '</div>';
+      pd.body.appendChild(ov);
+
+      var title = pd.getElementById('gxpCalPopTitle');
+      var body  = pd.getElementById('gxpCalPopBody');
+
+      function closePopup() {{ ov.classList.remove('open'); }}
+
+      // Close handlers
+      pd.getElementById('gxpCalPopClose').onclick = function(e) {{ e.stopPropagation(); closePopup(); }};
+      ov.addEventListener('click', function(e) {{ if (e.target === ov) closePopup(); }});
+      pd.addEventListener('keydown', function(e) {{ if (e.key === 'Escape') closePopup(); }});
+
+      // ── Wire cell clicks in parent DOM ──
+      pd.querySelectorAll('.gxp-cal-cell[data-date]').forEach(function(cell) {{
+        cell.addEventListener('click', function() {{
+          var iso = cell.getAttribute('data-date');
+          var info = data[iso];
+          if (!info) {{
+            var parts = iso.split('-');
+            var d = new Date(parts[0], parts[1]-1, parts[2]);
+            var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+            var mons = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            title.textContent = days[d.getDay()] + ', ' + mons[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+            body.innerHTML = '<div class="gxp-cal-popup-empty">No events on this day</div>';
+          }} else {{
+            title.textContent = info.label;
+            var html = '';
+            info.events.forEach(function(ev) {{
+              html += '<div class="gxp-cal-popup-item" style="background:' + ev.bg + ';">'
+                    + '<span class="gxp-cal-popup-icon">' + ev.icon + '</span>'
+                    + '<span class="gxp-cal-popup-label" style="color:' + ev.color + ';">' + ev.title + '</span>'
+                    + '</div>';
+            }});
+            body.innerHTML = html;
+          }}
+          ov.classList.add('open');
+        }});
+      }});
+    }})();
+    </script>
+    """, height=0)
 
 
 # ============================================================
@@ -641,6 +793,9 @@ def _render_holiday_table(holidays: list[dict]):
 # ============================================================
 
 def render():
+    from app.auth import is_page_readonly
+    _readonly = is_page_readonly("Calendar")
+
     inject_css()
 
     _col_title, _col_clock = st.columns([3, 1])
@@ -762,6 +917,9 @@ def render():
             unsafe_allow_html=True,
         )
 
+        # JS popup for day-click (runs in iframe, targets parent DOM)
+        _render_calendar_popup_js(day_events)
+
         # Legend
         _render_legend()
 
@@ -772,7 +930,7 @@ def render():
             pay_periods + next_pay_periods,
             deadlines + next_deadlines,
         )
-        _render_upcoming_events(upcoming)
+        _render_upcoming_events(upcoming[:6])
 
     st.divider()
 

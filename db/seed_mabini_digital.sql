@@ -311,11 +311,11 @@ BEGIN
   -- ═══════════════════════════════════════════════════════════════════════════
   -- Ana (GM) → no manager
   -- Ben & Carla → Ana
-  UPDATE employees SET manager_id = e01 WHERE id IN (e02, e03, e04, e08);
+  UPDATE employees SET reports_to = e01 WHERE id IN (e02, e03, e04, e08);
   -- Dan → Ana; Eva, Fred, Gia → Dan
-  UPDATE employees SET manager_id = e04 WHERE id IN (e05, e06, e07);
+  UPDATE employees SET reports_to = e04 WHERE id IN (e05, e06, e07);
   -- Hugo → Ana; Iris & Jake → Hugo
-  UPDATE employees SET manager_id = e08 WHERE id IN (e09, e10);
+  UPDATE employees SET reports_to = e08 WHERE id IN (e09, e10);
 
   -- ═══════════════════════════════════════════════════════════════════════════
   -- 7. EMPLOYEE PROFILES  (department mapping + basic personal info)

@@ -1,6 +1,6 @@
 # GenXcript Payroll — Product Roadmap
 
-> Last updated: 2026-03-25
+> Last updated: 2026-03-26
 > Strategy: Payroll-first → HR Compliance → Attendance → Advanced Payroll → Portal → BI → Scale
 > Each phase unlocks the next. Features within a phase are ordered by dependency.
 
@@ -109,12 +109,15 @@
 ### 3D — Company Policy Extraction *(prerequisite for correct payroll configuration)*
 - [ ] **Mind Joggler Presentation** — interactive questionnaire / guided wizard that walks a new client through every company policy the system needs: pay frequency, daily rate divisor, OT rules, leave entitlements, holiday pay policy, break rules, NSD policy, 13th month computation method, loan deduction rules, government contribution employer share policy, cut-off dates, probationary period, separation pay rules; outputs a structured policy document that seeds Company Setup
 
-### 3E — User Roles & Access Control *(prerequisite for multi-user companies and 2-level approvals)*
-- [ ] Role definitions — Admin, HR Manager, Payroll Processor, Supervisor, Employee (read-only portal)
-- [ ] Role-based page access — HR Manager cannot touch Company Setup; Payroll Processor cannot modify employee records; Supervisor sees only their team
-- [ ] Supervisor assignment — each employee can be assigned a reporting supervisor; used for 2-level approval chain in Phase 4C
-- [ ] Role selector in user management UI — Company Setup "Users & Roles" tab
-- [ ] RLS policy updates in Supabase to enforce role boundaries at DB level
+### 3E — User Roles & Access Control ✅ Mostly Complete
+- [x] Role definitions — Admin, HR Manager, Payroll Officer, Supervisor, Employee; 5-role model with PAGE_ACCESS + PAGE_READONLY maps *(migration 028)*
+- [x] Role-based page access — navigation filtered by role; read-only guards on mutation controls; access guard in page dispatch *(auth.py, main.py)*
+- [x] Supervisor assignment — `reports_to` hierarchy with recursive `get_supervisor_tree()` SQL function; team-scoped dashboard + attendance *(migration 025, 028)*
+- [x] Role selector in user management UI — Company Setup "Users & Roles" tab: change role, invite user, remove user with audit logging *(company_setup.py)*
+- [x] RLS policy updates — 12+ policies updated for new roles *(migration 028)*
+- [x] Role badge in topbar — color-coded pill showing current role next to user name *(main.py)*
+- [x] Supervisor Team Dashboard — team-scoped bento grid (team overview, member count, pending approvals); financial data hidden *(dashboard.py)*
+- [ ] **Supervisor Dashboard v2** — ADP-style manager tool: DTR exceptions, holiday pay validator, OT authorization, statutory overview, leave tracker, 201 file access; "Coming Soon" cards for Loans, Disciplinary, HMO *(in progress)*
 
 ### 3E — Employee Exit & Offboarding
 - [ ] Exit initiation — HR records last working day, reason (resignation / termination / end of contract), and clearance deadline (DOLE 30-day rule)
@@ -202,7 +205,13 @@
 - [ ] Salary disbursement record — mark as disbursed, disbursement date, reference number
 - [ ] Disbursement status on payslip — "Disbursed via [Bank] on [Date]" footer line
 
-### 5E — Piece Work / Output-Based Pay
+### 5E — OT Type Distinction *(prerequisite for accurate OT pay computation)*
+- [ ] **OT type field on overtime_requests** — `ot_type` column: `regular`, `rest_day`, `holiday`; dropdown in portal OT request form
+- [ ] **OT rate multipliers** — Regular OT 125%, Rest Day OT 130%, Holiday OT per DOLE rate table (Regular Holiday 200%/260%, SNWH 130%/169%)
+- [ ] **Payroll integration** — OT auto-fill in payroll run uses correct multiplier per OT type
+- [ ] **Supervisor OT authorization** — supervisor dashboard shows OT type in approval view
+
+### 5F — Piece Work / Output-Based Pay
 - [ ] Piece rate definitions (rate per unit)
 - [ ] Piece rate multipliers (holiday, OT, night diff factors on piece work)
 - [ ] Per-employee piece work entries per period
@@ -228,6 +237,42 @@
 - [ ] View leave summary report (credits, used, remaining per type)
 - [ ] View loan balance and amortization schedule
 - [ ] Change password
+
+---
+
+## Phase 6B: HR Compliance & Employee Relations
+> Modules for Philippine labor law compliance beyond payroll. Unlocks full digital 201 file and supervisor management capabilities.
+
+### 6B-1 — Disciplinary Action Hub *(DOLE Due Process Compliance)*
+- [ ] **Disciplinary actions table** — `disciplinary_actions` with type (verbal warning, written warning, suspension, termination), dates, status
+- [ ] **Notice to Explain (NTE)** — template-driven NTE generation with offense details, employee response field, response deadline
+- [ ] **Notice of Decision** — decision template with findings, penalty, effectivity date
+- [ ] **Two-Notice Rule workflow** — enforces DOLE-mandated NTE → hearing → Decision sequence; prevents illegal dismissal claims
+- [ ] **Supervisor view** — supervisors can initiate NTE for their team; HR/Admin review and finalize
+- [ ] **Audit trail** — full history of all disciplinary actions per employee, linked to 201 file
+
+### 6B-2 — BIR 2316 Digital Sign-off *(optional)*
+- [ ] **Acknowledgment tracking** — record that employee received and acknowledged their annual BIR 2316 certificate
+- [ ] **Manager dashboard** — view which team members have/haven't acknowledged their 2316
+- [ ] **Portal integration** — employee signs off via portal; timestamp recorded
+
+### 6B-3 — HMO & Group Insurance Portal *(optional)*
+- [ ] **HMO plans table** — plan name, provider, coverage limits (MBL), premium tiers
+- [ ] **Employee HMO enrollment** — assigned plan, dependents list, coverage start/end dates
+- [ ] **Dependent management** — add/remove dependents with relationship, DOB, coverage status
+- [ ] **Supervisor view** — read-only team HMO enrollment status
+
+### 6B-4 — Probation Tracker & Regularization *(optional)*
+- [ ] **Probation tracking** — auto-compute probation end date from hire date + company probationary months setting
+- [ ] **5th-month evaluation alert** — dashboard reminder 30 days before regularization deadline
+- [ ] **Regularization workflow** — supervisor submits evaluation → HR approves → auto-update employment_type to "regular"
+- [ ] **Failed regularization** — termination workflow with DOLE-compliant notice period
+
+### 6B-5 — Internal Transfer & Promotion Workflow
+- [ ] **Salary grade history** — table tracking salary changes with effective date, reason (promotion/merit/adjustment), old/new values
+- [ ] **Promotion letter generator** — template-driven PDF with new position, salary, effectivity date
+- [ ] **Contract addendum** — auto-generated addendum reflecting changes to employment terms
+- [ ] **Supervisor recommendation** — supervisor can recommend promotion; HR/Admin approves
 
 ---
 
@@ -373,6 +418,8 @@
 - [x] **Discord webhook** — auto-posts new tunnel URL on restart
 - [x] **Supabase free tier** — 500 MB DB, 1 GB storage, 50k monthly active users
 - [x] **`@st.cache_data` everywhere** — ~35 cached functions, 2-10 min TTL, write invalidation
+- [x] **Supervisor Portal team cache** — `_load_team_cache()` bulk-loads all subordinate employees + profiles in 2 queries (cached 2 min); eliminates ~12 redundant DB round-trips per page load across 5 tab sections; 201 dialog reads from cache (zero DB calls)
+- [ ] **Cache optimization & DB query audit** — Profile all pages for N+1 queries and redundant DB calls; consolidate into bulk-cached loaders (same pattern as supervisor cache); target: <5 DB queries per page load for all roles; add `print()` timing to identify slowest queries; consider `@st.cache_resource` for DB connection pooling
 - [ ] **Permanent domain** — buy a cheap domain ($2/yr `.xyz` or `.site`), add to Cloudflare, create named tunnel for fixed URL (e.g., `app.genxcript.xyz`)
 - [ ] **Auto-start on boot** — shortcut in `shell:startup` folder pointing to `start_all.bat`
 - [ ] **Windows sleep prevention** — `powercfg /change standby-timeout-ac 0`

@@ -28,11 +28,13 @@ st.set_page_config(
 
 from app.auth import (
     is_logged_in, logout, get_current_user_email,
-    restore_from_query_params, is_employee_role,
+    restore_from_query_params, is_employee_role, is_admin,
     update_active_company, add_accessible_company,
     ensure_accessible_companies_loaded,
     change_own_password, get_current_display_name, update_own_display_name,
     exchange_recovery_code, set_new_password, get_user_from_access_token,
+    get_accessible_pages, can_access_page, is_page_readonly,
+    get_current_role, get_role_label, ROLE_COLORS,
 )
 
 # ── Sidebar: hide everything on first paint ───────────────────────────────────
@@ -375,9 +377,10 @@ def _add_company_dialog():
             st.rerun()
 
 
-# Show the "Add / Switch Company" button in sidebar (admin/viewer only)
-if st.sidebar.button("Add Company", width='stretch'):
-    _add_company_dialog()
+# Show the "Add / Switch Company" button in sidebar (admin only)
+if is_admin():
+    if st.sidebar.button("Add Company", width='stretch'):
+        _add_company_dialog()
 
 st.sidebar.divider()
 
@@ -385,7 +388,7 @@ st.sidebar.divider()
 # Page navigation
 # ============================================================
 
-PAGES = [
+ALL_PAGES = [
     "Dashboard",
     "Employees",
     "Payroll Run",
@@ -397,6 +400,9 @@ PAGES = [
     "Company Setup",
     "Preferences",
 ]
+
+# Filter pages based on current user's role
+PAGES = get_accessible_pages()
 
 # current_page = what is actually rendered (source of truth)
 # nav_page     = st.sidebar.radio key (what user clicked)
@@ -413,6 +419,7 @@ if "_nav_redirect" in st.session_state:
     if _target in PAGES:
         st.session_state.nav_page     = _target
         st.session_state.current_page = _target
+        st.rerun()
 
 # ---- Unsaved-changes guard ----------------------------------------
 # Must check + revert nav_page BEFORE the radio is instantiated —
@@ -462,13 +469,19 @@ _NAV_ICONS = {
     "Company Setup":      "domain",
     "Preferences":        "cog",
 }
-_NAV_GROUPS = [
+_ALL_NAV_GROUPS = [
     ("Overview",    ["Dashboard"]),
     ("People",      ["Employees", "Attendance", "Calendar"]),
     ("Payroll",     ["Payroll Run", "Payroll Comparison", "Workforce Analytics"]),
     ("Compliance",  ["Government Reports"]),
     ("Settings",    ["Company Setup", "Preferences"]),
 ]
+# Filter groups to only include pages the current role can access
+_NAV_GROUPS = [
+    (name, [p for p in pages if p in PAGES])
+    for name, pages in _ALL_NAV_GROUPS
+]
+_NAV_GROUPS = [(n, ps) for n, ps in _NAV_GROUPS if ps]  # drop empty groups
 _active_page = st.session_state.current_page   # stable source of truth for highlight
 
 for _grp_name, _grp_pages in _NAV_GROUPS:
@@ -486,10 +499,14 @@ for _grp_name, _grp_pages in _NAV_GROUPS:
             key=f"nav_btn_{_p}",
             use_container_width=True,
         ):
-            st.session_state.nav_page = _p   # guard will catch dirty state
-            if not st.session_state.get("editing_id"):
-                st.session_state.current_page = _p
-            st.rerun()
+            # Skip reload if already on this page
+            if _p == _active_page:
+                pass
+            else:
+                st.session_state.nav_page = _p   # guard will catch dirty state
+                if not st.session_state.get("editing_id"):
+                    st.session_state.current_page = _p
+                st.rerun()
 
 st.session_state.current_page = st.session_state.nav_page
 page = st.session_state.nav_page
@@ -522,6 +539,8 @@ _user_email     = st.session_state.get("user_email", "")
 # Derive a short display name: "firstname" from email or role
 _user_display   = _user_email.split("@")[0].replace(".", " ").title() if _user_email else "User"
 _nav_pref_label = "Preferences"
+_role_label     = get_role_label()
+_role_fg, _role_bg = ROLE_COLORS.get(get_current_role(), ("#64748b", "#f1f5f9"))
 
 components.html(f"""
 <script>
@@ -533,6 +552,10 @@ components.html(f"""
     var e=d.getElementById(id); if(e) e.remove();
   }});
 
+  // ── Hide any page-transition loader left from nav click ──────────────
+  var _pl=d.getElementById('gxp-page-loader');
+  if(_pl){{ _pl.style.opacity='0'; setTimeout(function(){{ _pl.style.display='none'; }},180); }}
+
   var PAGES=[{_page_json}];
   var GROUPS=[{_grp_json}];
   var ACTIVE="{page}";
@@ -542,6 +565,9 @@ components.html(f"""
   var COMPANY_NAME="{_company_name}";
   var USER_DISPLAY="{_user_display}";
   var USER_EMAIL="{_user_email}";
+  var ROLE_LABEL="{_role_label}";
+  var ROLE_FG="{_role_fg}";
+  var ROLE_BG="{_role_bg}";
   var COSW_PFX="__cosw__";
   var ID='gxp-lnav', CSS_ID='gxp-lnav-css', LS='gxp-lnav-c';
   var TB_ID='gxp-topbar';
@@ -554,13 +580,61 @@ components.html(f"""
     catch(e){{return fb;}}
   }}
 
+  // ── Page transition overlay ─────────────────────────────────────────
+  function showPageLoader(){{
+    var ov=d.getElementById('gxp-page-loader');
+    if(!ov){{
+      ov=d.createElement('div'); ov.id='gxp-page-loader';
+      ov.style.cssText=
+        'position:fixed;top:0;left:0;right:0;bottom:0;'+
+        'background:rgba(255,255,255,0.70);backdrop-filter:blur(3px);'+
+        '-webkit-backdrop-filter:blur(3px);z-index:99998;'+
+        'display:flex;align-items:center;justify-content:center;'+
+        'opacity:0;transition:opacity 0.15s ease;pointer-events:all;';
+      var sp=d.createElement('div');
+      sp.style.cssText=
+        'width:40px;height:40px;border:3.5px solid #e5e7eb;'+
+        'border-top-color:#2563eb;border-radius:50%;'+
+        'animation:gxp-spin 0.7s linear infinite;';
+      ov.appendChild(sp);
+      // keyframes (in case not already present)
+      if(!d.getElementById('gxp-spin-kf')){{
+        var kf=d.createElement('style'); kf.id='gxp-spin-kf';
+        kf.textContent='@keyframes gxp-spin{{to{{transform:rotate(360deg);}}}}';
+        d.head.appendChild(kf);
+      }}
+      d.body.appendChild(ov);
+    }}
+    ov.style.display='flex';
+    requestAnimationFrame(function(){{ ov.style.opacity='1'; }});
+    // Auto-hide after Streamlit finishes re-rendering (watch for new content)
+    var hideTimer=setTimeout(function(){{ hidePageLoader(); }},8000); // safety cap
+    var obs=new MutationObserver(function(muts){{
+      // Streamlit replaces page content — wait for the main area to settle
+      clearTimeout(hideTimer);
+      hideTimer=setTimeout(function(){{ obs.disconnect(); hidePageLoader(); }},400);
+    }});
+    var mainEl=d.querySelector('[data-testid="stMain"]')||d.body;
+    obs.observe(mainEl,{{childList:true,subtree:true}});
+  }}
+  function hidePageLoader(){{
+    var ov=d.getElementById('gxp-page-loader');
+    if(ov){{ ov.style.opacity='0'; setTimeout(function(){{ ov.style.display='none'; }},180); }}
+  }}
+
   // ── Click a Streamlit sidebar button by page name ────────────────────
   function clickNav(name){{
+    // Skip reload if clicking the already-active page
+    if(name===ACTIVE) return;
     var sb=d.querySelector('[data-testid="stSidebar"]');
     if(!sb) return;
     var btns=sb.querySelectorAll('[data-testid="stButton"] button');
     for(var i=0;i<btns.length;i++){{
-      if(btns[i].textContent.indexOf(name)!==-1){{ btns[i].click(); return; }}
+      if(btns[i].textContent.indexOf(name)!==-1){{
+        showPageLoader();
+        btns[i].click();
+        return;
+      }}
     }}
   }}
 
@@ -1053,7 +1127,8 @@ components.html(f"""
       'background:'+ab+';border-radius:9999px;margin-right:4px;';
     chip.innerHTML=
       '<span class="mdi mdi-account-circle" style="font-size:16px;color:'+ac+';"></span>'+
-      '<span style="font-size:12px;font-weight:600;color:'+ac+';max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+USER_EMAIL+'">'+USER_DISPLAY+'</span>';
+      '<span style="font-size:12px;font-weight:600;color:'+ac+';max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+USER_EMAIL+'">'+USER_DISPLAY+'</span>'+
+      '<span style="font-size:10px;font-weight:700;color:'+ROLE_FG+';background:'+ROLE_BG+';padding:2px 8px;border-radius:9999px;white-space:nowrap;">'+ROLE_LABEL+'</span>';
 
     // Divider
     var div=d.createElement('div');
@@ -1148,27 +1223,6 @@ def _my_account_dialog():
     st.markdown(f"**Email** &nbsp; `{email}`")
     st.divider()
 
-    # ── Display name ─────────────────────────────────────────
-    st.markdown("#### Display Name")
-    new_name = st.text_input(
-        "Name shown in the sidebar",
-        value=display_name,
-        placeholder="e.g. Juan dela Cruz",
-        key="ma_display_name",
-    )
-    if st.button("Update Name", key="ma_save_name", type="primary"):
-        if not new_name.strip():
-            st.error("Display name cannot be empty.")
-        else:
-            ok, err = update_own_display_name(new_name)
-            if ok:
-                st.toast("Display name updated!", icon="✅")
-                st.rerun()
-            else:
-                st.error(err)
-
-    st.divider()
-
     # ── Change password ───────────────────────────────────────
     st.markdown("#### Change Password")
     cur_pw  = st.text_input("Current password",  type="password", key="ma_cur_pw")
@@ -1200,6 +1254,12 @@ if st.session_state.pop("_show_my_account", False):
 # ============================================================
 
 def _render_page(page: str) -> None:
+    # Access guard — deny pages the current role cannot see
+    if not can_access_page(page):
+        st.error("You do not have permission to access this page.")
+        st.info("Contact your company administrator to request access.")
+        return
+
     if page == "Dashboard":
         from app.pages._dashboard import render as render_dashboard
         render_dashboard()

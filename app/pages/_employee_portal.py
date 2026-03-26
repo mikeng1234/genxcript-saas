@@ -1337,7 +1337,9 @@ def _mini_calendar_html(year: int, month: int,
                          holiday_dates: dict[str, str],
                          today: date) -> str:
     """Render a month mini-calendar as HTML. VL = green, Holiday = purple, Today = blue ring."""
-    cal = _calendar.Calendar(firstweekday=0)  # Monday first
+    _week_pref = st.session_state.get("gxp_week_start", "Sunday")
+    _first_day = 6 if _week_pref == "Sunday" else 0
+    cal = _calendar.Calendar(firstweekday=_first_day)
     weeks = cal.monthdatescalendar(year, month)
     month_name = date(year, month, 1).strftime("%B %Y")
 
@@ -1393,7 +1395,7 @@ def _mini_calendar_html(year: int, month: int,
         f'<thead><tr>'
         + "".join(
             f'<th style="font-size:11px;color:#6b7280;font-weight:600;text-align:center;padding-bottom:4px;">{d}</th>'
-            for d in ["Mo","Tu","We","Th","Fr","Sa","Su"]
+            for d in (["Su","Mo","Tu","We","Th","Fr","Sa"] if _week_pref == "Sunday" else ["Mo","Tu","We","Th","Fr","Sa","Su"])
         )
         + f'</tr></thead><tbody>{rows}</tbody></table>'
         + legend

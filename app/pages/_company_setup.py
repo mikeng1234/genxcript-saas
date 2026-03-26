@@ -14,6 +14,11 @@ import streamlit.components.v1 as components
 from datetime import date, datetime, timezone, timedelta
 from app.db_helper import get_db, get_company_id, log_action
 from app.styles import inject_css
+from app.auth import (
+    is_admin, is_page_readonly, get_current_role,
+    ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR, ROLE_EMPLOYEE,
+    ROLE_LABELS, ROLE_COLORS,
+)
 
 
 # ============================================================
@@ -2137,6 +2142,209 @@ def _render_org_tab():
 
 
 # ============================================================
+# ============================================================
+# Users & Roles Tab (Admin only)
+# ============================================================
+
+
+def _render_users_roles_tab():
+    """Manage user roles within the company. Admin-only tab."""
+    db = get_db()
+    company_id = get_company_id()
+
+    st.caption("Manage user access and roles for this company.")
+
+    # ── Load all user-company-access rows for this company ──
+    access_rows = (
+        db.table("user_company_access")
+        .select("id, user_id, role, created_at")
+        .eq("company_id", company_id)
+        .order("created_at", desc=False)
+        .execute()
+    ).data or []
+
+    # ── Get user emails from Supabase Auth ──
+    from app.auth import _get_admin_auth_client
+    try:
+        admin_client = _get_admin_auth_client()
+        all_auth_users = admin_client.auth.admin.list_users()
+        user_list = all_auth_users if isinstance(all_auth_users, list) else getattr(all_auth_users, "users", [])
+        email_map = {str(u.id): u.email for u in user_list if u.email}
+    except Exception:
+        email_map = {}
+
+    # Also get linked employee names
+    employees = (
+        db.table("employees")
+        .select("id, user_id, first_name, last_name, employee_no")
+        .eq("company_id", company_id)
+        .execute()
+    ).data or []
+    emp_by_uid = {e["user_id"]: e for e in employees if e.get("user_id")}
+
+    # ── Show invite result (persists until dismissed) ──
+    _inv_result = st.session_state.get("_invite_result")
+    if _inv_result:
+        with st.container(border=True):
+            if _inv_result.get("smtp_failed"):
+                st.success(f"✅ Account created for **{_inv_result['email']}** as **{_inv_result['role']}**")
+                st.warning("⚠️ Email delivery unavailable. Please share the credentials manually:")
+                st.code(f"Email:    {_inv_result['email']}\nPassword: {_inv_result['password']}", language=None)
+                st.caption("The user can change their password after first login via My Account.")
+            else:
+                st.success(f"✅ Invite sent to **{_inv_result['email']}** as **{_inv_result['role']}**")
+            if st.button("Dismiss", key="ur_dismiss_invite_result"):
+                st.session_state.pop("_invite_result", None)
+                st.rerun()
+
+    # ── Invite New User section ──
+    with st.expander("Invite New User", expanded=False):
+        _ic1, _ic2 = st.columns([2, 1])
+        with _ic1:
+            invite_email = st.text_input(
+                "Email address",
+                placeholder="user@example.com",
+                key="ur_invite_email",
+            )
+        with _ic2:
+            invite_role = st.selectbox(
+                "Role",
+                options=[ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR, ROLE_EMPLOYEE],
+                format_func=lambda r: ROLE_LABELS.get(r, r),
+                key="ur_invite_role",
+            )
+
+        if st.button("Send Invite", type="primary", key="ur_send_invite"):
+            if not invite_email or "@" not in invite_email:
+                st.error("Please enter a valid email address.")
+            else:
+                # Check if user already has access to this company
+                existing = [r for r in access_rows if email_map.get(r["user_id"], "").lower() == invite_email.lower()]
+                if existing:
+                    st.warning(f"This email already has access as **{ROLE_LABELS.get(existing[0]['role'], existing[0]['role'])}**.")
+                else:
+                    from app.auth import invite_employee
+                    ok, result = invite_employee(invite_email, role=invite_role)
+                    if ok:
+                        # Parse result — may contain user_id or user_id|SMTP_FAILED|password|error
+                        parts = result.split("|")
+                        auth_user_id = parts[0]
+                        # Ensure user_company_access row exists
+                        try:
+                            db.table("user_company_access").upsert({
+                                "user_id": auth_user_id,
+                                "company_id": company_id,
+                                "role": invite_role,
+                            }, on_conflict="user_id,company_id").execute()
+                        except Exception:
+                            try:
+                                db.table("user_company_access").insert({
+                                    "user_id": auth_user_id,
+                                    "company_id": company_id,
+                                    "role": invite_role,
+                                }).execute()
+                            except Exception:
+                                pass
+                        log_action("invite_user", "user_company_access", auth_user_id,
+                                   details={"email": invite_email, "role": invite_role})
+                        if len(parts) > 1 and parts[1] == "SMTP_FAILED":
+                            # Store result in session so it persists (don't rerun yet)
+                            st.session_state["_invite_result"] = {
+                                "email": invite_email,
+                                "password": parts[2] if len(parts) > 2 else "N/A",
+                                "role": ROLE_LABELS.get(invite_role, invite_role),
+                                "smtp_failed": True,
+                            }
+                            st.rerun()
+                        else:
+                            st.session_state["_invite_result"] = {
+                                "email": invite_email,
+                                "role": ROLE_LABELS.get(invite_role, invite_role),
+                                "smtp_failed": False,
+                            }
+                            st.rerun()
+                    else:
+                        st.error(f"Failed to invite: {result}")
+
+    # ── User list ──
+    if not access_rows:
+        st.info("No users found for this company.")
+        return
+
+    st.markdown(f"**{len(access_rows)} user(s)** with access to this company")
+
+    for row in access_rows:
+        uid = row["user_id"]
+        email = email_map.get(uid, f"(unknown — {uid[:8]}…)")
+        current_role = row["role"]
+        emp = emp_by_uid.get(uid)
+        emp_name = f"{emp['first_name']} {emp['last_name']}" if emp else None
+        role_fg, role_bg = ROLE_COLORS.get(current_role, ("#64748b", "#f1f5f9"))
+
+        with st.container(border=True):
+            _c1, _c2, _c3 = st.columns([3, 2, 1])
+
+            with _c1:
+                st.markdown(f"**{email}**")
+                if emp_name:
+                    st.caption(f"Linked to: {emp_name} ({emp.get('employee_no', '')})")
+
+            with _c2:
+                # Role selector
+                current_user_id = st.session_state.get("user_id")
+                is_self = (uid == current_user_id)
+
+                available_roles = [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR, ROLE_EMPLOYEE]
+                cur_idx = available_roles.index(current_role) if current_role in available_roles else 0
+
+                new_role = st.selectbox(
+                    "Role",
+                    options=available_roles,
+                    index=cur_idx,
+                    format_func=lambda r: ROLE_LABELS.get(r, r),
+                    key=f"ur_role_{uid}",
+                    label_visibility="collapsed",
+                    disabled=is_self,  # Can't change own role
+                )
+
+            with _c3:
+                if is_self:
+                    st.caption("(you)")
+                elif new_role != current_role:
+                    if st.button("Save", key=f"ur_save_{uid}", type="primary"):
+                        db.table("user_company_access").update(
+                            {"role": new_role}
+                        ).eq("user_id", uid).eq("company_id", company_id).execute()
+                        log_action("update_role", "user_company_access", uid,
+                                   details={"old_role": current_role, "new_role": new_role, "email": email})
+                        st.toast(f"Updated **{email}** to **{ROLE_LABELS[new_role]}**.")
+                        st.rerun()
+                else:
+                    # Show remove button for non-self users
+                    if st.button("Remove", key=f"ur_remove_{uid}", type="secondary"):
+                        st.session_state[f"_ur_confirm_remove_{uid}"] = True
+
+            # Confirmation for removal
+            if st.session_state.get(f"_ur_confirm_remove_{uid}"):
+                st.warning(f"Remove **{email}** from this company? They will lose all access.")
+                _rc1, _rc2, _ = st.columns([1, 1, 3])
+                with _rc1:
+                    if st.button("Yes, Remove", key=f"ur_confirm_yes_{uid}", type="primary"):
+                        db.table("user_company_access").delete().eq(
+                            "user_id", uid
+                        ).eq("company_id", company_id).execute()
+                        log_action("remove_user", "user_company_access", uid,
+                                   details={"email": email, "role": current_role})
+                        st.session_state.pop(f"_ur_confirm_remove_{uid}", None)
+                        st.toast(f"Removed **{email}** from this company.")
+                        st.rerun()
+                with _rc2:
+                    if st.button("Cancel", key=f"ur_confirm_no_{uid}"):
+                        st.session_state.pop(f"_ur_confirm_remove_{uid}", None)
+                        st.rerun()
+
+
+# ============================================================
 # Main Page Render
 # ============================================================
 
@@ -2156,15 +2364,27 @@ def render():
         st.error("No company found. Please contact your administrator.")
         return
 
-    tab_settings, tab_templates, tab_holidays, tab_schedules, tab_locations, tab_org, tab_log = st.tabs([
-        "General",
-        "Leave Templates",
-        "Holidays",
-        "Schedules",
-        "Locations",
-        "Organization",
-        "Activity Log",
-    ])
+    _setup_readonly = is_page_readonly("Company Setup")
+
+    # Build tab list — "Users & Roles" only for admin
+    _tab_names = [
+        "General", "Leave Templates", "Holidays", "Schedules",
+        "Locations", "Organization",
+    ]
+    if is_admin():
+        _tab_names.append("Users & Roles")
+    _tab_names.append("Activity Log")
+
+    _tabs = st.tabs(_tab_names)
+    _ti = 0  # tab index counter
+    tab_settings   = _tabs[_ti]; _ti += 1
+    tab_templates  = _tabs[_ti]; _ti += 1
+    tab_holidays   = _tabs[_ti]; _ti += 1
+    tab_schedules  = _tabs[_ti]; _ti += 1
+    tab_locations  = _tabs[_ti]; _ti += 1
+    tab_org        = _tabs[_ti]; _ti += 1
+    tab_users      = _tabs[_ti] if is_admin() else None; _ti += (1 if is_admin() else 0)
+    tab_log        = _tabs[_ti]
 
     with tab_settings:
         st.caption("Company details, government numbers, and payroll policy. These appear on payslips and government reports.")
@@ -2351,6 +2571,10 @@ def render():
 
     with tab_org:
         _render_org_tab()
+
+    if tab_users is not None:
+        with tab_users:
+            _render_users_roles_tab()
 
     with tab_log:
         _render_activity_log_tab()

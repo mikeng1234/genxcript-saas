@@ -17,8 +17,12 @@ import uuid
 import streamlit as st
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from supabase.lib.client_options import ClientOptions
 
 load_dotenv()
+
+# Supabase auth can be slow from PH → Tokyo (ap-northeast-1); bump timeouts
+_SB_OPTS = ClientOptions(postgrest_client_timeout=15, storage_client_timeout=20)
 
 
 # ============================================================
@@ -39,14 +43,14 @@ def _session_cache() -> dict:
 def _get_auth_client() -> Client:
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_KEY"]
-    return create_client(url, key)
+    return create_client(url, key, options=_SB_OPTS)
 
 
 def _get_admin_auth_client() -> Client:
     """Service-role client required for admin Auth API (invite, delete user, etc.)."""
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_SERVICE_KEY"]
-    return create_client(url, key)
+    return create_client(url, key, options=_SB_OPTS)
 
 
 # ============================================================
@@ -68,13 +72,157 @@ def get_current_company_id() -> str:
     return company_id
 
 
+# ============================================================
+# Role constants & access control
+# ============================================================
+
+ROLE_ADMIN = "admin"
+ROLE_HR_MANAGER = "hr_manager"
+ROLE_PAYROLL_OFFICER = "payroll_officer"
+ROLE_SUPERVISOR = "supervisor"
+ROLE_EMPLOYEE = "employee"
+
+ALL_STAFF_ROLES = [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR]
+
+ROLE_LABELS = {
+    ROLE_ADMIN: "Admin",
+    ROLE_HR_MANAGER: "HR Manager",
+    ROLE_PAYROLL_OFFICER: "Payroll Officer",
+    ROLE_SUPERVISOR: "Supervisor",
+    ROLE_EMPLOYEE: "Employee",
+}
+
+ROLE_COLORS = {
+    ROLE_ADMIN: ("#1d4ed8", "#dbeafe"),            # blue
+    ROLE_HR_MANAGER: ("#15803d", "#dcfce7"),        # green
+    ROLE_PAYROLL_OFFICER: ("#b45309", "#fef3c7"),   # amber
+    ROLE_SUPERVISOR: ("#7c3aed", "#ede9fe"),         # purple
+    ROLE_EMPLOYEE: ("#64748b", "#f1f5f9"),           # slate
+}
+
+# Page → list of roles that can ACCESS the page
+PAGE_ACCESS = {
+    "Dashboard":           [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR],
+    "Employees":           [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER],
+    "Payroll Run":         [ROLE_ADMIN, ROLE_PAYROLL_OFFICER],
+    "Payroll Comparison":  [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER],
+    "Workforce Analytics": [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER],
+    "Attendance":          [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR],
+    "Government Reports":  [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER],
+    "Calendar":            [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR],
+    "Company Setup":       [ROLE_ADMIN, ROLE_HR_MANAGER],
+    "Preferences":         [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR],
+}
+
+# Page → list of roles that get READ-ONLY access (subset of PAGE_ACCESS)
+PAGE_READONLY = {
+    "Employees":           [ROLE_PAYROLL_OFFICER],
+    "Payroll Comparison":  [ROLE_HR_MANAGER],
+    "Workforce Analytics": [ROLE_PAYROLL_OFFICER],
+    "Attendance":          [ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR],
+    "Company Setup":       [ROLE_HR_MANAGER],
+    "Calendar":            [ROLE_SUPERVISOR],
+}
+
+
 def get_current_role() -> str:
-    """Returns the current user's role: 'admin', 'viewer', or 'employee'."""
-    return st.session_state.get("user_role", "admin")
+    """Returns the current user's role."""
+    role = st.session_state.get("user_role", "admin")
+    # Backward compat: map deprecated 'viewer' → 'hr_manager'
+    if role == "viewer":
+        return ROLE_HR_MANAGER
+    return role
 
 
 def is_employee_role() -> bool:
-    return get_current_role() == "employee"
+    return get_current_role() == ROLE_EMPLOYEE
+
+
+def is_admin() -> bool:
+    return get_current_role() == ROLE_ADMIN
+
+
+def is_hr_manager() -> bool:
+    return get_current_role() == ROLE_HR_MANAGER
+
+
+def is_payroll_officer() -> bool:
+    return get_current_role() == ROLE_PAYROLL_OFFICER
+
+
+def is_supervisor() -> bool:
+    return get_current_role() == ROLE_SUPERVISOR
+
+
+def has_role(*roles: str) -> bool:
+    return get_current_role() in roles
+
+
+def can_access_page(page_name: str) -> bool:
+    """Check if the current user's role can access a given page."""
+    role = get_current_role()
+    return role in PAGE_ACCESS.get(page_name, [])
+
+
+def get_accessible_pages() -> list[str]:
+    """Return list of page names the current role can access, in standard order."""
+    role = get_current_role()
+    all_pages = [
+        "Dashboard", "Employees", "Payroll Run", "Payroll Comparison",
+        "Workforce Analytics", "Attendance", "Government Reports",
+        "Calendar", "Company Setup", "Preferences",
+    ]
+    return [p for p in all_pages if role in PAGE_ACCESS.get(p, [])]
+
+
+def is_page_readonly(page_name: str) -> bool:
+    """Check if the current user's role gets read-only access to a page."""
+    role = get_current_role()
+    return role in PAGE_READONLY.get(page_name, [])
+
+
+def get_role_label(role: str | None = None) -> str:
+    """Human-readable label for a role."""
+    if role is None:
+        role = get_current_role()
+    return ROLE_LABELS.get(role, role.replace("_", " ").title())
+
+
+def get_supervisor_employee_ids() -> list[str]:
+    """
+    For the current user (must be supervisor role), return all employee IDs
+    in their reporting tree. Returns empty list if not a supervisor or
+    has no linked employee record.
+    """
+    if not is_supervisor():
+        return []
+    from app.db_helper import get_db, get_company_id
+    db = get_db()
+    user_id = st.session_state.get("user_id")
+    # Find the employee record linked to this auth user
+    emp_result = (
+        db.table("employees")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("company_id", get_company_id())
+        .limit(1)
+        .execute()
+    )
+    if not emp_result.data:
+        return []
+    supervisor_emp_id = emp_result.data[0]["id"]
+    # Get all direct + indirect reports via recursive SQL function
+    tree_result = db.rpc("get_supervisor_tree", {"supervisor_employee_id": supervisor_emp_id}).execute()
+    if not tree_result.data:
+        return []
+    # RPC may return list of dicts or list of plain strings depending on Supabase client version
+    result = []
+    for row in tree_result.data:
+        if isinstance(row, dict):
+            result.append(row.get("get_supervisor_tree", row.get("id", "")))
+        else:
+            result.append(str(row))
+    return result
 
 
 def _load_accessible_companies(user_id: str, db) -> list[dict]:
@@ -131,6 +279,32 @@ def _store_session(
     st.session_state.accessible_companies  = accessible_companies
     st.session_state.company_name          = company_name
 
+    # Resolve display name: employee first_name > user_metadata > email
+    _dn = ""
+    try:
+        from app.db_helper import get_db
+        _db = get_db()
+        _emp = (
+            _db.table("employees")
+            .select("first_name")
+            .eq("user_id", user_id)
+            .eq("company_id", company_id)
+            .limit(1)
+            .execute()
+        )
+        if _emp.data:
+            _dn = (_emp.data[0].get("first_name") or "").strip()
+    except Exception:
+        pass
+    if not _dn:
+        try:
+            adm = _get_admin_auth_client()
+            _u = adm.auth.admin.get_user_by_id(user_id)
+            _dn = (_u.user.user_metadata or {}).get("display_name", "")
+        except Exception:
+            pass
+    st.session_state.display_name = _dn
+
     # Load persisted theme / display preferences for this user
     try:
         from app.pages._preferences import load_user_prefs
@@ -147,6 +321,7 @@ def _store_session(
         "user_role":             role,
         "accessible_companies":  accessible_companies,
         "company_name":          company_name,
+        "display_name":          _dn,
     }
     st.query_params["sid"] = token
 
@@ -176,6 +351,7 @@ def restore_from_query_params() -> bool:
     st.session_state.user_role            = session.get("user_role", "admin")
     st.session_state.accessible_companies = session.get("accessible_companies", [])
     st.session_state.company_name         = session.get("company_name", "")
+    st.session_state.display_name         = session.get("display_name", "")
 
     # Load persisted preferences once per user per server session
     # (sentinel avoids a DB hit on every page navigation rerun)
@@ -529,7 +705,7 @@ def _find_auth_user_by_email(client, email: str) -> str | None:
     return None
 
 
-def invite_employee(employee_email: str) -> tuple[bool, str]:
+def invite_employee(employee_email: str, role: str = "employee") -> tuple[bool, str]:
     """
     Create (or update) a Supabase Auth account for an employee with a
     system-generated temporary password, then email the credentials.

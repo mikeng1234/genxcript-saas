@@ -1107,7 +1107,7 @@ def _render_leave_request_row(req: dict):
         unsafe_allow_html=True,
     )
 
-    if is_pend:
+    if is_pend and not _readonly:
         nc, ac, rc = st.columns([3.5, 1, 1])
         note_key = f"note_lr_{req['id']}"
         with nc:
@@ -1160,7 +1160,7 @@ def _render_ot_request_row(req: dict):
         unsafe_allow_html=True,
     )
 
-    if is_pend:
+    if is_pend and not _readonly:
         nc, ac, rc = st.columns([3.5, 1, 1])
         note_key = f"note_ot_{req['id']}"
         with nc:
@@ -1479,7 +1479,7 @@ def _render_special_leave_row(req: dict):
         unsafe_allow_html=True,
     )
 
-    if is_pend:
+    if is_pend and not _readonly:
         nc, ac, rc = st.columns([3.5, 1, 1])
         note_key = f"note_slr_{req['id']}"
         with nc:
@@ -1846,6 +1846,67 @@ def _edit_employee_dialog(emp_id: str):
                           placeholder="e.g. juan.delacruz@gmail.com",
                           key=f"d_em_{emp_id}",
                           help="Used to send the employee a portal invite.")
+
+        # ── Invite to Portal button (only if email exists) ──
+        _cur_email = (emp.get("email") or "").strip()
+        if _cur_email:
+            _already_linked = bool(emp.get("user_id"))
+            _invite_label = "📧 Re-send Portal Access" if _already_linked else "📧 Send Portal Invite"
+            _invite_key = f"d_invite_{emp_id}"
+
+            if st.session_state.get(f"_invite_pending_{emp_id}"):
+                st.info(f"Send portal invite to **{_cur_email}**?")
+                _ic1, _ic2, _ = st.columns([1, 1, 3])
+                with _ic1:
+                    if st.button("Yes, Send", key=f"d_inv_yes_{emp_id}", type="primary"):
+                        from app.auth import invite_employee
+                        ok, result = invite_employee(_cur_email)
+                        if ok:
+                            parts = result.split("|")
+                            auth_user_id = parts[0]
+                            db = get_db()
+                            db.table("employees").update({"user_id": auth_user_id}).eq("id", emp_id).execute()
+                            try:
+                                db.table("user_company_access").upsert({
+                                    "user_id": auth_user_id,
+                                    "company_id": get_company_id(),
+                                    "role": "employee",
+                                }, on_conflict="user_id,company_id").execute()
+                            except Exception:
+                                try:
+                                    db.table("user_company_access").insert({
+                                        "user_id": auth_user_id,
+                                        "company_id": get_company_id(),
+                                        "role": "employee",
+                                    }).execute()
+                                except Exception:
+                                    pass
+                            st.session_state.pop(f"_invite_pending_{emp_id}", None)
+                            if len(parts) > 1 and parts[1] == "SMTP_FAILED":
+                                st.session_state["_invite_toast"] = (
+                                    "warning",
+                                    f"Account created for **{_cur_email}**.\n\n"
+                                    f"Email could not be sent.\n\n"
+                                    f"**Share this temporary password manually:**\n\n"
+                                    f"```\n{parts[2]}\n```"
+                                )
+                            else:
+                                st.session_state["_invite_toast"] = (
+                                    "success",
+                                    f"Portal invite sent to **{_cur_email}**!"
+                                )
+                            st.rerun()
+                        else:
+                            st.error(f"Failed: {result}")
+                            st.session_state.pop(f"_invite_pending_{emp_id}", None)
+                with _ic2:
+                    if st.button("Cancel", key=f"d_inv_no_{emp_id}"):
+                        st.session_state.pop(f"_invite_pending_{emp_id}", None)
+                        st.rerun()
+            else:
+                if st.button(_invite_label, key=_invite_key):
+                    st.session_state[f"_invite_pending_{emp_id}"] = True
+                    st.rerun()
 
     # ─────────────────────────────────────────────────────────────────────────
     # TAB 2 — Personal Profile
@@ -2298,11 +2359,13 @@ def _render_employees_tab(show_salary_toggle: bool = True):
             _clear_dialog_state(_edit_id)
 
     # Row 1: add button (right-aligned)
-    _, col_add = st.columns([5, 1])
-    with col_add:
-        add_clicked = st.button("+ Add Employee", type="primary", width="stretch")
-        if add_clicked:
-            st.session_state.pop("editing_id", None)  # close any open edit dialog
+    add_clicked = False
+    if not _readonly:
+        _, col_add = st.columns([5, 1])
+        with col_add:
+            add_clicked = st.button("+ Add Employee", type="primary", width="stretch")
+            if add_clicked:
+                st.session_state.pop("editing_id", None)  # close any open edit dialog
 
     # Read filter flags from session state so employee load uses last-selected values
     # (checkboxes live inside the expander below; session state keeps them across reruns)
@@ -2637,29 +2700,59 @@ def _render_employees_tab(show_salary_toggle: bool = True):
         ("PI",  "pagibig_no"), ("TIN", "tin_no"),
     ]
 
-    # Sort by department for grouping, then 3-column card grid with dept headers
-    filtered = sorted(filtered, key=lambda e: (e.get("department") or "Unassigned").upper())
+    # Hierarchy badges — use shared utility
+    from app.ui_helpers import hierarchy_badge_html, _get_hierarchy_data
+    _cid_for_badge = get_company_id()
+    _h_data = _get_hierarchy_data(_cid_for_badge)
+
+    # Sort by department, then by hierarchy depth (top execs first), then name
+    filtered = sorted(filtered, key=lambda e: (
+        (e.get("department") or "Unassigned").upper(),
+        _h_data.get(e["id"], {}).get("depth", 99),
+        e.get("last_name", ""),
+    ))
     _prev_dept = None
 
-    for row_start in range(0, len(filtered), 3):
-        # Department header when group changes
-        _first_dept = (filtered[row_start].get("department") or "Unassigned").upper()
-        if _first_dept != _prev_dept:
-            _dept_count = sum(1 for e in filtered if (e.get("department") or "Unassigned").upper() == _first_dept)
+    # Build rows of 3, breaking at department boundaries
+    _dept_counts = {}
+    for e in filtered:
+        _d = (e.get("department") or "Unassigned").upper()
+        _dept_counts[_d] = _dept_counts.get(_d, 0) + 1
+
+    _card_rows = []  # list of (dept_header_or_None, [emp, emp, emp])
+    _current_row = []
+    for emp in filtered:
+        _emp_dept = (emp.get("department") or "Unassigned").upper()
+        if _emp_dept != _prev_dept:
+            # Flush current row before starting new department
+            if _current_row:
+                _card_rows.append((None, _current_row))
+                _current_row = []
+            _card_rows.append((_emp_dept, None))  # header marker
+            _prev_dept = _emp_dept
+        _current_row.append(emp)
+        if len(_current_row) == 3:
+            _card_rows.append((None, _current_row))
+            _current_row = []
+    if _current_row:
+        _card_rows.append((None, _current_row))
+
+    _global_idx = 0
+    for _hdr, _row in _card_rows:
+        if _hdr is not None:
             st.markdown(
                 f"<div style='font-size:11px;font-weight:700;color:#727784;"
                 f"text-transform:uppercase;letter-spacing:0.08em;"
                 f"padding:10px 0 2px;border-bottom:1px solid #ebeef0;"
-                f"margin-bottom:4px;'>{_first_dept} ({_dept_count})</div>",
+                f"margin-bottom:4px;'>{_hdr} ({_dept_counts[_hdr]})</div>",
                 unsafe_allow_html=True,
             )
-            _prev_dept = _first_dept
-
-        row_emps = filtered[row_start:row_start + 3]
+            continue
+        row_emps = _row
         gcols = st.columns(3)
         for col_idx, emp in enumerate(row_emps):
             with gcols[col_idx]:
-                idx     = row_start + col_idx
+                idx     = _global_idx
                 av_bg, av_fg = _AV_PAL[idx % len(_AV_PAL)]
                 initials = (
                     (emp.get("first_name") or "")[:1]
@@ -2727,33 +2820,39 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                         f"font-family:\"Plus Jakarta Sans\",system-ui,sans-serif;'>{initials}</div>"
                     )
 
-                # Active status dot (visual indicator on avatar)
+                # Hierarchy badge (shape indicates rank level)
                 _is_active = emp.get("is_active", True)
-                _act_color = "#4caf50" if _is_active else "#bdbdbd"
                 _act_key = f"deact_{emp['id']}" if _is_active else f"react_{emp['id']}"
                 _act_label = "Deactivate" if _is_active else "Activate"
                 _act_icon = "&#9899;" if _is_active else "&#9898;"
-                active_dot_html = (
-                    f"<span style='width:11px;height:11px;border-radius:50%;background:{_act_color};"
-                    f"border:2px solid #fff;display:inline-block;"
-                    f"box-shadow:0 0 0 1px {_act_color}55;'></span>"
+                _badge_html = hierarchy_badge_html(emp["id"], _cid_for_badge, _is_active) if _is_active else (
+                    "<span style='width:11px;height:11px;border-radius:50%;background:#bdbdbd;"
+                    "border:2px solid #fff;display:inline-block;"
+                    "box-shadow:0 0 0 1px #bdbdbd55;'></span>"
                 )
 
                 # Build swipe action tray (Edit, Deactivate/Activate, Print)
                 _eid = emp["id"]
                 _deact_bg = '#ef5350' if _is_active else '#4caf50'
-                _swipe_actions = (
-                    f"<div class='emp-act' data-emp-action='edit_{_eid}' "
-                    f"style='background:#005bc1;' title='Edit'>"
-                    f"&#9998;<span>Edit</span></div>"
-                    f"<div class='emp-act' data-emp-action='print201_{_eid}' "
-                    f"style='background:#ff9800;' title='Print 201'>"
-                    f"&#128424;<span>Print</span></div>"
-                    f"<div class='emp-act emp-act-sm' data-emp-action='{_act_key}' "
-                    f"data-emp-confirm='{_act_label} this employee?' "
-                    f"style='background:{_deact_bg};' title='{_act_label}'>"
-                    f"<span>{_act_label}</span></div>"
-                )
+                if _readonly:
+                    _swipe_actions = (
+                        f"<div class='emp-act' data-emp-action='print201_{_eid}' "
+                        f"style='background:#ff9800;' title='Print 201'>"
+                        f"&#128424;<span>Print</span></div>"
+                    )
+                else:
+                    _swipe_actions = (
+                        f"<div class='emp-act' data-emp-action='edit_{_eid}' "
+                        f"style='background:#005bc1;' title='Edit'>"
+                        f"&#9998;<span>Edit</span></div>"
+                        f"<div class='emp-act' data-emp-action='print201_{_eid}' "
+                        f"style='background:#ff9800;' title='Print 201'>"
+                        f"&#128424;<span>Print</span></div>"
+                        f"<div class='emp-act emp-act-sm' data-emp-action='{_act_key}' "
+                        f"data-emp-confirm='{_act_label} this employee?' "
+                        f"style='background:{_deact_bg};' title='{_act_label}'>"
+                        f"<span>{_act_label}</span></div>"
+                    )
 
                 st.markdown(
                     f"<div class='emp-swipe-wrap'>"
@@ -2768,7 +2867,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                     # Left: avatar + active dot
                     f"<div style='position:relative;flex-shrink:0;'>"
                     f"{avatar_html}"
-                    f"<div style='position:absolute;bottom:-2px;right:-2px;'>{active_dot_html}</div>"
+                    f"<div style='position:absolute;bottom:-2px;left:-2px;'>{_badge_html}</div>"
                     f"</div>"
                     # Right: info block
                     f"<div style='flex:1;min-width:0;'>"
@@ -2798,26 +2897,27 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                 )
 
                 # ── Hidden Streamlit buttons (wired via JS from swipe actions) ──
-                def _on_edit_click(_eid=emp["id"]):
-                    """on_click runs BEFORE page re-renders, so dialog sees new ID immediately."""
-                    _prev = st.session_state.get("editing_id")
-                    if _prev and _prev != _eid:
-                        _clear_dialog_state(_prev)
-                    st.session_state.pop(f"_edit_ready_{_eid}", None)
-                    st.session_state["editing_id"] = _eid
-                    st.session_state["_prev_editing_id"] = _eid
-                st.button("_", key=f"edit_{emp['id']}", on_click=_on_edit_click)
-                if emp.get("is_active", True):
-                    st.button("_", key=f"deact_{emp['id']}",
-                              on_click=_update_employee, args=(emp["id"], {"is_active": False}))
-                else:
-                    st.button("_", key=f"react_{emp['id']}",
-                              on_click=_update_employee, args=(emp["id"], {"is_active": True}))
+                if not _readonly:
+                    def _on_edit_click(_eid=emp["id"]):
+                        """on_click runs BEFORE page re-renders, so dialog sees new ID immediately."""
+                        _prev = st.session_state.get("editing_id")
+                        if _prev and _prev != _eid:
+                            _clear_dialog_state(_prev)
+                        st.session_state.pop(f"_edit_ready_{_eid}", None)
+                        st.session_state["editing_id"] = _eid
+                        st.session_state["_prev_editing_id"] = _eid
+                    st.button("_", key=f"edit_{emp['id']}", on_click=_on_edit_click)
+                    if emp.get("is_active", True):
+                        st.button("_", key=f"deact_{emp['id']}",
+                                  on_click=_update_employee, args=(emp["id"], {"is_active": False}))
+                    else:
+                        st.button("_", key=f"react_{emp['id']}",
+                                  on_click=_update_employee, args=(emp["id"], {"is_active": True}))
                 if st.button("_", key=f"print201_{emp['id']}"):
                     st.session_state["print201_id"] = emp["id"]
 
                 # ── Invite confirmation ────────────────────────────────────
-                if st.session_state.get(f"invite_confirm_{emp['id']}"):
+                if not _readonly and st.session_state.get(f"invite_confirm_{emp['id']}"):
                     already_linked = bool(emp.get("user_id"))
                     action_label   = "Re-send / Re-link portal access" if already_linked else "Send portal invite"
                     st.info(f"{action_label} for **{emp['email']}**?")
@@ -2880,6 +2980,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                         if st.button("Cancel", key=f"inv_no_{emp['id']}"):
                             st.session_state[f"invite_confirm_{emp['id']}"] = False
                             st.rerun()
+                _global_idx += 1
 
     # ── Employee 201 Print ────────────────────────────────────────────────────
     if st.session_state.get("print201_id"):
@@ -2937,7 +3038,14 @@ def _render_employees_tab(show_salary_toggle: bool = True):
 # Page entry point
 # ============================================================
 
+_readonly = False  # set at render() time; read by helpers
+
+
 def render():
+    from app.auth import is_page_readonly
+    global _readonly
+    _readonly = is_page_readonly("Employees")
+
     inject_css()
     st.title("Employees")
 

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GenXcript Supervisor Portal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container": "#edeeef",
+              "primary-container": "#005bc1",
+              "surface-tint": "#005bc0",
+              "surface-container-high": "#e7e8e9",
+              "tertiary-fixed-dim": "#6ddd82",
+              "tertiary-fixed": "#89fa9b",
+              "surface-bright": "#f8f9fa",
+              "inverse-primary": "#adc6ff",
+              "primary": "#004494",
+              "on-primary-fixed": "#001a41",
+              "secondary": "#795900",
+              "on-primary-container": "#c9d9ff",
+              "on-secondary-container": "#6d5000",
+              "background": "#f8f9fa",
+              "tertiary-container": "#006e2d",
+              "error-container": "#ffdad6",
+              "error": "#ba1a1a",
+              "surface-variant": "#e1e3e4",
+              "surface-dim": "#d9dadb",
+              "on-tertiary-fixed": "#002108",
+              "on-tertiary-fixed-variant": "#005320",
+              "outline-variant": "#c2c6d5",
+              "on-surface-variant": "#424753",
+              "on-secondary": "#ffffff",
+              "on-secondary-fixed": "#261a00",
+              "on-tertiary-container": "#80f193",
+              "on-background": "#191c1d",
+              "surface-container-lowest": "#ffffff",
+              "on-primary-fixed-variant": "#004493",
+              "secondary-fixed-dim": "#fbbc06",
+              "surface-container-low": "#f3f4f5",
+              "inverse-on-surface": "#f0f1f2",
+              "primary-fixed": "#d8e2ff",
+              "on-secondary-fixed-variant": "#5c4300",
+              "inverse-surface": "#2e3132",
+              "primary-fixed-dim": "#adc6ff",
+              "on-primary": "#ffffff",
+              "outline": "#727784",
+              "surface-container-highest": "#e1e3e4",
+              "tertiary": "#005320",
+              "secondary-container": "#febf0d",
+              "on-error-container": "#93000a",
+              "on-surface": "#191c1d",
+              "on-error": "#ffffff",
+              "surface": "#f8f9fa",
+              "on-tertiary": "#ffffff",
+              "secondary-fixed": "#ffdea0"
+            },
+            fontFamily: {
+              "headline": ["Plus Jakarta Sans"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8f9fa; color: #2d3335; overflow-x: hidden; }
+      .material-symbols-outlined { font-variation-settings: 'wght' 300, 'opsz' 24; }
+      .glass-header { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(20px); }
+      .signature-gradient { background: linear-gradient(135deg, #005bc1 0%, #3d89ff 100%); }
+      .shadow-soft { box-shadow: 0px 20px 40px rgba(45, 51, 53, 0.06); }
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #e1e3e4; border-radius: 10px; }
+      .card-radius { border-radius: 2rem; }
+    </style>
+</head>
+<body class="antialiased">
+<!-- SideNavBar (Updated Navigation) -->
+<aside class="fixed left-0 top-0 h-full w-[240px] bg-slate-50 dark:bg-slate-950 flex flex-col gap-2 p-6 z-50">
+<div class="mb-10 px-2">
+<h1 class="text-xl font-bold text-slate-900 dark:text-white leading-tight">GenXcript</h1>
+<p class="text-[0.7rem] font-bold text-slate-500 uppercase tracking-widest mt-1">Supervisor Portal</p>
+</div>
+<nav class="flex flex-col gap-1">
+<a class="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-6 py-2.5 flex items-center gap-3 transition-transform translate-x-1" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-medium text-sm">Team Dashboard</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 px-6 py-2.5 rounded-full hover:bg-slate-200/50 flex items-center gap-3 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="folder_shared">folder_shared</span>
+<span class="font-medium text-sm">Team Records</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 px-6 py-2.5 rounded-full hover:bg-slate-200/50 flex items-center gap-3 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="event_available">event_available</span>
+<span class="font-medium text-sm">Attendance</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 px-6 py-2.5 rounded-full hover:bg-slate-200/50 flex items-center gap-3 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+<span class="font-medium text-sm">Calendar</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 px-6 py-2.5 rounded-full hover:bg-slate-200/50 flex items-center gap-3 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-medium text-sm">Preferences</span>
+</a>
+</nav>
+<div class="mt-auto p-4 bg-surface-container-low rounded-lg">
+<div class="flex items-center gap-3">
+<img class="w-10 h-10 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDhgThMQhqityk-DCKCD_Ip1zAdFRl8PZ-n43XZzSgsvLtOE68QQgHrnYclXB2LdD5TKWyzABfFE7rMCoAF2yK5v7WCoPDcA5ao5EKqYw944B5T6ixm4tZ_BpxhnnH3YVhO-EbbwrHeL5557YfWAKtSUXlsvQVbUv-jdA5OaQcMY4PTd9r1t1kFLMkDFNcE_oOeC2JiP7PuZjR2oKvgntv8-QGYDtt9RiIjPOIjVHbft5Cvr8-bzCYFzz5IExkutAefQqBFod1D97Ec"/>
+<div>
+<p class="text-xs font-bold text-on-surface">Victoria Garcia</p>
+<p class="text-[10px] text-slate-500">Supervisor</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-40 bg-white/70 backdrop-blur-xl shadow-soft flex justify-between items-center px-12 py-3 ml-[240px] pr-[280px]">
+<div class="flex items-center gap-8">
+<div class="flex gap-6">
+<a class="text-blue-700 font-semibold border-b-2 border-blue-600 text-sm py-1" href="#">Team Dashboard</a>
+<a class="text-slate-500 hover:text-slate-900 text-sm py-1" href="#">Attendance</a>
+<a class="text-slate-500 hover:text-slate-900 text-sm py-1" href="#">Calendar</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors cursor-pointer" data-icon="search">search</span>
+</div>
+<span class="text-[11px] font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full">Supervisor</span>
+</div>
+</header>
+<main class="ml-[240px] pt-20 px-10 pb-10">
+<!-- Landscape Optimized Welcome & Key Stats -->
+<section class="mb-8 flex justify-between items-center">
+<div>
+<h2 class="text-xl font-semibold text-[#2d3335]">Good morning, Victoria.</h2>
+<p class="text-[#5a6062] text-sm">You have <span class="font-bold">5 team members</span> reporting to you.</p>
+</div>
+<div class="flex items-center gap-6">
+<div class="text-right">
+<p class="text-sm font-bold text-[#2d3335]">March 26, 2026</p>
+<p class="text-[11px] text-[#5a6062] uppercase tracking-wider">11:53 AM</p>
+</div>
+</div>
+</section>
+<!-- Horizontal Bento Grid (Minimized Scroll) -->
+<section class="grid grid-cols-12 gap-5 mb-8 items-stretch">
+<!-- Card 1: Your Team (Expanded) -->
+<div class="col-span-12 lg:col-span-7 bg-surface-container-lowest card-radius p-6 shadow-soft">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">YOUR TEAM</h3>
+<span class="text-[10px] font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full">5 Members Total</span>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4">
+<div class="aspect-square bg-slate-50 rounded-2xl flex flex-col items-center justify-center p-2 text-center hover:bg-white transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+<div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-[11px] font-bold text-blue-700 mb-2">RC</div>
+<p class="text-[10px] font-bold text-slate-800 leading-tight">Rico</p>
+<p class="text-[8px] text-slate-400 mt-0.5">IT Dept</p>
+</div>
+<div class="aspect-square bg-slate-50 rounded-2xl flex flex-col items-center justify-center p-2 text-center hover:bg-white transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+<div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-[11px] font-bold text-amber-700 mb-2">AS</div>
+<p class="text-[10px] font-bold text-slate-800 leading-tight">Angela</p>
+<p class="text-[8px] text-slate-400 mt-0.5">Admin</p>
+</div>
+<div class="aspect-square bg-slate-50 rounded-2xl flex flex-col items-center justify-center p-2 text-center hover:bg-white transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+<div class="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-[11px] font-bold text-emerald-700 mb-2">MT</div>
+<p class="text-[10px] font-bold text-slate-800 leading-tight">Mateo</p>
+<p class="text-[8px] text-slate-400 mt-0.5">Design</p>
+</div>
+<div class="aspect-square bg-slate-50 rounded-2xl flex flex-col items-center justify-center p-2 text-center hover:bg-white transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+<div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-[11px] font-bold text-purple-700 mb-2">JP</div>
+<p class="text-[10px] font-bold text-slate-800 leading-tight">Janine</p>
+<p class="text-[8px] text-slate-400 mt-0.5">Support</p>
+</div>
+<div class="aspect-square bg-slate-50 rounded-2xl flex flex-col items-center justify-center p-2 text-center hover:bg-white transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-[11px] font-bold text-indigo-700 mb-2">GV</div>
+<p class="text-[10px] font-bold text-slate-800 leading-tight">Gabriel</p>
+<p class="text-[8px] text-slate-400 mt-0.5">IT Dept</p>
+</div>
+<div class="aspect-square bg-slate-100/50 rounded-2xl flex flex-col items-center justify-center p-2 border-2 border-dashed border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+<span class="material-symbols-outlined text-slate-400 mb-1" data-icon="add" style="font-size: 20px;">add</span>
+<p class="text-[9px] font-bold text-slate-500 uppercase">Add New</p>
+</div>
+</div>
+</div>
+<!-- Card 3: Combined Approvals & Alerts (Pushed Right) -->
+<div class="col-span-12 lg:col-span-5 flex flex-col gap-4">
+<div class="bg-surface-container-lowest card-radius p-5 shadow-soft flex-1 flex flex-col justify-between">
+<div class="flex justify-between items-start">
+<h3 class="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">PENDING APPROVALS</h3>
+<span class="bg-[#fbbc05] text-black text-[10px] font-black px-2 py-0.5 rounded-full">3</span>
+</div>
+<div class="grid grid-cols-2 gap-4 mt-3">
+<div class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-low cursor-pointer hover:bg-white transition-colors border border-transparent hover:border-slate-100">
+<span class="text-lg">🏖</span>
+<div>
+<p class="text-[10px] font-bold">2 Leaves</p>
+<p class="text-[8px] text-slate-400">Angela, Mateo</p>
+</div>
+</div>
+<div class="flex items-center gap-2 p-2 rounded-xl bg-surface-container-low cursor-pointer hover:bg-white transition-colors border border-transparent hover:border-slate-100">
+<span class="text-lg">⏰</span>
+<div>
+<p class="text-[10px] font-bold">1 OT Req</p>
+<p class="text-[8px] text-slate-400">Rico (Alpha)</p>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-low px-4 py-3 card-radius flex items-center gap-3 relative overflow-hidden group hover:bg-white transition-all shadow-sm">
+<div class="absolute top-0 right-0 w-1 h-full bg-tertiary-fixed"></div>
+<span class="material-symbols-outlined text-tertiary text-lg" data-icon="task_alt">task_alt</span>
+<div>
+<p class="text-[10px] font-bold leading-tight">Reminders</p>
+<p class="text-[8px] text-slate-500">DTR cutoff in 2d</p>
+</div>
+</div>
+<div class="bg-surface-container-low px-4 py-3 card-radius flex items-center gap-3 relative overflow-hidden group hover:bg-white transition-all shadow-sm">
+<div class="absolute top-0 right-0 w-1 h-full bg-error"></div>
+<span class="material-symbols-outlined text-error text-lg" data-icon="notification_important">notification_important</span>
+<div>
+<p class="text-[10px] font-bold leading-tight">Alerts</p>
+<p class="text-[8px] text-slate-500">1 Missing Log</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Tabbed Interface -->
+<section class="mb-8">
+<div class="flex gap-2 p-1 bg-surface-container-low rounded-full w-fit mb-6">
+<button class="bg-surface-container-lowest shadow-soft text-blue-700 px-5 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="schedule">schedule</span>
+                    Timekeeping
+                </button>
+<button class="text-slate-500 hover:bg-white/50 px-5 py-2 rounded-full text-xs font-medium transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="folder_shared">folder_shared</span>
+                    Team Records
+                </button>
+<button class="text-slate-500 hover:bg-white/50 px-5 py-2 rounded-full text-xs font-medium transition-all">🏖 Benefits</button>
+<button class="text-slate-500 hover:bg-white/50 px-5 py-2 rounded-full text-xs font-medium transition-all">🔜 More</button>
+</div>
+<!-- Timekeeping Active State (Landscape arrangement) -->
+<div class="grid grid-cols-12 gap-6">
+<!-- DTR Exceptions Left -->
+<div class="col-span-12 lg:col-span-7 space-y-3">
+<div class="flex items-center justify-between mb-1">
+<h3 class="text-xs font-bold text-slate-900 uppercase tracking-widest">DTR Exceptions</h3>
+<button class="text-[10px] font-bold text-blue-700">Review All</button>
+</div>
+<div class="bg-surface-container-lowest card-radius p-4 shadow-soft flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center font-bold text-[10px]">AS</div>
+<div>
+<p class="text-xs font-bold">Angela Santos</p>
+<p class="text-[9px] text-slate-400">March 25 • Regular Shift</p>
+</div>
+</div>
+<div class="flex gap-2">
+<span class="bg-error-container text-error text-[8px] font-bold px-2.5 py-1 rounded-full uppercase">No Time In</span>
+<span class="bg-surface-container text-slate-600 text-[8px] font-bold px-2.5 py-1 rounded-full uppercase">Late 23m</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest card-radius p-4 shadow-soft flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center font-bold text-[10px]">RC</div>
+<div>
+<p class="text-xs font-bold">Rico Caballero</p>
+<p class="text-[9px] text-slate-400">March 24 • Night Shift</p>
+</div>
+</div>
+<div class="flex gap-2">
+<span class="bg-primary-fixed text-primary text-[8px] font-bold px-2.5 py-1 rounded-full uppercase">NSD 2.5h</span>
+</div>
+</div>
+</div>
+<!-- OT & Holiday Pay Right -->
+<div class="col-span-12 lg:col-span-5 flex flex-col gap-4">
+<div class="bg-[#fbbc05]/10 p-5 card-radius flex justify-between items-center">
+<div>
+<h3 class="text-[0.65rem] font-bold text-black uppercase tracking-wider mb-1">OT Authorization</h3>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-black text-black">3</span>
+<span class="text-[9px] font-bold text-black/60 uppercase">Pending</span>
+</div>
+</div>
+<button class="signature-gradient text-white px-4 py-2 rounded-full text-[9px] font-bold shadow-lg">Open Portal</button>
+</div>
+<div class="bg-surface-container-low p-5 card-radius">
+<h3 class="text-[0.65rem] font-bold text-slate-900 uppercase tracking-wider mb-3">Holiday Pay Validator</h3>
+<div class="grid grid-cols-2 gap-3">
+<div class="bg-white p-3 rounded-2xl">
+<p class="text-[8px] text-slate-500 font-bold uppercase">Regular</p>
+<p class="text-base font-bold text-blue-700">200%</p>
+</div>
+<div class="bg-white p-3 rounded-2xl">
+<p class="text-[8px] text-slate-500 font-bold uppercase">Special</p>
+<p class="text-base font-bold text-amber-600">130%</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Hidden initially but moved to 'Team Records' tab in logic -->
+<section class="mt-8 border-t-8 border-transparent pt-4">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 opacity-40 hover:opacity-100 transition-opacity">
+<!-- Statutory Summary (Moved here per request) -->
+<div>
+<h3 class="text-xs font-bold text-slate-900 mb-4 uppercase tracking-widest">Team Records: Statutory Summary</h3>
+<div class="grid grid-cols-2 gap-4 mb-4">
+<div class="bg-white p-4 card-radius shadow-soft bg-slate-50">
+<p class="text-[8px] font-black text-slate-400 uppercase">SSS Contribution</p>
+<p class="text-sm font-bold mt-1">₱ 24,500.00</p>
+</div>
+<div class="bg-white p-4 card-radius shadow-soft bg-slate-50">
+<p class="text-[8px] font-black text-slate-400 uppercase">PhilHealth</p>
+<p class="text-sm font-bold mt-1">₱ 12,200.00</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest card-radius overflow-hidden shadow-soft">
+<table class="w-full text-left text-[10px]">
+<thead>
+<tr class="bg-surface-container-low text-slate-500 uppercase font-bold text-[8px]">
+<th class="px-4 py-2">Employee</th>
+<th class="px-4 py-2">EE Share</th>
+<th class="px-4 py-2">ER Share</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100">
+<tr>
+<td class="px-4 py-2 font-bold">Caballero, Rico</td>
+<td class="px-4 py-2">₱ 1,350.00</td>
+<td class="px-4 py-2 text-slate-400">₱ 2,650.00</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Digital 201 Cards (Moved here per request) -->
+<div>
+<h3 class="text-xs font-bold text-slate-900 mb-4 uppercase tracking-widest">Digital 201 Cards</h3>
+<div class="space-y-3">
+<div class="bg-white p-4 card-radius shadow-soft flex items-center gap-4">
+<img class="w-10 h-10 rounded-full object-cover grayscale opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCSXwoFKMadMw6Ifu4sO7-oC1l_LMKGiW6Ty6xWCcSfeNEqYc1tC4lPbodVXxxLrWjWI77yuQ19Y-fB9hLsGq2z5I23-LSCcW23caB_T2znLStnGpaNxnxU3nmGPv350zbBz2KDtItkUeq9nPJwZFqAHwACOfUV8qrTkjUSNOdOMRPPsVwOsplLKC3argZF3IQELb8xAnfGXXsczP2c5V1-kK2fTPlSog6Utr_Z7bPsDamn66ZgH7b6LeG-r8QQBOi9I24luRG-lwlF"/>
+<div class="flex-1">
+<div class="flex justify-between">
+<h4 class="text-xs font-bold">Rico Caballero</h4>
+<p class="text-[8px] text-slate-400 font-bold uppercase tracking-wider">EMP-2024-089</p>
+</div>
+<p class="text-[9px] text-slate-500">IT • Sr. Backend Developer</p>
+<div class="flex gap-3 mt-1.5">
+<div class="flex items-center gap-1">
+<div class="w-1 h-1 rounded-full bg-emerald-500"></div>
+<span class="text-[8px] font-bold text-slate-400">SSS</span>
+</div>
+<div class="flex items-center gap-1">
+<div class="w-1 h-1 rounded-full bg-emerald-500"></div>
+<span class="text-[8px] font-bold text-slate-400">PH</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Future Section - Condensed -->
+<section class="mt-12">
+<h3 class="text-xs font-bold text-slate-900 mb-6 flex items-center gap-3">
+<span class="material-symbols-outlined text-amber-500 text-sm" data-icon="auto_awesome">auto_awesome</span>
+                Platform Roadmap
+            </h3>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<div class="bg-surface-container-low p-4 card-radius opacity-60 hover:opacity-100 transition-all cursor-not-allowed">
+<span class="material-symbols-outlined text-slate-400 mb-2 text-base" data-icon="gavel">gavel</span>
+<p class="text-[10px] font-bold">Disciplinary Hub</p>
+</div>
+<div class="bg-surface-container-low p-4 card-radius opacity-60 hover:opacity-100 transition-all cursor-not-allowed">
+<span class="material-symbols-outlined text-slate-400 mb-2 text-base" data-icon="payments">payments</span>
+<p class="text-[10px] font-bold">Loan Portal</p>
+</div>
+<div class="bg-surface-container-low p-4 card-radius opacity-60 hover:opacity-100 transition-all cursor-not-allowed">
+<span class="material-symbols-outlined text-slate-400 mb-2 text-base" data-icon="draw">draw</span>
+<p class="text-[10px] font-bold">Digital Sign-off</p>
+</div>
+<div class="bg-surface-container-low p-4 card-radius opacity-60 hover:opacity-100 transition-all cursor-not-allowed">
+<span class="material-symbols-outlined text-slate-400 mb-2 text-base" data-icon="analytics">analytics</span>
+<p class="text-[10px] font-bold">AI Analytics</p>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button -->
+<div class="fixed bottom-8 right-8">
+<button class="signature-gradient text-white w-12 h-12 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition-transform">
+<span class="material-symbols-outlined" data-icon="add" style="font-size: 24px;">add</span>
+</button>
+</div>
+</body></html>

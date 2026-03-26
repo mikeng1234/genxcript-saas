@@ -13,6 +13,7 @@ from app.db_helper import get_db, get_company_id
 from app.styles import (
     inject_css, status_badge, remit_card, GOV_COLORS,
 )
+from app.auth import is_supervisor, get_supervisor_employee_ids, get_role_label
 from backend.deadlines import get_remittance_deadlines, load_holiday_set
 import plotly.express as px
 import pandas as pd
@@ -204,13 +205,19 @@ def _get_deadlines(remittance_status: dict[str, dict | None] | None = None) -> l
     return get_remittance_deadlines(today, holidays, remitted_set)
 
 
-def _count_pending_requests() -> tuple[int, int]:
-    """Return (pending_leave_count, pending_ot_count) for this company."""
+def _count_pending_requests(team_ids: list | None = None) -> tuple[int, int]:
+    """Return (pending_leave_count, pending_ot_count). If team_ids given, scope to those employees."""
     try:
         db  = get_db()
         cid = get_company_id()
-        lr  = db.table("leave_requests").select("id", count="exact").eq("company_id", cid).eq("status", "pending").execute()
-        otr = db.table("overtime_requests").select("id", count="exact").eq("company_id", cid).eq("status", "pending").execute()
+        lr_q  = db.table("leave_requests").select("id", count="exact").eq("company_id", cid).eq("status", "pending")
+        otr_q = db.table("overtime_requests").select("id", count="exact").eq("company_id", cid).eq("status", "pending")
+        if team_ids:
+            str_ids = [str(tid) for tid in team_ids]
+            lr_q  = lr_q.in_("employee_id", str_ids)
+            otr_q = otr_q.in_("employee_id", str_ids)
+        lr  = lr_q.execute()
+        otr = otr_q.execute()
         return (lr.count or 0), (otr.count or 0)
     except Exception:
         return 0, 0
@@ -450,8 +457,416 @@ def _render_bento_row1(next_period, active_count, total_count):
         )
 
 
-def _render_bento_row2(latest_period, history, cal_events):
-    """Row 2: Calendar | Payroll Expenditure."""
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_team_cache(_team_ids_tuple: tuple, company_id: str) -> dict:
+    """Load ALL subordinate data in bulk — cached for 2 min.
+    Returns a dict with employees, profiles, and a name_map for quick lookup.
+    Called once per session refresh; all supervisor tabs read from this cache.
+    """
+    db = get_db()
+    str_ids = [str(tid) for tid in _team_ids_tuple]
+
+    # 1. Full employee records
+    emp_resp = (
+        db.table("employees")
+        .select("id,first_name,last_name,employee_no,position,employment_type,"
+                "date_hired,email,sss_no,philhealth_no,pagibig_no,bir_tin,"
+                "basic_salary,salary_type,is_active")
+        .in_("id", str_ids)
+        .eq("is_active", True)
+        .order("last_name")
+        .execute()
+    )
+    employees = emp_resp.data or []
+
+    # 2. Full profiles
+    prof_resp = (
+        db.table("employee_profiles")
+        .select("employee_id,department,mobile_no,emergency_name,emergency_relationship,"
+                "emergency_phone,date_of_birth,sex,civil_status,present_address_city,"
+                "present_address_province,education_degree,education_school,photo_url")
+        .in_("employee_id", str_ids)
+        .execute()
+    )
+    profiles = {p["employee_id"]: p for p in (prof_resp.data or [])}
+
+    # 3. Name map (used everywhere)
+    name_map = {e["id"]: f'{e["first_name"]} {e["last_name"]}' for e in employees}
+
+    # 4. Department map
+    dept_map = {eid: p.get("department") or "" for eid, p in profiles.items()}
+
+    return {
+        "employees": employees,
+        "profiles": profiles,
+        "name_map": name_map,
+        "dept_map": dept_map,
+        "str_ids": str_ids,
+    }
+
+
+_SV_AVATAR_COLORS = [
+    ("#dbeafe", "#2563eb"), ("#fef3c7", "#d97706"), ("#d1fae5", "#059669"),
+    ("#ede9fe", "#7c3aed"), ("#f1f5f9", "#475569"), ("#fce7f3", "#be185d"),
+    ("#e0e7ff", "#4338ca"), ("#fef9c3", "#a16207"),
+]
+
+
+def _build_201_modals_html(team_cache: dict, company_id: str) -> str:
+    """Pre-render all employee 201 modals as hidden HTML divs.
+    Shown/hidden with JS — zero Streamlit reruns for instant popup.
+    """
+    if not team_cache:
+        return ""
+    employees = team_cache["employees"]
+    profiles = team_cache["profiles"]
+    dept_map = team_cache["dept_map"]
+    str_ids = team_cache["str_ids"]
+
+    modals_html = ""
+    for idx, emp in enumerate(employees):
+        eid = emp.get("id", "")
+        name = f'{emp.get("first_name", "")} {emp.get("last_name", "")}'
+        initials = (emp.get("first_name", "?")[0] + emp.get("last_name", "?")[0]).upper()
+        emp_no = emp.get("employee_no", "")
+        pos = emp.get("position", "")
+        dept = dept_map.get(eid, "")
+        prof = profiles.get(eid, {})
+
+        # Photo URL
+        photo_url = (
+            f"https://dduxctbrjggqkqdlhwpz.supabase.co/storage/v1/object/public/"
+            f"employee-photos/{company_id}/{eid}.jpg"
+        ) if company_id else ""
+        bg_img = f"background-image:url({photo_url});" if photo_url else ""
+
+        # Avatar color
+        bg, fg = _SV_AVATAR_COLORS[idx % len(_SV_AVATAR_COLORS)]
+
+        # Employment type badge
+        emp_type = emp.get("employment_type", "")
+        et_bg = {"regular": "#d4edda", "probationary": "#fef3c7", "contractual": "#dbeafe"}.get(
+            (emp_type or "").lower(), "#f1f5f9")
+        et_fg = {"regular": "#155724", "probationary": "#92400e", "contractual": "#1e40af"}.get(
+            (emp_type or "").lower(), "#475569")
+        et_label = (emp_type or "").capitalize()
+
+        # Personal details
+        city = prof.get("present_address_city") or ""
+        prov = prof.get("present_address_province") or ""
+        loc = f"{city}, {prov}".strip(", ") or "\u2014"
+
+        dash = "\u2014"
+
+        modals_html += (
+            f'<div id="gxp201_{eid}" class="gxp-201-content" style="display:none;">'
+            # Header
+            f'<div class="gxp-201-hdr">'
+            f'<div class="gxp-201-avatar" style="background:{bg};{bg_img}">'
+            f'<span style="color:{fg};">{initials}</span></div>'
+            f'<div>'
+            f'<div class="gxp-201-name">{name}</div>'
+            f'<div class="gxp-201-sub">{emp_no} &middot; {dept} &middot; {pos}</div>'
+            f'<span class="gxp-201-badge" style="background:{et_bg};color:{et_fg};">{et_label}</span>'
+            f'</div></div>'
+            # Divider
+            f'<div class="gxp-201-divider"></div>'
+            # Detail grid
+            f'<div class="gxp-201-grid">'
+            # Employment column
+            f'<div>'
+            f'<div class="gxp-201-section-title">Employment</div>'
+            f'<div class="gxp-201-field">Date Hired: <b>{emp.get("date_hired") or dash}</b></div>'
+            f'<div class="gxp-201-field">Email: <b>{emp.get("email") or dash}</b></div>'
+            f'<div class="gxp-201-field">Mobile: <b>{prof.get("mobile_no") or dash}</b></div>'
+            f'<div class="gxp-201-field">Salary Type: <b>{emp.get("salary_type") or dash}</b></div>'
+            f'</div>'
+            # Personal column
+            f'<div>'
+            f'<div class="gxp-201-section-title">Personal</div>'
+            f'<div class="gxp-201-field">Date of Birth: <b>{prof.get("date_of_birth") or dash}</b></div>'
+            f'<div class="gxp-201-field">Sex: <b>{prof.get("sex") or dash}</b> &middot; Civil Status: <b>{prof.get("civil_status") or dash}</b></div>'
+            f'<div class="gxp-201-field">Location: <b>{loc}</b></div>'
+            f'<div class="gxp-201-field">Education: <b>{prof.get("education_degree") or dash}</b></div>'
+            f'</div>'
+            # Emergency column
+            f'<div>'
+            f'<div class="gxp-201-section-title">Emergency Contact</div>'
+            f'<div class="gxp-201-field">Name: <b>{prof.get("emergency_name") or dash}</b></div>'
+            f'<div class="gxp-201-field">Relationship: <b>{prof.get("emergency_relationship") or dash}</b></div>'
+            f'<div class="gxp-201-field">Phone: <b>{prof.get("emergency_phone") or dash}</b></div>'
+            f'</div>'
+            f'</div>'
+            # Divider
+            f'<div class="gxp-201-divider"></div>'
+            # Government IDs
+            f'<div class="gxp-201-section-title">Government IDs</div>'
+            f'<div class="gxp-201-gov-grid">'
+            f'<div class="gxp-201-field">SSS: <b>{emp.get("sss_no") or dash}</b></div>'
+            f'<div class="gxp-201-field">PhilHealth: <b>{emp.get("philhealth_no") or dash}</b></div>'
+            f'<div class="gxp-201-field">Pag-IBIG: <b>{emp.get("pagibig_no") or dash}</b></div>'
+            f'<div class="gxp-201-field">BIR TIN: <b>{emp.get("bir_tin") or dash}</b></div>'
+            f'</div>'
+            f'</div>'
+        )
+
+    # Overlay container with modal shell + close button
+    html = (
+        f'<div id="gxp201-overlay" class="gxp-201-overlay">'
+        f'<div class="gxp-201-modal" style="position:relative;">'
+        f'<button class="gxp-201-close" id="gxp201-close">&times;</button>'
+        f'<div id="gxp201-body">{modals_html}</div>'
+        f'</div></div>'
+    )
+    return html
+
+
+def _build_201_modal_js() -> str:
+    """JS to open/close the pure HTML 201 modal. No Streamlit rerun."""
+    return """
+    <script>
+    (function(){
+        const pd = window.parent.document;
+
+        // ── Open / Close functions (on parent window so tiles can call them) ──
+        window.parent._gxpOpen201 = function(eid) {
+            pd.querySelectorAll('.gxp-201-content').forEach(d => d.style.display = 'none');
+            var target = pd.getElementById('gxp201_' + eid);
+            if (target) target.style.display = 'block';
+            var ov = pd.getElementById('gxp201-overlay');
+            if (ov) ov.classList.add('gxp-201-open');
+        };
+        window.parent._gxpClose201 = function() {
+            var ov = pd.getElementById('gxp201-overlay');
+            if (ov) ov.classList.remove('gxp-201-open');
+        };
+
+        // ── Close button ──
+        var closeBtn = pd.getElementById('gxp201-close');
+        if (closeBtn) {
+            closeBtn.onclick = function(e) { e.stopPropagation(); window.parent._gxpClose201(); };
+        }
+        // Click overlay background to close
+        var ov = pd.getElementById('gxp201-overlay');
+        if (ov) {
+            ov.addEventListener('click', function(e) {
+                if (e.target === ov) window.parent._gxpClose201();
+            });
+        }
+        // ESC key to close
+        pd.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && window.parent._gxpClose201) window.parent._gxpClose201();
+        });
+
+        // ── Wire clickable elements ──
+        function wireAll() {
+            // Team tiles (Your Team grid)
+            pd.querySelectorAll('.gxp-team-tile[data-emp-id]').forEach(el => {
+                if (el.dataset.gxp201) return;
+                el.dataset.gxp201 = '1';
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', () => {
+                    window.parent._gxpOpen201(el.dataset.empId);
+                });
+            });
+
+            // Swipe action clicks (201 cards)
+            pd.querySelectorAll('.ps-swipe-act[data-ps-action]').forEach(el => {
+                if (el.dataset.gxp201) return;
+                el.dataset.gxp201 = '1';
+                var action = el.getAttribute('data-ps-action');
+                if (action && action.startsWith('view201_')) {
+                    el.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        window.parent._gxpOpen201(action.slice(8));
+                    });
+                }
+            });
+
+            // Hide old hidden buttons (tile201_ and sv201_) if any remain
+            pd.querySelectorAll('[class*="st-key-tile201_"],[class*="st-key-sv201_"]').forEach(el => {
+                el.style.position = 'absolute';
+                el.style.opacity = '0';
+                el.style.pointerEvents = 'none';
+                el.style.height = '0';
+                el.style.overflow = 'hidden';
+            });
+        }
+
+        // Wire immediately, then re-wire after DOM settles (race condition fix)
+        wireAll();
+        setTimeout(wireAll, 300);
+        setTimeout(wireAll, 800);
+
+        // Also watch for new tiles added dynamically
+        var obs = new MutationObserver(function() { wireAll(); });
+        var main = pd.querySelector('[data-testid="stMain"]');
+        if (main) obs.observe(main, {childList: true, subtree: true});
+        // Auto-disconnect after 10s to avoid perf drag
+        setTimeout(function() { obs.disconnect(); }, 10000);
+    })();
+    </script>
+    """
+
+
+def _render_supervisor_row1(team_ids, pending_leave, pending_ot, team_cache: dict | None = None):
+    """Supervisor Row 1: Expanded Team Grid (7/12) | Pending Approvals + mini alerts (5/12)."""
+
+    team_count = len(team_ids)
+
+    col_team, col_right = st.columns([7, 5], gap="medium")
+
+    def _nav(page):
+        st.session_state["_nav_redirect"] = page
+
+    with col_team:
+        _tiles_html = ""
+        try:
+            # Use cached data if available
+            if team_cache:
+                _team_emps = team_cache["employees"]
+                dept_map = team_cache["dept_map"]
+            else:
+                db = get_db()
+                str_ids = [str(tid) for tid in team_ids]
+                team_data = (
+                    db.table("employees")
+                    .select("id,first_name,last_name")
+                    .in_("id", str_ids)
+                    .eq("is_active", True)
+                    .order("last_name")
+                    .execute()
+                )
+                _team_emps = team_data.data or []
+                dept_map = {}
+                if str_ids:
+                    prof_result = (
+                        db.table("employee_profiles")
+                        .select("employee_id,department")
+                        .in_("employee_id", str_ids)
+                        .execute()
+                    )
+                    for p in (prof_result.data or []):
+                        dept_map[p["employee_id"]] = p.get("department") or ""
+            _team_tile_ids = []
+            for idx, m in enumerate(_team_emps):
+                _mid = m.get("id", "")
+                _team_tile_ids.append(_mid)
+                initials = (m.get("first_name", "?")[0] + m.get("last_name", "?")[0]).upper()
+                first = m.get("first_name", "?")
+                dept = dept_map.get(_mid, "")
+                bg, fg = _SV_AVATAR_COLORS[idx % len(_SV_AVATAR_COLORS)]
+                _color_idx = idx % len(_SV_AVATAR_COLORS)
+                _tiles_html += (
+                    f'<div class="gxp-team-tile gxp-tile-c{_color_idx}" data-emp-id="{_mid}" style="aspect-ratio:1;background:#f8f9fa;border-radius:16px;display:flex;flex-direction:column;'
+                    f'align-items:center;justify-content:center;padding:8px;text-align:center;cursor:pointer;">'
+                    f'  <div style="width:40px;height:40px;border-radius:50%;background:{bg};color:{fg};'
+                    f'font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:6px;">{initials}</div>'
+                    f'  <div style="font-size:10px;font-weight:700;color:#191c1d;line-height:1.2;">{first}</div>'
+                    f'  <div style="font-size:8px;color:#9ca3af;margin-top:2px;">{dept}</div>'
+                    f'</div>'
+                )
+            # (Add New tile removed — supervisors manage team via Team Records)
+        except Exception:
+            _tiles_html = '<div style="color:#9ca3af;font-size:11px;grid-column:span 6;">Could not load team.</div>'
+
+        st.markdown(
+            f'<div class="gxp-bento-hero-card" style="{_CARD}min-height:180px;padding:24px;">'
+            f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+            f'    <div style="{_LABEL}margin-bottom:0;">Your Team</div>'
+            f'    <span style="font-size:10px;font-weight:700;color:#2563eb;background:#eff6ff;'
+            f'padding:4px 12px;border-radius:9999px;">{team_count} Members Total</span>'
+            f'  </div>'
+            f'  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;">{_tiles_html}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    with col_right:
+        # Pending Approvals + Reminders/Alerts in a single flex column
+        total_pending = pending_leave + pending_ot
+        if total_pending > 0:
+            items_html = ""
+            if pending_leave:
+                items_html += (
+                    f'<div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:12px;background:#f3f4f5;cursor:pointer;">'
+                    f'  <span style="font-size:16px">🏖</span>'
+                    f'  <div>'
+                    f'    <div style="font-size:10px;font-weight:700;color:#191c1d">{pending_leave} Leave{"s" if pending_leave > 1 else ""}</div>'
+                    f'    <div style="font-size:8px;color:#9ca3af">Awaiting approval</div>'
+                    f'  </div>'
+                    f'</div>'
+                )
+            if pending_ot:
+                items_html += (
+                    f'<div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:12px;background:#f3f4f5;cursor:pointer;">'
+                    f'  <span style="font-size:16px">⏰</span>'
+                    f'  <div>'
+                    f'    <div style="font-size:10px;font-weight:700;color:#191c1d">{pending_ot} OT Req</div>'
+                    f'    <div style="font-size:8px;color:#9ca3af">Awaiting approval</div>'
+                    f'  </div>'
+                    f'</div>'
+                )
+            approvals_html = (
+                f'<div style="{_CARD}flex:1;display:flex;flex-direction:column;justify-content:space-between;">'
+                f'  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+                f'    <div style="{_LABEL}margin-bottom:0;">Pending Approvals</div>'
+                f'    <span style="background:#febf0d;color:#000;font-size:10px;font-weight:900;'
+                f'padding:2px 8px;border-radius:9999px;">{total_pending}</span>'
+                f'  </div>'
+                f'  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">{items_html}</div>'
+                f'</div>'
+            )
+        else:
+            approvals_html = (
+                f'<div style="{_CARD}flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">'
+                f'  <div style="{_LABEL}align-self:flex-start;">Pending Approvals</div>'
+                f'  <div style="font-size:28px;margin-bottom:4px">✅</div>'
+                f'  <div style="font-size:12px;font-weight:700;color:#191c1d">All Clear</div>'
+                f'  <div style="font-size:10px;color:#9ca3af;margin-top:2px">No pending requests</div>'
+                f'</div>'
+            )
+
+        alerts_html = (
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1;">'
+            '  <div style="background:#f3f4f5;padding:12px 16px;border-radius:16px;position:relative;overflow:hidden;'
+            'display:flex;align-items:center;gap:10px;">'
+            '    <div style="position:absolute;top:0;right:0;width:3px;height:100%;background:#89fa9b;border-radius:0 4px 4px 0;"></div>'
+            '    <span class="material-symbols-outlined" style="font-size:18px;color:#059669;">task_alt</span>'
+            '    <div>'
+            '      <div style="font-size:10px;font-weight:700;color:#191c1d">Reminders</div>'
+            '      <div style="font-size:8px;color:#727784;margin-top:1px">All caught up</div>'
+            '    </div>'
+            '  </div>'
+            '  <div style="background:#f3f4f5;padding:12px 16px;border-radius:16px;position:relative;overflow:hidden;'
+            'display:flex;align-items:center;gap:10px;">'
+            '    <div style="position:absolute;top:0;right:0;width:3px;height:100%;background:#ba1a1a;border-radius:0 4px 4px 0;"></div>'
+            '    <span class="material-symbols-outlined" style="font-size:18px;color:#ba1a1a;">notification_important</span>'
+            '    <div>'
+            '      <div style="font-size:10px;font-weight:700;color:#191c1d">Alerts</div>'
+            '      <div style="font-size:8px;color:#727784;margin-top:1px">No issues</div>'
+            '    </div>'
+            '  </div>'
+            '</div>'
+        )
+
+        st.markdown(
+            f'<div style="display:flex;flex-direction:column;gap:10px;height:100%;">'
+            f'  {approvals_html}'
+            f'  {alerts_html}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _render_bento_row2(latest_period, history, cal_events,
+                       latest_entries: list | None = None,
+                       name_map: dict | None = None,
+                       team_scope: bool = False):
+    """Row 2: Calendar | Payroll Expenditure.
+    When team_scope=True, derive headline amount from latest_entries (team only)
+    instead of company-wide history.
+    """
     bar_vals = [int(r["gross_pay"] * 100) for r in history[-6:]] if history else []
     max_val  = max(bar_vals) if bar_vals else 1
 
@@ -465,10 +880,26 @@ def _render_bento_row2(latest_period, history, cal_events):
             st.rerun()
 
     with col_exp:
-        if latest_period and bar_vals:
+        # When team_scope, derive headline from latest_entries (subordinates only)
+        _has_data = False
+        if team_scope and latest_entries:
+            latest_gross = sum(e.get("gross_pay", 0) for e in latest_entries)
+            _has_data = bool(latest_period and latest_gross)
+            # No trend comparison for team scope (no historical per-team data)
+            trend_s = f'<span style="color:#6b7280;font-size:12px">{len(latest_entries)} team member{"s" if len(latest_entries) != 1 else ""}</span>'
+            # Build mini bars from entries (per-employee share)
+            _sorted_for_bars = sorted(latest_entries, key=lambda e: e.get("gross_pay", 0))
+            _bar_max = max(e.get("gross_pay", 0) for e in latest_entries) if latest_entries else 1
+            bars_html = ""
+            for i, ent in enumerate(_sorted_for_bars):
+                _g = ent.get("gross_pay", 0)
+                h = max(int((_g / _bar_max) * 100), 8) if _bar_max else 8
+                bg = "#005bc1" if i == len(_sorted_for_bars) - 1 else "#e5e7eb"
+                bars_html += f'<div style="flex:1;border-radius:4px 4px 0 0;background:{bg};height:{h}%;min-height:4px"></div>'
+        elif latest_period and bar_vals:
             latest_gross = bar_vals[-1]
-            prev_gross   = bar_vals[-2] if len(bar_vals) >= 2 else 0
-            gross_fmt    = _fmt(latest_gross)
+            _has_data = True
+            prev_gross = bar_vals[-2] if len(bar_vals) >= 2 else 0
             if prev_gross:
                 pct = (latest_gross - prev_gross) / prev_gross * 100
                 if pct > 0.5:
@@ -479,31 +910,145 @@ def _render_bento_row2(latest_period, history, cal_events):
                     trend_s = '<span style="color:#6b7280;font-size:12px">\u2014 flat</span>'
             else:
                 trend_s = '<span style="color:#6b7280;font-size:12px">First pay run</span>'
-
             bars_html = ""
             for i, v in enumerate(bar_vals):
                 h   = max(int((v / max_val) * 100), 4)
                 bg  = "#005bc1" if i == len(bar_vals) - 1 else "#e5e7eb"
                 bars_html += f'<div style="flex:1;border-radius:4px 4px 0 0;background:{bg};height:{h}%;min-height:4px"></div>'
+        else:
+            latest_gross = 0
+            trend_s = ""
+            bars_html = ""
 
+        if _has_data:
             period_lbl = f"{latest_period['period_start']} \u2192 {latest_period['period_end']}"
+            _scope_label = "Team Payroll" if team_scope else "Payroll Expenditure"
+
+            # Hint text for clickable card
+            _click_hint = ""
+            if latest_entries:
+                _click_hint = (
+                    '<div style="font-size:9px;color:#2563eb;margin-top:8px;font-weight:600;'
+                    'cursor:pointer;letter-spacing:0.02em;" id="gxp-exp-hint">'
+                    'Click to view breakdown per employee →</div>'
+                )
+
             st.markdown(
-                f'<div class="gxp-bento-hero-card" style="{_CARD}">'
-                f'  <div style="{_MLBL}">Payroll Expenditure</div>'
+                f'<div class="gxp-bento-hero-card gxp-exp-clickable" style="{_CARD}cursor:pointer;" id="gxp-exp-card">'
+                f'  <div style="{_MLBL}">{_scope_label}</div>'
                 f'  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
                 f'    <span class="gxp-count-money" data-to="{latest_gross}" data-cid="{get_company_id()[:8]}" style="font-size:1.6rem;font-weight:800;color:#191c1d;letter-spacing:-1px">&#8369;{latest_gross / 100:,.2f}</span>'
                 f'    {trend_s}'
                 f'  </div>'
                 f'  <div style="font-size:10px;color:#9ca3af;margin-top:4px">{period_lbl}</div>'
                 f'  <div style="display:flex;align-items:flex-end;gap:5px;height:60px;margin-top:14px">{bars_html}</div>'
+                f'  {_click_hint}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+            # ── Build per-employee breakdown modal (pure HTML/JS — instant) ──
+            if latest_entries and name_map:
+                _sorted_entries = sorted(latest_entries, key=lambda e: e.get("gross_pay", 0), reverse=True)
+                _total_gross = sum(e.get("gross_pay", 0) for e in _sorted_entries)
+                _total_net = sum(e.get("net_pay", 0) for e in _sorted_entries)
+                _total_deductions = _total_gross - _total_net
+
+                _rows_html = ""
+                for idx, ent in enumerate(_sorted_entries):
+                    _eid = ent.get("employee_id", "")
+                    _ename = name_map.get(_eid, "Unknown")
+                    _gross = ent.get("gross_pay", 0)
+                    _net = ent.get("net_pay", 0)
+                    _ded = _gross - _net
+                    _pct = (_gross / _total_gross * 100) if _total_gross else 0
+                    _bar_w = max(int(_pct), 2)
+                    _bg_row = "#f8fafc" if idx % 2 == 0 else "#fff"
+                    _rows_html += (
+                        f'<tr style="background:{_bg_row};">'
+                        f'<td style="padding:10px 14px;font-size:13px;font-weight:600;color:#191c1d;white-space:nowrap;">{_ename}</td>'
+                        f'<td style="padding:10px 14px;font-size:13px;color:#191c1d;text-align:right;font-weight:700;">₱{_gross/100:,.2f}</td>'
+                        f'<td style="padding:10px 14px;font-size:13px;color:#727784;text-align:right;">₱{_ded/100:,.2f}</td>'
+                        f'<td style="padding:10px 14px;font-size:13px;color:#059669;text-align:right;font-weight:700;">₱{_net/100:,.2f}</td>'
+                        f'<td style="padding:10px 14px;width:120px;">'
+                        f'  <div style="background:#e5e7eb;border-radius:4px;height:8px;overflow:hidden;">'
+                        f'    <div style="background:#2563eb;height:100%;width:{_bar_w}%;border-radius:4px;"></div>'
+                        f'  </div>'
+                        f'  <div style="font-size:9px;color:#9ca3af;margin-top:2px;text-align:right;">{_pct:.1f}%</div>'
+                        f'</td>'
+                        f'</tr>'
+                    )
+
+                _breakdown_html = (
+                    f'<div id="gxp-exp-overlay" class="gxp-201-overlay">'
+                    f'<div class="gxp-201-modal" style="position:relative;max-width:1000px;">'
+                    f'<button class="gxp-201-close" id="gxp-exp-close">&times;</button>'
+                    f'<div style="margin-bottom:20px;">'
+                    f'  <div style="font-size:20px;font-weight:800;color:#191c1d;">Payroll Expenditure Breakdown</div>'
+                    f'  <div style="font-size:12px;color:#727784;margin-top:4px;">{period_lbl} · {len(_sorted_entries)} employees</div>'
+                    f'</div>'
+                    # Summary cards
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">'
+                    f'  <div style="background:#eff6ff;border-radius:12px;padding:14px 18px;">'
+                    f'    <div style="font-size:10px;font-weight:700;color:#2563eb;text-transform:uppercase;letter-spacing:0.04em;">Total Gross</div>'
+                    f'    <div style="font-size:20px;font-weight:800;color:#191c1d;margin-top:4px;">₱{_total_gross/100:,.2f}</div>'
+                    f'  </div>'
+                    f'  <div style="background:#fef3c7;border-radius:12px;padding:14px 18px;">'
+                    f'    <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.04em;">Total Deductions</div>'
+                    f'    <div style="font-size:20px;font-weight:800;color:#191c1d;margin-top:4px;">₱{_total_deductions/100:,.2f}</div>'
+                    f'  </div>'
+                    f'  <div style="background:#d1fae5;border-radius:12px;padding:14px 18px;">'
+                    f'    <div style="font-size:10px;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:0.04em;">Total Net Pay</div>'
+                    f'    <div style="font-size:20px;font-weight:800;color:#191c1d;margin-top:4px;">₱{_total_net/100:,.2f}</div>'
+                    f'  </div>'
+                    f'</div>'
+                    # Table
+                    f'<div style="overflow-x:auto;border-radius:12px;border:1px solid #e5e7eb;">'
+                    f'<table style="width:100%;border-collapse:collapse;">'
+                    f'<thead><tr style="background:#f1f5f9;">'
+                    f'  <th style="padding:10px 14px;font-size:11px;font-weight:800;color:#475569;text-align:left;text-transform:uppercase;letter-spacing:0.04em;">Employee</th>'
+                    f'  <th style="padding:10px 14px;font-size:11px;font-weight:800;color:#475569;text-align:right;text-transform:uppercase;letter-spacing:0.04em;">Gross</th>'
+                    f'  <th style="padding:10px 14px;font-size:11px;font-weight:800;color:#475569;text-align:right;text-transform:uppercase;letter-spacing:0.04em;">Deductions</th>'
+                    f'  <th style="padding:10px 14px;font-size:11px;font-weight:800;color:#475569;text-align:right;text-transform:uppercase;letter-spacing:0.04em;">Net Pay</th>'
+                    f'  <th style="padding:10px 14px;font-size:11px;font-weight:800;color:#475569;text-align:right;text-transform:uppercase;letter-spacing:0.04em;">Share</th>'
+                    f'</tr></thead>'
+                    f'<tbody>{_rows_html}</tbody>'
+                    f'<tfoot><tr style="background:#f1f5f9;border-top:2px solid #e5e7eb;">'
+                    f'  <td style="padding:10px 14px;font-size:13px;font-weight:800;color:#191c1d;">Total</td>'
+                    f'  <td style="padding:10px 14px;font-size:13px;font-weight:800;color:#191c1d;text-align:right;">₱{_total_gross/100:,.2f}</td>'
+                    f'  <td style="padding:10px 14px;font-size:13px;font-weight:800;color:#727784;text-align:right;">₱{_total_deductions/100:,.2f}</td>'
+                    f'  <td style="padding:10px 14px;font-size:13px;font-weight:800;color:#059669;text-align:right;">₱{_total_net/100:,.2f}</td>'
+                    f'  <td style="padding:10px 14px;font-size:13px;font-weight:800;color:#191c1d;text-align:right;">100%</td>'
+                    f'</tr></tfoot>'
+                    f'</table></div>'
+                    f'</div></div>'
+                )
+                st.markdown(_breakdown_html, unsafe_allow_html=True)
+
+                # JS to wire click open/close
+                _stc.html("""<script>
+                (function(){
+                    var pd=window.parent.document;
+                    var card=pd.querySelector('.gxp-exp-clickable');
+                    var ov=pd.getElementById('gxp-exp-overlay');
+                    var closeBtn=pd.getElementById('gxp-exp-close');
+                    if(card&&ov){
+                        card.addEventListener('click',function(){ov.classList.add('gxp-201-open');});
+                        if(closeBtn) closeBtn.onclick=function(e){e.stopPropagation();ov.classList.remove('gxp-201-open');};
+                        ov.addEventListener('click',function(e){if(e.target===ov)ov.classList.remove('gxp-201-open');});
+                        pd.addEventListener('keydown',function(e){if(e.key==='Escape')ov.classList.remove('gxp-201-open');});
+                    }
+                })();
+                </script>""", height=0)
+
         else:
+            _no_data_label = "Team Payroll" if team_scope else "Payroll Expenditure"
+            _no_data_msg = ("No payroll data for your team yet." if team_scope
+                            else "No finalized pay periods yet.<br>Run your first payroll to see trends.")
             st.markdown(
                 f'<div class="gxp-bento-hero-card" style="{_CARD}">'
-                f'  <div style="{_MLBL}">Payroll Expenditure</div>'
-                f'  <div style="color:#9ca3af;font-size:12px;margin-top:8px">No finalized pay periods yet.<br>Run your first payroll to see trends.</div>'
+                f'  <div style="{_MLBL}">{_no_data_label}</div>'
+                f'  <div style="color:#9ca3af;font-size:12px;margin-top:8px">{_no_data_msg}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -956,6 +1501,33 @@ def _dlg_gov_reports() -> None:
 @st.dialog("Employees", width="large")
 def _dlg_employees() -> None:
     """Full Employees page embedded in a dialog (all 3 tabs)."""
+    # If Edit was clicked inside this dialog, we can't nest another dialog.
+    # Instead: show a brief redirect, then use JS to navigate to the Employees page.
+    if st.session_state.get("editing_id"):
+        _eid = st.session_state["editing_id"]
+        st.info("Opening employee edit form...")
+        import streamlit.components.v1 as _dlg_stc
+        _dlg_stc.html("""<script>
+        (function(){
+            var pd = window.parent.document;
+            // Close this dialog by pressing ESC
+            pd.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape',code:'Escape',bubbles:true}));
+            // Click the Employees nav button after a short delay
+            setTimeout(function(){
+                var sb = pd.querySelector('[data-testid="stSidebar"]');
+                if (!sb) return;
+                var btns = sb.querySelectorAll('[data-testid="stButton"] button');
+                for (var i = 0; i < btns.length; i++) {
+                    if (btns[i].textContent.indexOf('Employees') !== -1) {
+                        btns[i].click();
+                        return;
+                    }
+                }
+            }, 200);
+        })();
+        </script>""", height=0)
+        return
+
     from app.pages._employees import (
         _render_employees_tab,
         _render_approvals_tab,
@@ -1559,8 +2131,10 @@ def _render_mini_calendar(events: dict):
     month_name = today.strftime("%B %Y")
 
     # Build grid: list of weeks, each week = list of (day_number_or_0)
-    cal_sun = _cal.Calendar(firstweekday=6)  # Sunday first
-    weeks = cal_sun.monthdayscalendar(year, month)
+    _week_pref = st.session_state.get("gxp_week_start", "Sunday")
+    _first_day = 6 if _week_pref == "Sunday" else 0
+    cal_obj = _cal.Calendar(firstweekday=_first_day)
+    weeks = cal_obj.monthdayscalendar(year, month)
 
     events_json = json.dumps(events)
     today_iso = today.isoformat()
@@ -1637,8 +2211,7 @@ def _render_mini_calendar(events: dict):
         <span class="cal-month">{month_name}</span>
       </div>
       <div class="cal-weekdays">
-        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span>
-        <span>Th</span><span>Fr</span><span>Sa</span>
+        {"<span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>" if _week_pref == "Sunday" else "<span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>"}
       </div>
       <div class="cal-grid" id="calGrid"></div>
     </div>
@@ -1698,7 +2271,849 @@ def _render_mini_calendar(events: dict):
     }})();
     </script>
     """
-    _stc.html(html, height=240, scrolling=False)
+    _stc.html(html, height=216, scrolling=False)
+
+
+# ============================================================
+# Supervisor Dashboard Sections (ADP Manager Tool)
+# ============================================================
+
+_COMING_SOON_CSS = (
+    "background:linear-gradient(135deg,#f8fafc,#f1f5f9);border:1px dashed #cbd5e1;"
+    "border-radius:16px;padding:24px;min-height:140px;display:flex;flex-direction:column;"
+    "align-items:center;justify-content:center;text-align:center;opacity:.75;"
+)
+
+
+def _sv_load_dtr_exceptions(team_ids: list, team_cache: dict | None = None) -> list[dict]:
+    """Load team members with missing time-in/out for today or recent workdays."""
+    from datetime import date as _d, timedelta
+    try:
+        db = get_db()
+        cid = get_company_id()
+        today = _d.today()
+        check_dates = []
+        d = today
+        for _ in range(5):
+            if d.weekday() < 6:
+                check_dates.append(str(d))
+            d -= timedelta(days=1)
+            if len(check_dates) >= 3:
+                break
+
+        str_ids = [str(tid) for tid in team_ids]
+        logs = (
+            db.table("time_logs")
+            .select("employee_id,work_date,time_in,time_out,status,late_minutes,nsd_hours")
+            .eq("company_id", cid)
+            .in_("employee_id", str_ids)
+            .in_("work_date", check_dates)
+            .execute()
+        )
+        # Use cache for employee names if available
+        if team_cache:
+            emp_map = {e["id"]: e for e in team_cache["employees"]}
+        else:
+            emps = (
+                db.table("employees")
+                .select("id,first_name,last_name,position")
+                .in_("id", str_ids)
+                .eq("is_active", True)
+                .execute()
+            )
+            emp_map = {e["id"]: e for e in (emps.data or [])}
+
+        exceptions = []
+        for log in (logs.data or []):
+            issues = []
+            if not log.get("time_in"):
+                issues.append("No Time In")
+            if not log.get("time_out") and log.get("time_in"):
+                issues.append("No Time Out")
+            if (log.get("late_minutes") or 0) >= 15:
+                issues.append(f"Late {log['late_minutes']}min")
+            if (log.get("nsd_hours") or 0) > 0:
+                issues.append(f"NSD {log['nsd_hours']:.1f}h")
+            if issues:
+                emp = emp_map.get(log["employee_id"], {})
+                exceptions.append({
+                    "name": f'{emp.get("first_name", "?")} {emp.get("last_name", "")}',
+                    "position": emp.get("position", ""),
+                    "date": log["work_date"],
+                    "issues": issues,
+                    "status": log.get("status", ""),
+                })
+        # Sort by date desc, then name
+        exceptions.sort(key=lambda x: (x["date"], x["name"]), reverse=True)
+        return exceptions[:12]
+    except Exception:
+        return []
+
+
+def _sv_load_holiday_workers(team_ids: list, team_cache: dict | None = None) -> list[dict]:
+    """Load team members who worked on recent holidays."""
+    from datetime import date as _d, timedelta
+    try:
+        db = get_db()
+        cid = get_company_id()
+        today = _d.today()
+        month_ago = today - timedelta(days=30)
+
+        # Get recent holidays
+        holidays = (
+            db.table("holidays")
+            .select("date,observed_date,name,type")
+            .gte("date", str(month_ago))
+            .lte("date", str(today))
+            .execute()
+        )
+        if not holidays.data:
+            return []
+
+        hol_dates = {}
+        for h in holidays.data:
+            d = h.get("observed_date") or h["date"]
+            hol_dates[d] = {"name": h["name"], "type": h["type"]}
+
+        if not hol_dates:
+            return []
+
+        str_ids = [str(tid) for tid in team_ids]
+        logs = (
+            db.table("time_logs")
+            .select("employee_id,work_date,gross_hours,ot_hours")
+            .eq("company_id", cid)
+            .in_("employee_id", str_ids)
+            .in_("work_date", list(hol_dates.keys()))
+            .not_.is_("time_in", "null")
+            .execute()
+        )
+        if not logs.data:
+            return []
+
+        if team_cache:
+            emp_map = {e["id"]: e for e in team_cache["employees"]}
+        else:
+            emps = (
+                db.table("employees")
+                .select("id,first_name,last_name")
+                .in_("id", str_ids)
+                .execute()
+            )
+            emp_map = {e["id"]: e for e in (emps.data or [])}
+
+        result = []
+        for log in logs.data:
+            hol = hol_dates.get(log["work_date"], {})
+            emp = emp_map.get(log["employee_id"], {})
+            result.append({
+                "name": f'{emp.get("first_name", "?")} {emp.get("last_name", "")}',
+                "date": log["work_date"],
+                "holiday": hol.get("name", ""),
+                "type": hol.get("type", ""),
+                "hours": log.get("gross_hours", 0),
+            })
+        return result
+    except Exception:
+        return []
+
+
+def _sv_load_ot_requests(team_ids: list, team_cache: dict | None = None) -> list[dict]:
+    """Load pending + recent OT requests from team."""
+    try:
+        db = get_db()
+        cid = get_company_id()
+        str_ids = [str(tid) for tid in team_ids]
+        result = (
+            db.table("overtime_requests")
+            .select("id,employee_id,ot_date,start_time,end_time,hours,reason,status,created_at")
+            .eq("company_id", cid)
+            .in_("employee_id", str_ids)
+            .order("created_at", desc=True)
+            .limit(15)
+            .execute()
+        )
+        if team_cache:
+            emp_map = {e["id"]: e for e in team_cache["employees"]}
+        else:
+            emps = (
+                db.table("employees")
+                .select("id,first_name,last_name")
+                .in_("id", str_ids)
+                .execute()
+            )
+            emp_map = {e["id"]: e for e in (emps.data or [])}
+        rows = []
+        for r in (result.data or []):
+            emp = emp_map.get(r["employee_id"], {})
+            rows.append({
+                **r,
+                "name": f'{emp.get("first_name", "?")} {emp.get("last_name", "")}',
+            })
+        return rows
+    except Exception:
+        return []
+
+
+def _sv_load_leave_overview(team_ids: list, team_cache: dict | None = None) -> list[dict]:
+    """Load team leave balances and pending requests."""
+    from datetime import date as _d
+    try:
+        db = get_db()
+        cid = get_company_id()
+        year = _d.today().year
+        str_ids = [str(tid) for tid in team_ids]
+
+        # Get leave balances
+        balances = (
+            db.table("leave_balance")
+            .select("employee_id,leave_type,opening_balance")
+            .eq("company_id", cid)
+            .eq("year", year)
+            .in_("employee_id", str_ids)
+            .execute()
+        )
+        # Get approved leave days this year
+        approved = (
+            db.table("leave_requests")
+            .select("employee_id,leave_type,days")
+            .eq("company_id", cid)
+            .eq("status", "approved")
+            .in_("employee_id", str_ids)
+            .gte("start_date", f"{year}-01-01")
+            .execute()
+        )
+        # Get pending leave requests
+        pending = (
+            db.table("leave_requests")
+            .select("id,employee_id,leave_type,start_date,end_date,days,reason,status,created_at")
+            .eq("company_id", cid)
+            .eq("status", "pending")
+            .in_("employee_id", str_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        # Get special leaves
+        special = (
+            db.table("special_leave_requests")
+            .select("employee_id,leave_type,days,status,start_date,end_date")
+            .eq("company_id", cid)
+            .in_("employee_id", str_ids)
+            .gte("start_date", f"{year}-01-01")
+            .execute()
+        )
+
+        if team_cache:
+            emp_map = {e["id"]: e for e in team_cache["employees"]}
+        else:
+            emps = (
+                db.table("employees")
+                .select("id,first_name,last_name")
+                .in_("id", str_ids)
+                .eq("is_active", True)
+                .execute()
+            )
+            emp_map = {e["id"]: e for e in (emps.data or [])}
+
+        # Build per-employee balance summary
+        bal_map = {}  # emp_id -> {VL: {opening, used}, SL: ...}
+        for b in (balances.data or []):
+            eid = b["employee_id"]
+            lt = b["leave_type"]
+            bal_map.setdefault(eid, {}).setdefault(lt, {"opening": 0, "used": 0})
+            bal_map[eid][lt]["opening"] = float(b.get("opening_balance") or 0)
+        for a in (approved.data or []):
+            eid = a["employee_id"]
+            lt = a["leave_type"]
+            bal_map.setdefault(eid, {}).setdefault(lt, {"opening": 0, "used": 0})
+            bal_map[eid][lt]["used"] += float(a.get("days") or 0)
+
+        return {
+            "balances": bal_map,
+            "emp_map": emp_map,
+            "pending": pending.data or [],
+            "special": special.data or [],
+        }
+    except Exception:
+        return {"balances": {}, "emp_map": {}, "pending": [], "special": []}
+
+
+def _sv_load_statutory_overview(team_ids: list, team_cache: dict | None = None) -> list[dict]:
+    """Load latest payroll statutory deductions for team (read-only)."""
+    try:
+        db = get_db()
+        cid = get_company_id()
+        str_ids = [str(tid) for tid in team_ids]
+
+        periods = (
+            db.table("pay_periods")
+            .select("id,period_start,period_end,status")
+            .eq("company_id", cid)
+            .in_("status", ["finalized", "paid"])
+            .order("period_end", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not periods.data:
+            return {"entries": [], "period": None}
+
+        period = periods.data[0]
+        entries = (
+            db.table("payroll_entries")
+            .select("employee_id,basic_pay,sss_employee,sss_employer,philhealth_employee,philhealth_employer,pagibig_employee,pagibig_employer,withholding_tax")
+            .eq("pay_period_id", period["id"])
+            .in_("employee_id", str_ids)
+            .execute()
+        )
+        if team_cache:
+            emp_map = {e["id"]: e for e in team_cache["employees"]}
+        else:
+            emps = (
+                db.table("employees")
+                .select("id,first_name,last_name")
+                .in_("id", str_ids)
+                .execute()
+            )
+            emp_map = {e["id"]: e for e in (emps.data or [])}
+
+        result = []
+        for e in (entries.data or []):
+            emp = emp_map.get(e["employee_id"], {})
+            result.append({
+                "name": f'{emp.get("first_name", "?")} {emp.get("last_name", "")}',
+                "sss_ee": e.get("sss_employee", 0),
+                "sss_er": e.get("sss_employer", 0),
+                "ph_ee": e.get("philhealth_employee", 0),
+                "ph_er": e.get("philhealth_employer", 0),
+                "pi_ee": e.get("pagibig_employee", 0),
+                "pi_er": e.get("pagibig_employer", 0),
+                "tax": e.get("withholding_tax", 0),
+            })
+        result.sort(key=lambda x: x["name"])
+        return {"entries": result, "period": period}
+    except Exception:
+        return {"entries": [], "period": None}
+
+
+def _render_supervisor_sections(team_ids: list, pending_leave: int = 0, pending_ot: int = 0,
+                                team_cache: dict | None = None,
+                                latest_period: dict | None = None,
+                                history: list | None = None,
+                                cal_events: dict | None = None,
+                                latest_entries: list | None = None,
+                                name_map: dict | None = None):
+    """Render the full ADP-style supervisor management tool below the bento grid.
+    Design patterned after fromstitch/12_supervisor_dashboard.html (Tactile Sanctuary).
+    """
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+
+    # ── Shadow-soft card style (no 1px borders — Stitch rule) ──
+    _SV_CARD = ("background:#ffffff;border-radius:16px;padding:20px;"
+                "box-shadow:0 20px 40px rgba(45,51,53,0.06);")
+    _SV_CARD_FLUSH = ("background:#ffffff;border-radius:16px;overflow:hidden;"
+                      "box-shadow:0 20px 40px rgba(45,51,53,0.06);")
+
+    # ── Tab bar (5 tabs — Dashboard first, then Stitch v2 layout) ──
+    tabs = st.tabs([
+        "📊 Dashboard",
+        "🕐 Timekeeping",
+        "📁 Team Records",
+        "🏖 Benefits",
+        "🔜 More",
+    ])
+
+    # ────────────────────────────────────────────────
+    # TAB 0: Dashboard (bento: Your Team + Pending Approvals + Alerts + Row 2)
+    # ────────────────────────────────────────────────
+    with tabs[0]:
+        _render_supervisor_row1(team_ids, pending_leave, pending_ot, team_cache=team_cache)
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        _render_bento_row2(latest_period, history or [], cal_events or {},
+                           latest_entries=latest_entries, name_map=name_map,
+                           team_scope=True)
+
+    # ────────────────────────────────────────────────
+    # TAB 1: Timekeeping & DTR (Stitch pattern)
+    # ────────────────────────────────────────────────
+    with tabs[1]:
+        col_dtr, col_ot = st.columns(2, gap="large")
+
+        with col_dtr:
+            # DTR Exceptions — shadow-soft cards with initials avatars
+            st.markdown(
+                '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
+                '  <div style="font-size:14px;font-weight:700;color:#191c1d;">DTR Exceptions</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            exceptions = _sv_load_dtr_exceptions(team_ids, team_cache=team_cache)
+            if exceptions:
+                for idx, exc in enumerate(exceptions):
+                    initials = "".join(w[0] for w in exc["name"].split()[:2]).upper()
+                    bg, fg = _SV_AVATAR_COLORS[idx % len(_SV_AVATAR_COLORS)]
+                    issue_pills = " ".join(
+                        f'<span style="background:{"#ffdad6" if "No" in i else ("#d8e2ff" if "NSD" in i else "#ebeef0")};'
+                        f'color:{"#93000a" if "No" in i else ("#004494" if "NSD" in i else "#424753")};'
+                        f'font-size:9px;font-weight:700;padding:3px 10px;border-radius:9999px;text-transform:uppercase;">{i}</span>'
+                        for i in exc["issues"]
+                    )
+                    st.markdown(
+                        f'<div style="{_SV_CARD}margin-bottom:8px;padding:16px 20px;">'
+                        f'  <div style="display:flex;align-items:center;justify-content:space-between;">'
+                        f'    <div style="display:flex;align-items:center;gap:14px;">'
+                        f'      <div style="width:40px;height:40px;border-radius:50%;background:{bg};color:{fg};'
+                        f'font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">{initials}</div>'
+                        f'      <div>'
+                        f'        <div style="font-size:12px;font-weight:700;color:#191c1d">{exc["name"]}</div>'
+                        f'        <div style="font-size:10px;color:#727784;margin-top:1px">{exc["date"]}</div>'
+                        f'      </div>'
+                        f'    </div>'
+                        f'    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">{issue_pills}</div>'
+                        f'  </div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.markdown(
+                    f'<div style="{_SV_CARD}text-align:center;padding:28px;">'
+                    '  <div style="font-size:24px;margin-bottom:6px">✅</div>'
+                    '  <div style="font-size:12px;font-weight:700;color:#005320">No DTR Exceptions</div>'
+                    '  <div style="font-size:10px;color:#727784;margin-top:2px">All team members have complete logs</div>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+
+        with col_ot:
+            # OT Authorization — amber-tinted featured card (Stitch pattern)
+            ot_requests = _sv_load_ot_requests(team_ids, team_cache=team_cache)
+            pending_ots = [r for r in ot_requests if r["status"] == "pending"]
+            recent_ots = [r for r in ot_requests if r["status"] != "pending"][:6]
+
+            st.markdown(
+                f'<div style="background:rgba(251,188,5,0.08);border-radius:16px;padding:24px;position:relative;overflow:hidden;margin-bottom:16px;">'
+                f'  <div style="position:absolute;right:16px;top:16px;opacity:0.15;font-size:3rem;">⏰</div>'
+                f'  <div style="font-size:10px;font-weight:900;color:#000;text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;">OT Authorization</div>'
+                f'  <div style="display:flex;align-items:center;gap:24px;">'
+                f'    <div>'
+                f'      <div style="font-size:2rem;font-weight:900;color:#000;line-height:1;">{len(pending_ots)}</div>'
+                f'      <div style="font-size:10px;font-weight:700;color:rgba(0,0,0,.55);text-transform:uppercase;margin-top:2px;">Pending Review</div>'
+                f'    </div>'
+                f'  </div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            if pending_ots:
+                for ot in pending_ots:
+                    st.markdown(
+                        f'<div style="{_SV_CARD}margin-bottom:8px;padding:14px 20px;">'
+                        f'  <div style="display:flex;justify-content:space-between;align-items:center;">'
+                        f'    <span style="font-size:12px;font-weight:700;color:#191c1d">{ot["name"]}</span>'
+                        f'    <span style="font-size:11px;font-weight:800;color:#d97706">{ot.get("hours", 0):.1f}h</span>'
+                        f'  </div>'
+                        f'  <div style="font-size:10px;color:#727784;margin-top:3px">'
+                        f'    {ot["ot_date"]} \u2022 {ot.get("start_time", "")[:5]}\u2013{ot.get("end_time", "")[:5]}'
+                        f'  </div>'
+                        f'  <div style="font-size:10px;color:#9ca3af;margin-top:2px;font-style:italic">{ot.get("reason", "")[:60]}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            # Holiday Pay Validator — rate reference cards (Stitch pattern)
+            st.markdown(
+                '<div style="background:#f3f4f5;border-radius:16px;padding:20px;margin-top:16px;">'
+                '  <div style="font-size:10px;font-weight:900;color:#191c1d;text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;">Holiday Pay Validator</div>'
+                '  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">',
+                unsafe_allow_html=True,
+            )
+            hol_workers = _sv_load_holiday_workers(team_ids, team_cache=team_cache)
+            _hw_count_reg = sum(1 for h in hol_workers if "regular" in h.get("type", "").lower())
+            _hw_count_sp = len(hol_workers) - _hw_count_reg
+            st.markdown(
+                f'    <div style="background:#fff;padding:14px;border-radius:12px;">'
+                f'      <div style="font-size:10px;color:#727784;font-weight:700;text-transform:uppercase;">Regular Holiday</div>'
+                f'      <div style="font-size:1.3rem;font-weight:800;color:#004494;margin-top:6px;">200%</div>'
+                f'      <div style="font-size:9px;color:#9ca3af;margin-top:2px;">{_hw_count_reg} team member{"s" if _hw_count_reg != 1 else ""} worked</div>'
+                f'    </div>'
+                f'    <div style="background:#fff;padding:14px;border-radius:12px;">'
+                f'      <div style="font-size:10px;color:#727784;font-weight:700;text-transform:uppercase;">Special Non-Working</div>'
+                f'      <div style="font-size:1.3rem;font-weight:800;color:#d97706;margin-top:6px;">130%</div>'
+                f'      <div style="font-size:9px;color:#9ca3af;margin-top:2px;">{_hw_count_sp} team member{"s" if _hw_count_sp != 1 else ""} worked</div>'
+                f'    </div>'
+                f'  </div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ────────────────────────────────────────────────
+    # TAB 3: Benefits (Leave & Benefits)
+    # ────────────────────────────────────────────────
+    with tabs[3]:
+        leave_data = _sv_load_leave_overview(team_ids, team_cache=team_cache)
+        balances = leave_data["balances"]
+        emp_map = leave_data["emp_map"]
+        pending_leaves = leave_data["pending"]
+        special_leaves = leave_data["special"]
+
+        col_bal, col_pending = st.columns([3, 2], gap="medium")
+
+        with col_bal:
+            st.markdown(
+                '<div style="font-size:14px;font-weight:700;color:#191c1d;margin-bottom:12px;">'
+                'Team Leave Balances</div>',
+                unsafe_allow_html=True,
+            )
+            if balances:
+                # Proper HTML table — Stitch pattern: divide-y, no borders, shadow-soft
+                rows_html = ""
+                for eid, types in balances.items():
+                    emp = emp_map.get(eid, {})
+                    name = f'{emp.get("first_name", "?")} {emp.get("last_name", "")}'
+                    cells = ""
+                    for lt in ["VL", "SL", "CL"]:
+                        info = types.get(lt, {"opening": 0, "used": 0})
+                        remaining = info["opening"] - info["used"]
+                        color = "#059669" if remaining > 3 else ("#d97706" if remaining > 0 else "#dc2626")
+                        cells += (
+                            f'<td style="text-align:center;padding:10px 8px;">'
+                            f'<span style="font-size:14px;font-weight:700;color:{color}">{remaining:.0f}</span>'
+                            f'<span style="font-size:9px;color:#94a3b8;margin-left:2px">/{info["opening"]:.0f}</span>'
+                            f'</td>'
+                        )
+                    idx = list(balances.keys()).index(eid)
+                    av_bg, av_fg = _SV_AVATAR_COLORS[idx % len(_SV_AVATAR_COLORS)]
+                    initials = (emp.get("first_name", "?")[0] + emp.get("last_name", " ")[0]).upper()
+                    rows_html += (
+                        f'<tr style="border-bottom:1px solid #f1f5f9;">'
+                        f'<td style="padding:10px 8px;">'
+                        f'<div style="display:flex;align-items:center;gap:8px;">'
+                        f'<div style="width:28px;height:28px;border-radius:50%;background:{av_bg};color:{av_fg};'
+                        f'display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">{initials}</div>'
+                        f'<span style="font-size:12px;font-weight:600;color:#191c1d">{name}</span>'
+                        f'</div></td>{cells}</tr>'
+                    )
+                st.markdown(
+                    '<div style="background:#fff;border-radius:16px;box-shadow:0px 20px 40px rgba(45,51,53,0.06);overflow:hidden;">'
+                    '<table style="width:100%;border-collapse:collapse;text-align:left;font-size:11px;">'
+                    '<thead><tr style="border-bottom:1px solid #e2e8f0;">'
+                    '<th style="padding:10px 8px;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;">Employee</th>'
+                    '<th style="padding:10px 8px;text-align:center;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;">VL</th>'
+                    '<th style="padding:10px 8px;text-align:center;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;">SL</th>'
+                    '<th style="padding:10px 8px;text-align:center;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;">CL</th>'
+                    '</tr></thead>'
+                    f'<tbody>{rows_html}</tbody></table></div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    '<div style="background:#fff;border-radius:16px;box-shadow:0px 20px 40px rgba(45,51,53,0.06);'
+                    'padding:24px;text-align:center;">'
+                    '<div style="font-size:20px;margin-bottom:4px">📋</div>'
+                    '<div style="font-size:12px;font-weight:600;color:#64748b">No leave balances set up for this year.</div>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # Special leaves — shadow-soft card, no borders
+            if special_leaves:
+                st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+                st.markdown(
+                    '<div style="font-size:14px;font-weight:700;color:#191c1d;margin-bottom:8px;">'
+                    'Special Leaves (Statutory)</div>',
+                    unsafe_allow_html=True,
+                )
+                _SL_LABELS = {"ML": "Maternity (105d)", "PL": "Paternity (7d)", "SPL": "Solo Parent (7d)"}
+                for sl in special_leaves:
+                    emp = emp_map.get(sl["employee_id"], {})
+                    name = f'{emp.get("first_name", "?")} {emp.get("last_name", "")}'
+                    s = sl.get("status", "pending")
+                    s_bg = {"approved": "#d1fae5", "rejected": "#fecaca"}.get(s, "#fef3c7")
+                    s_fg = {"approved": "#065f46", "rejected": "#991b1b"}.get(s, "#92400e")
+                    st.markdown(
+                        f'<div style="background:#fff;border-radius:12px;box-shadow:0px 20px 40px rgba(45,51,53,0.06);'
+                        f'padding:12px 14px;margin-bottom:6px;">'
+                        f'  <div style="display:flex;justify-content:space-between;align-items:center;">'
+                        f'    <div>'
+                        f'      <span style="font-size:12px;font-weight:600;color:#191c1d">{name}</span>'
+                        f'      <span style="font-size:10px;color:#64748b;margin-left:6px">'
+                        f'{_SL_LABELS.get(sl["leave_type"], sl["leave_type"])}</span>'
+                        f'    </div>'
+                        f'    <span style="background:{s_bg};color:{s_fg};font-size:9px;font-weight:700;'
+                        f'padding:3px 10px;border-radius:9999px;">{s.upper()}</span>'
+                        f'  </div>'
+                        f'  <div style="font-size:10px;color:#94a3b8;margin-top:3px">{sl.get("start_date", "")} → {sl.get("end_date", "")}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        with col_pending:
+            st.markdown(
+                '<div style="font-size:14px;font-weight:700;color:#191c1d;margin-bottom:12px;">'
+                'Pending Leave Requests</div>',
+                unsafe_allow_html=True,
+            )
+            if pending_leaves:
+                for lv in pending_leaves:
+                    emp = emp_map.get(lv["employee_id"], {})
+                    name = f'{emp.get("first_name", "?")} {emp.get("last_name", "")}'
+                    lt_colors = {"VL": ("#dbeafe", "#1d4ed8"), "SL": ("#fce7f3", "#be185d"), "CL": ("#e0e7ff", "#4338ca")}
+                    bg, fg = lt_colors.get(lv["leave_type"], ("#f3f4f6", "#374151"))
+                    st.markdown(
+                        f'<div style="background:#fffbeb;border-radius:12px;box-shadow:0px 20px 40px rgba(45,51,53,0.06);'
+                        f'padding:12px 14px;margin-bottom:8px;">'
+                        f'  <div style="display:flex;justify-content:space-between;align-items:center;">'
+                        f'    <span style="font-size:12px;font-weight:600;color:#191c1d">{name}</span>'
+                        f'    <span style="background:{bg};color:{fg};font-size:9px;font-weight:700;'
+                        f'padding:3px 10px;border-radius:9999px;">{lv["leave_type"]} · {lv.get("days", 0):.0f}d</span>'
+                        f'  </div>'
+                        f'  <div style="font-size:10px;color:#64748b;margin-top:3px">{lv.get("start_date", "")} → {lv.get("end_date", "")}</div>'
+                        f'  <div style="font-size:10px;color:#94a3b8;margin-top:2px;font-style:italic">{lv.get("reason", "")[:80]}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.markdown(
+                    '<div style="background:#f0fdf4;border-radius:12px;box-shadow:0px 20px 40px rgba(45,51,53,0.06);'
+                    'padding:20px;text-align:center;">'
+                    '  <div style="font-size:20px;margin-bottom:4px">✅</div>'
+                    '  <div style="font-size:12px;font-weight:600;color:#166534">No Pending Leaves</div>'
+                    '  <div style="font-size:10px;color:#94a3b8;margin-top:2px">All leave requests have been processed</div>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+
+    # ────────────────────────────────────────────────
+    # TAB 2: Team Records (Stitch v2 — 2-column: Statutory + 201 Cards)
+    # ────────────────────────────────────────────────
+    with tabs[2]:
+        col_stat, col_201 = st.columns(2, gap="large")
+
+        # ── Left: Statutory Summary ──
+        with col_stat:
+            st.markdown(
+                '<div style="font-size:12px;font-weight:700;color:#191c1d;text-transform:uppercase;'
+                'letter-spacing:.05em;margin-bottom:12px;">Statutory Summary</div>',
+                unsafe_allow_html=True,
+            )
+            stat_data = _sv_load_statutory_overview(team_ids, team_cache=team_cache)
+            stat_entries = stat_data["entries"]
+            stat_period = stat_data["period"]
+
+            if stat_entries:
+                _f = lambda c: f"\u20b1{c / 100:,.2f}" if c else "\u20b10.00"
+
+                # Summary metric cards — 2-column grid (Stitch v2)
+                tot_sss = sum(e["sss_ee"] + e["sss_er"] for e in stat_entries)
+                tot_ph = sum(e["ph_ee"] + e["ph_er"] for e in stat_entries)
+
+                st.markdown(
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">'
+                    f'  <div style="{_SV_CARD}background:#f8f9fa;">'
+                    f'    <div style="font-size:8px;font-weight:900;color:#9ca3af;text-transform:uppercase;">SSS Contribution</div>'
+                    f'    <div style="font-size:14px;font-weight:700;color:#191c1d;margin-top:6px">{_f(tot_sss)}</div>'
+                    f'  </div>'
+                    f'  <div style="{_SV_CARD}background:#f8f9fa;">'
+                    f'    <div style="font-size:8px;font-weight:900;color:#9ca3af;text-transform:uppercase;">PhilHealth</div>'
+                    f'    <div style="font-size:14px;font-weight:700;color:#191c1d;margin-top:6px">{_f(tot_ph)}</div>'
+                    f'  </div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # Detail table — EE/ER breakdown
+                rows_html = ""
+                for e in stat_entries:
+                    rows_html += (
+                        f'<tr style="border-top:1px solid #f1f5f9;">'
+                        f'  <td style="padding:8px 16px;font-weight:700;font-size:10px;color:#191c1d;">{e["name"]}</td>'
+                        f'  <td style="padding:8px 16px;font-size:10px;">{_f(e["sss_ee"])}</td>'
+                        f'  <td style="padding:8px 16px;font-size:10px;color:#9ca3af;">{_f(e["sss_er"])}</td>'
+                        f'</tr>'
+                    )
+                st.markdown(
+                    f'<div style="{_SV_CARD_FLUSH}">'
+                    f'<table style="width:100%;text-align:left;border-collapse:collapse;">'
+                    f'  <thead><tr style="background:#f3f4f5;">'
+                    f'    <th style="padding:8px 16px;font-size:8px;font-weight:900;color:#94a3b8;text-transform:uppercase;">Employee</th>'
+                    f'    <th style="padding:8px 16px;font-size:8px;font-weight:900;color:#94a3b8;text-transform:uppercase;">EE Share</th>'
+                    f'    <th style="padding:8px 16px;font-size:8px;font-weight:900;color:#94a3b8;text-transform:uppercase;">ER Share</th>'
+                    f'  </tr></thead>'
+                    f'  <tbody>{rows_html}</tbody>'
+                    f'</table></div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.info("No finalized payroll data available for your team yet.", icon="💰")
+
+        # ── Right: Digital 201 Cards ──
+        with col_201:
+            st.markdown(
+                '<div style="font-size:12px;font-weight:700;color:#191c1d;text-transform:uppercase;'
+                'letter-spacing:.05em;margin-bottom:12px;">Digital 201 Cards</div>',
+                unsafe_allow_html=True,
+            )
+            try:
+                # Use cache for employees + profiles (no DB hit)
+                if team_cache:
+                    _tc_emps = team_cache["employees"]
+                    dept_map = team_cache["dept_map"]
+                    prof_map = team_cache["profiles"]
+                    str_ids = team_cache["str_ids"]
+                else:
+                    db = get_db()
+                    str_ids = [str(tid) for tid in team_ids]
+                    _tc_resp = (
+                        db.table("employees")
+                        .select("id,first_name,last_name,employee_no,position,employment_type,date_hired,"
+                                "email,sss_no,philhealth_no,pagibig_no,bir_tin,basic_salary,salary_type")
+                        .in_("id", str_ids)
+                        .eq("is_active", True)
+                        .order("last_name")
+                        .execute()
+                    )
+                    _tc_emps = _tc_resp.data or []
+                    dept_map = {}
+                    prof_map = {}
+                    prof_result = (
+                        db.table("employee_profiles")
+                        .select("employee_id,department,mobile_no,emergency_name,emergency_relationship,"
+                                "emergency_phone,date_of_birth,sex,civil_status,present_address_city,"
+                                "present_address_province,education_degree,education_school")
+                        .in_("employee_id", str_ids)
+                        .execute()
+                    )
+                    for p in (prof_result.data or []):
+                        dept_map[p["employee_id"]] = p.get("department") or ""
+                        prof_map[p["employee_id"]] = p
+
+                # Load photo URLs
+                _photo_urls_201 = {}
+                cid = get_company_id()
+                if str_ids and cid:
+                    for _eid in str_ids:
+                        _photo_urls_201[_eid] = (
+                            f"https://dduxctbrjggqkqdlhwpz.supabase.co/storage/v1/object/public/"
+                            f"employee-photos/{cid}/{_eid}.jpg"
+                        )
+
+                for idx, emp in enumerate(_tc_emps):
+                    initials = (emp.get("first_name", "?")[0] + emp.get("last_name", "?")[0]).upper()
+                    name = f'{emp.get("first_name", "")} {emp.get("last_name", "")}'
+                    bg, fg = _SV_AVATAR_COLORS[idx % len(_SV_AVATAR_COLORS)]
+                    emp_no = emp.get("employee_no", "")
+                    dept = dept_map.get(emp.get("id", ""), "")
+                    pos = emp.get("position", "")
+                    eid = emp.get("id", "")
+                    prof = prof_map.get(eid, {})
+
+                    # Gov ID dots
+                    gov_dots = ""
+                    for gid, label in [
+                        ("sss_no", "SSS"), ("philhealth_no", "PH"),
+                        ("pagibig_no", "PI"), ("bir_tin", "TIN"),
+                    ]:
+                        dot_color = "#059669" if emp.get(gid) else "#d97706"
+                        gov_dots += (
+                            f'<div style="display:inline-flex;align-items:center;gap:3px;margin-right:8px;">'
+                            f'<div style="width:4px;height:4px;border-radius:50%;background:{dot_color};"></div>'
+                            f'<span style="font-size:8px;font-weight:700;color:#9ca3af;">{label}</span>'
+                            f'</div>'
+                        )
+
+                    # Employment type badge
+                    emp_type = emp.get("employment_type", "")
+                    et_bg = {"regular": "#d4edda", "probationary": "#fef3c7", "contractual": "#dbeafe"}.get(
+                        (emp_type or "").lower(), "#f1f5f9")
+                    et_fg = {"regular": "#155724", "probationary": "#92400e", "contractual": "#1e40af"}.get(
+                        (emp_type or "").lower(), "#475569")
+                    et_label = (emp_type or "").upper()
+
+                    # Avatar — CSS background-image for photo, initials always visible as fallback
+                    _photo_url = _photo_urls_201.get(eid, "")
+                    _bg_img = f"background-image:url({_photo_url});background-size:cover;background-position:center;" if _photo_url else ""
+                    _avatar_inner = (
+                        f'<span style="color:{fg};font-weight:700;font-size:14px;">{initials}</span>'
+                    )
+
+                    # Swipe card (same pattern as payroll run)
+                    _action_tray = (
+                        f'<div class="ps-swipe-act" '
+                        f'data-ps-action="view201_{eid}" '
+                        f'style="background:#2563eb;color:#fff;font-size:20px;">'
+                        f'&#128065;<br><span style="font-size:9px;font-weight:700;">View</span></div>'
+                    )
+
+                    st.markdown(
+                        f'<div class="ps-swipe-wrap">'
+                        f'<div class="ps-swipe-actions">{_action_tray}</div>'
+                        f'<div class="ps-swipe-card" style="'
+                        f'display:flex;align-items:center;gap:12px;padding:10px 14px;'
+                        f'background:var(--gxp-surface);border-radius:12px;'
+                        f'border:1px solid var(--gxp-border);">'
+                        # Avatar — bg-image for photo, initials show if no photo
+                        f'<div style="width:40px;height:40px;border-radius:50%;background:{bg};{_bg_img}'
+                        f'display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">'
+                        f'{_avatar_inner}</div>'
+                        # Name + details
+                        f'<div style="flex:1;min-width:0;">'
+                        f'<div style="display:flex;align-items:center;gap:8px;">'
+                        f'<span style="font-size:13px;font-weight:700;color:var(--gxp-text);">{name}</span>'
+                        f'<span style="background:{et_bg};color:{et_fg};padding:2px 8px;border-radius:9999px;'
+                        f'font-size:10px;font-weight:700;">{et_label}</span></div>'
+                        f'<div style="font-size:11px;color:var(--gxp-text3);">{emp_no}</div>'
+                        f'<div style="font-size:11px;color:var(--gxp-text3);">{dept} · {pos}</div>'
+                        f'</div>'
+                        # Gov ID dots (right side)
+                        f'<div style="display:flex;flex-wrap:wrap;gap:2px;">{gov_dots}</div>'
+                        f'</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            except Exception:
+                st.error("Could not load team records.")
+
+    # ────────────────────────────────────────────────
+    # TAB 4: More (Platform Roadmap — Stitch v2 minimal)
+    # ────────────────────────────────────────────────
+    with tabs[4]:
+        st.markdown(
+            '<div style="font-size:12px;font-weight:700;color:#191c1d;display:flex;align-items:center;gap:8px;margin-bottom:16px;">'
+            '  <span class="material-symbols-outlined" style="font-size:16px;color:#d97706;">auto_awesome</span>'
+            '  Platform Roadmap'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        _coming = [
+            ("gavel", "Disciplinary Hub"),
+            ("payments", "Loan Portal"),
+            ("draw", "Digital Sign-off"),
+            ("analytics", "AI Analytics"),
+        ]
+        cols = st.columns(4, gap="medium")
+        for i, col in enumerate(cols):
+            ms_icon, title = _coming[i]
+            with col:
+                st.markdown(
+                    f'<div style="background:#f3f4f5;border-radius:16px;padding:20px;'
+                    f'opacity:0.6;cursor:not-allowed;">'
+                    f'  <div style="color:#9ca3af;margin-bottom:8px;">'
+                    f'    <span class="material-symbols-outlined" style="font-size:18px;">{ms_icon}</span>'
+                    f'  </div>'
+                    f'  <div style="font-size:10px;font-weight:700;color:#191c1d;">{title}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+    # ────────────────────────────────────────────────
+    # 201 Modal (pure HTML/JS — instant, no Streamlit rerun)
+    # ────────────────────────────────────────────────
+    if team_cache:
+        cid = get_company_id()
+        _modal_html = _build_201_modals_html(team_cache, cid or "")
+        st.markdown(_modal_html, unsafe_allow_html=True)
+        import streamlit.components.v1 as _modal_stc
+        _modal_stc.html(_build_201_modal_js(), height=0)
 
 
 # ============================================================
@@ -1714,23 +3129,36 @@ def render():
 
     inject_css()
 
+    # ── Role-based scoping (must be before title/greeting) ──
+    _is_supervisor = is_supervisor()
+    _team_ids = get_supervisor_employee_ids() if _is_supervisor else []
+
     # ── Show greeting immediately (before data loads) ──
     import datetime as _dt
     _hour = _dt.datetime.now().hour
     _greeting = "Good morning" if _hour < 12 else ("Good afternoon" if _hour < 18 else "Good evening")
-    _display_name = st.session_state.get("display_name", "Admin")
-    _first_name = _display_name.split()[0] if _display_name else "Admin"
+    _display_name = st.session_state.get("display_name") or ""
+    if not _display_name:
+        # Fallback: derive from email
+        _email = st.session_state.get("user_email", "")
+        _display_name = _email.split("@")[0].replace(".", " ").title() if _email else "there"
+    _first_name = _display_name.split()[0] if _display_name else "there"
     _now = _dt.datetime.now()
     _date_str = _now.strftime("%B %d, %Y")
     _time_str = _now.strftime("%I:%M %p").lstrip("0")
 
-    st.title("Dashboard")
+    st.title("Supervisor Portal" if _is_supervisor else "Dashboard")
 
     hdr_l, hdr_r = st.columns([3, 1])
     with hdr_l:
+        _sub_msg = (
+            f"You have <strong>{len(_team_ids)} team member(s)</strong> reporting to you."
+            if _is_supervisor and _team_ids
+            else "Everything is ready for your next pay cycle."
+        )
         st.markdown(
             f'<p style="font-size:16px;font-weight:600;color:#191c1d;margin:0;">{_greeting}, {_first_name}.</p>'
-            f'<p style="font-size:13px;color:#727784;margin:4px 0 0;">Everything is ready for your next pay cycle.</p>',
+            f'<p style="font-size:13px;color:#727784;margin:4px 0 0;">{_sub_msg}</p>',
             unsafe_allow_html=True,
         )
     with hdr_r:
@@ -1742,74 +3170,72 @@ def render():
             unsafe_allow_html=True,
         )
 
-    # ── Skeleton placeholders (show instantly while data loads) ──
-    _skel_placeholder = st.empty()
-    _SKEL_CARD = (
-        '<div class="gxp-skeleton" style="min-height:150px;margin-bottom:8px;"></div>'
-    )
-    _SKEL_SMALL = (
-        '<div class="gxp-skeleton" style="height:60px;margin-bottom:6px;"></div>'
-    )
-    with _skel_placeholder.container():
-        sk_main, sk_side = st.columns([3, 1], gap="medium")
-        with sk_main:
-            sk1, sk2, sk3 = st.columns(3, gap="medium")
-            sk1.markdown(_SKEL_CARD, unsafe_allow_html=True)
-            sk2.markdown(_SKEL_CARD, unsafe_allow_html=True)
-            sk3.markdown(_SKEL_CARD, unsafe_allow_html=True)
-            sk4, sk5 = st.columns(2, gap="medium")
-            sk4.markdown(_SKEL_CARD, unsafe_allow_html=True)
-            sk5.markdown(_SKEL_CARD, unsafe_allow_html=True)
-        with sk_side:
-            st.markdown(_SKEL_SMALL, unsafe_allow_html=True)
-            st.markdown(_SKEL_SMALL, unsafe_allow_html=True)
-            st.markdown(_SKEL_SMALL, unsafe_allow_html=True)
+    # (Skeleton placeholders removed — Streamlit's native stale/fade state
+    #  provides sufficient loading feedback.)
 
     # ── Load all data ─────────────────────────────────
     company             = _load_company()
-    active_count, total_count = _load_employee_counts()
+    if _is_supervisor and _team_ids:
+        # Supervisor sees only their team
+        active_count = sum(1 for _ in _team_ids)  # approximate — all team members
+        total_count = len(_team_ids)
+    else:
+        active_count, total_count = _load_employee_counts()
+    pending_leave, pending_ot = _count_pending_requests(_team_ids if _is_supervisor else None)
+
+    # ── Build team cache for supervisors (single bulk load, cached 2 min) ──
+    _team_cache = None
+    if _is_supervisor and _team_ids:
+        _cid = get_company_id()
+        _team_cache = _load_team_cache(tuple(_team_ids), _cid)
+
+    # ── Load payroll & calendar data (shared by admin + supervisor) ──
     periods             = _load_pay_periods()
     history             = _load_payroll_history(cid=get_company_id())
     remittance_status   = _load_current_remittance_status()
     deadlines           = _get_deadlines(remittance_status)
-    pending_leave, pending_ot = _count_pending_requests()
 
     next_period    = _find_next_period(periods)
     latest_period  = _find_latest_finalized(periods)
     latest_entries = _load_payroll_entries(latest_period["id"]) if latest_period else []
 
-    total_gross = sum(e["gross_pay"] for e in latest_entries) if latest_entries else 0
-    total_net   = sum(e["net_pay"]   for e in latest_entries) if latest_entries else 0
-    total_er    = sum(
-        e["sss_employer"] + e["philhealth_employer"] + e["pagibig_employer"]
-        for e in latest_entries
-    ) if latest_entries else 0
-    total_cost  = total_gross + total_er
-
-    headcount = len(latest_entries)
-
-    # Build calendar events from loaded data
     _cal_events = _build_calendar_events(periods, deadlines)
 
-    # ── Clear skeletons, render real content ───────────
-    _skel_placeholder.empty()
+    if not _is_supervisor:
+        total_gross = sum(e["gross_pay"] for e in latest_entries) if latest_entries else 0
+        total_net   = sum(e["net_pay"]   for e in latest_entries) if latest_entries else 0
+        total_er    = sum(
+            e["sss_employer"] + e["philhealth_employer"] + e["pagibig_employer"]
+            for e in latest_entries
+        ) if latest_entries else 0
+        total_cost  = total_gross + total_er
+        headcount = len(latest_entries)
 
     # ── Bento grid ─────────────────────────────────────────────
-    # Outer 2-column: left (3/4) for content rows, right (1/4) for Reminders + Alerts
-    col_main, col_side = st.columns([3, 1], gap="medium")
+    if _is_supervisor:
+        # Supervisor: bento grid is inside the tabbed sections (Dashboard tab)
+        col_main = None  # skip side column
+        col_side = None
+    else:
+        # Outer 2-column: left (3/4) for content rows, right (1/4) for Reminders + Alerts
+        col_main, col_side = st.columns([3, 1], gap="medium")
+        with col_main:
+            # Row 1: Upcoming Milestone | Active Employees | Recent Activity
+            _render_bento_row1(next_period, active_count, total_count)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            # Row 2: Calendar | Payroll Expenditure
+            _admin_name_map = _load_employee_names(
+                [e["employee_id"] for e in latest_entries if e.get("employee_id")]
+            ) if latest_entries else {}
+            _render_bento_row2(latest_period, history, _cal_events,
+                               latest_entries=latest_entries, name_map=_admin_name_map)
 
-    with col_main:
-        # Row 1: Upcoming Milestone | Active Employees | Recent Activity
-        _render_bento_row1(next_period, active_count, total_count)
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        # Row 2: Calendar | Payroll Expenditure
-        _render_bento_row2(latest_period, history, _cal_events)
-
-    with col_side:
-        st.markdown('<span class="gxp-bento-hero-card" style="display:none"></span>', unsafe_allow_html=True)
-        _render_reminders(pending_leave, pending_ot)
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        _render_alerts(deadlines, periods)
+    if col_side is not None:
+        with col_side:
+            st.markdown('<span class="gxp-bento-hero-card" style="display:none"></span>', unsafe_allow_html=True)
+            _render_reminders(pending_leave, pending_ot)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            _render_alerts(deadlines, periods)
 
     # Wire bento card clicks + ripple + reminder swipe action buttons (pure JS)
     _stc.html("""<script>
@@ -1996,7 +3422,31 @@ def render():
     })();
     </script>""", height=0)
 
-    # ── 3. KPI Stat Cards ────────────────────────────
-    _render_stat_cards(active_count, total_count, total_gross, total_net, total_cost,
-                       latest_period, history,
-                       latest_entries=latest_entries, headcount=headcount)
+    # ── 3. KPI Stat Cards (hidden for supervisors) ──
+    if not _is_supervisor:
+        _render_stat_cards(active_count, total_count, total_gross, total_net, total_cost,
+                           latest_period, history,
+                           latest_entries=latest_entries, headcount=headcount)
+
+    # ── 4. Supervisor Management Sections ──────────
+    if _is_supervisor and _team_ids:
+        # Filter payroll entries to subordinates only
+        _team_id_set = set(str(tid) for tid in _team_ids)
+        _sv_entries = [
+            e for e in (latest_entries or [])
+            if str(e.get("employee_id", "")) in _team_id_set
+        ]
+
+        # Build name map for payroll breakdown (use cache if available, else load)
+        _exp_name_map = {}
+        if _team_cache:
+            _exp_name_map = _team_cache.get("name_map", {})
+        if _sv_entries and not _exp_name_map:
+            _entry_ids = [e["employee_id"] for e in _sv_entries if e.get("employee_id")]
+            _exp_name_map = _load_employee_names(_entry_ids)
+
+        _render_supervisor_sections(
+            _team_ids, pending_leave, pending_ot, team_cache=_team_cache,
+            latest_period=latest_period, history=history, cal_events=_cal_events,
+            latest_entries=_sv_entries, name_map=_exp_name_map,
+        )

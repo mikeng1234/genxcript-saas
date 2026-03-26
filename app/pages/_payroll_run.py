@@ -539,12 +539,14 @@ def _render_employee_card_row(
     photo_urls: dict | None = None,
 ):
     """Render a compact employee row card for the payroll list."""
+    from app.ui_helpers import hierarchy_badge_html
     name       = f"{emp['first_name']} {emp['last_name']}"
     is_computed = emp["id"] in entries
     _initials  = (emp['first_name'][:1] + emp['last_name'][:1]).upper()
     _colors    = ["#005bc1","#006e2d","#795900","#ba1a1a","#4b0082","#006064","#37474f","#880e4f"]
     _color     = _colors[hash(emp["id"]) % len(_colors)]
     _pos       = emp.get("position") or "—"
+    _h_badge   = hierarchy_badge_html(emp["id"], get_company_id())
     _dept      = emp.get("department") or "—"
     _salary_lbl = _fmt(emp["basic_salary"])
 
@@ -578,10 +580,12 @@ def _render_employee_card_row(
         f'background:var(--gxp-surface);border-radius:12px;cursor:pointer;'
         f'border:1px solid var(--gxp-border);margin-bottom:4px;'
         f'transition:box-shadow 0.15s,transform 0.15s;">'
-        # Avatar
+        # Avatar with hierarchy badge
+        f'<div style="position:relative;flex-shrink:0;width:40px;height:40px;">'
         f'<div style="width:40px;height:40px;border-radius:50%;background:{_color};'
-        f'display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">'
+        f'display:flex;align-items:center;justify-content:center;overflow:hidden;">'
         f'{_pr_avatar_inner(emp["id"], _initials, photo_urls)}</div>'
+        f'<div style="position:absolute;bottom:-2px;left:-2px;">{_h_badge}</div></div>'
         # Name + details
         f'<div style="flex:1;min-width:0;">'
         f'<div style="display:flex;align-items:center;gap:8px;">'
@@ -600,6 +604,7 @@ def _render_employee_card_row(
 def _render_payslip_card(emp, is_done, entries, photo_urls, company, period, select_all):
     """Render a single payslip card matching the payroll processing card style."""
     from reports.payslip_pdf import generate_payslip_pdf
+    from app.ui_helpers import hierarchy_badge_html
 
     name = f"{emp['first_name']} {emp['last_name']}"
     _initials = (emp['first_name'][:1] + emp['last_name'][:1]).upper()
@@ -607,6 +612,7 @@ def _render_payslip_card(emp, is_done, entries, photo_urls, company, period, sel
     _color = _colors[hash(emp["id"]) % len(_colors)]
     _pos = emp.get("position") or "—"
     _dept = emp.get("department") or "—"
+    _h_badge = hierarchy_badge_html(emp["id"], get_company_id())
 
     if is_done:
         entry = entries[emp["id"]]
@@ -654,10 +660,12 @@ def _render_payslip_card(emp, is_done, entries, photo_urls, company, period, sel
         f'display:flex;align-items:center;gap:12px;padding:10px 14px;'
         f'background:var(--gxp-surface);border-radius:12px;'
         f'border:1px solid var(--gxp-border);">'
-        # Avatar
+        # Avatar with hierarchy badge
+        f'<div style="position:relative;flex-shrink:0;width:40px;height:40px;">'
         f'<div style="width:40px;height:40px;border-radius:50%;background:{_color};'
-        f'display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">'
+        f'display:flex;align-items:center;justify-content:center;overflow:hidden;">'
         f'{_pr_avatar_inner(emp["id"], _initials, photo_urls)}</div>'
+        f'<div style="position:absolute;bottom:-2px;left:-2px;">{_h_badge}</div></div>'
         # Name + details
         f'<div style="flex:1;min-width:0;">'
         f'<div style="display:flex;align-items:center;gap:8px;">'
@@ -715,19 +723,23 @@ def _payroll_computation_dialog(
     )
     saved = entry_resp.data[0] if entry_resp.data else {}
 
+    from app.ui_helpers import hierarchy_badge_html
     name = f"{emp['first_name']} {emp['last_name']}"
     _initials = (emp['first_name'][:1] + emp['last_name'][:1]).upper()
     _colors = ["#005bc1","#006e2d","#795900","#ba1a1a","#4b0082","#006064","#37474f","#880e4f"]
     _color = _colors[hash(emp["id"]) % len(_colors)]
     _pos = emp.get("position") or "—"
+    _h_badge = hierarchy_badge_html(emp["id"], cid)
 
     # Header
     st.markdown(
         f'<div style="display:flex;align-items:center;gap:12px;padding-bottom:12px;'
         f'border-bottom:1px solid var(--gxp-border);margin-bottom:16px;">'
+        f'<div style="position:relative;flex-shrink:0;width:48px;height:48px;">'
         f'<div style="width:48px;height:48px;border-radius:50%;background:{_color};'
         f'display:flex;align-items:center;justify-content:center;">'
         f'<span style="color:#fff;font-weight:700;font-size:16px;">{_initials}</span></div>'
+        f'<div style="position:absolute;bottom:-2px;left:-2px;">{_h_badge}</div></div>'
         f'<div><div style="font-size:15px;font-weight:700;">{name}</div>'
         f'<div style="font-size:12px;color:var(--gxp-text3);">'
         f'{_pos} &middot; {emp.get("employee_no","")} &middot; Basic {_fmt(emp["basic_salary"])}</div>'
@@ -1615,7 +1627,13 @@ def _render_payroll_processing():
 
     # ── Employee card grid grouped by department (4 columns) ──
     _pr_photos = _load_pr_photo_urls(_cid=get_company_id())
-    _sorted_emps = sorted(employees, key=lambda e: (e.get("department") or "Unassigned").upper())
+    from app.ui_helpers import _get_hierarchy_data
+    _h_data = _get_hierarchy_data(get_company_id())
+    _sorted_emps = sorted(employees, key=lambda e: (
+        (e.get("department") or "Unassigned").upper(),
+        _h_data.get(e["id"], {}).get("depth", 99),
+        e.get("last_name", ""),
+    ))
     _prev_dept = None
     _col_buf = []  # buffer cards for 4-col grid
 
@@ -1944,8 +1962,14 @@ def _render_payslips_tab():
     _ps_photos = _load_pr_photo_urls(_cid=get_company_id())
 
     # ── Card grid grouped by department (4 columns) ───────────────────────
+    from app.ui_helpers import _get_hierarchy_data
+    _h_data_ps = _get_hierarchy_data(get_company_id())
     all_filtered = done_filtered + pending_filtered
-    all_filtered = sorted(all_filtered, key=lambda e: (e.get("department") or "Unassigned").upper())
+    all_filtered = sorted(all_filtered, key=lambda e: (
+        (e.get("department") or "Unassigned").upper(),
+        _h_data_ps.get(e["id"], {}).get("depth", 99),
+        e.get("last_name", ""),
+    ))
     _prev_dept_ps = None
     _col_buf_ps: list = []
 

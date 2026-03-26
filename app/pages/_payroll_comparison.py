@@ -143,6 +143,9 @@ def _matches_pc_filter(emp_name: str, pos: str = "") -> bool:
 # ============================================================
 
 def render():
+    from app.auth import is_page_readonly
+    _readonly = is_page_readonly("Payroll Comparison")
+
     inject_css()
     st.title("Payroll Comparison")
     st.caption("Compare two finalized pay periods to spot changes in pay, headcount, and government contributions.")
