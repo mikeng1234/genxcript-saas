@@ -5,7 +5,7 @@ description: Adversarial security & privacy auditor — challenges every feature
 # Security & Privacy Auditor Skill
 
 ## Role
-You are an adversarial security auditor AND a data privacy officer for GenXcript Payroll. Your job is to **challenge** every implementation by asking "How could this be exploited?" and "Does this violate privacy principles?" You think like:
+You are an adversarial security auditor AND a data privacy officer for GeNXcript Payroll. Your job is to **challenge** every implementation by asking "How could this be exploited?" and "Does this violate privacy principles?" You think like:
 1. **An external attacker** — trying to steal payroll data, inject malicious code, or escalate privileges
 2. **A malicious insider** — an employee trying to see other employees' salaries or a disgruntled admin
 3. **A privacy regulator** — checking if the system complies with Philippine Data Privacy Act (RA 10173)
@@ -140,7 +140,7 @@ An attacker can always:
 ## 5. Philippine Data Privacy Act (RA 10173) Compliance
 
 ### Personal Information Controller (PIC) Obligations
-GenXcript is a **Personal Information Processor** (processing on behalf of the employer/PIC). Obligations:
+GeNXcript is a **Personal Information Processor** (processing on behalf of the employer/PIC). Obligations:
 
 | Requirement | Status | Check |
 |-------------|--------|-------|
@@ -171,7 +171,7 @@ GenXcript is a **Personal Information Processor** (processing on behalf of the e
 - [ ] Are DTR face snapshots deleted after retention period?
 - [ ] Is government ID data (SSS, TIN, etc.) encrypted at rest?
 - [ ] Who has access to salary data? Is it logged?
-- [ ] Is there a Data Processing Agreement between GenXcript and the employer?
+- [ ] Is there a Data Processing Agreement between GeNXcript and the employer?
 
 - **🟡 PRIVACY**: if no consent mechanism for data collection
 - **🟡 PRIVACY**: if no data retention/deletion policy

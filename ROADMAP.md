@@ -1,6 +1,6 @@
-# GenXcript Payroll — Product Roadmap
+# GeNXcript Payroll — Product Roadmap
 
-> Last updated: 2026-03-26
+> Last updated: 2026-03-28
 > Strategy: Payroll-first → HR Compliance → Attendance → Advanced Payroll → Portal → BI → Scale
 > Each phase unlocks the next. Features within a phase are ordered by dependency.
 
@@ -12,7 +12,7 @@
 
 - [x] **Phase A — Global CSS Foundation** — `app/styles.py`: "tactile" theme with full Material 3 token set (`--gxp-*` CSS variables); Plus Jakarta Sans + Material Symbols Outlined fonts; pill buttons, pill inputs, pill tabs, ambient card shadows, rounded modals; `DEFAULT_THEME = "tactile"`
 - [x] **Phase B — Sidebar Redesign** — Material Symbols Outlined icons replacing MDI; `injectFonts()` loads fonts directly into `window.parent.document.head`; light-theme fallback colors; pill-shaped active/hover nav items; brand section with "Payroll Solutions" subtitle; `[server] enableStaticServing = true` in config.toml
-- [x] **Phase C — Login Page** — `GenXcript_Dark.png` logo in `app/static/` replacing plain text; static file serving via Streamlit; ambient shadow on logo
+- [x] **Phase C — Login Page** — `GeNXcript_Dark.png` logo in `app/static/` replacing plain text; static file serving via Streamlit; ambient shadow on logo
 - [x] **Topbar** — Fixed top bar injected via JS: company name (left) + user chip + Preferences + My Account + Sign Out (right); `My Account` and `Sign Out` removed from sidebar footer (still hidden in DOM for `clickNav()` routing); 48px content push-down
 - [x] **Bug fixes** — Checkbox highlight (Emotion class whitelist); Edit employee 2-click (render-level redirect); Activate/Deactivate on_click pattern (data refresh without dialog close); Print 201 blob URL + immediate state clear; salary hidden by default with toggle; search bar repositioned
 - [x] **Phase D — Dashboard** — M3 bento hero grid: Next Pay Date hero, Active Employees accent card, Payroll Expenditure mini-bar chart, Recent Activity feed, Quick Actions row; existing KPI/alerts/remittance panels retained below
@@ -28,6 +28,8 @@
 - [x] **Employee Photo Upload** — migration 026 (photo_url); Supabase "employee-photos" bucket; auto-compress 200px JPEG; displayed in employee cards + org chart + edit dialog
 - [x] **Employee Portal UX** — custom topbar; checkbox highlight fix; permanent address redesign; People Search with org chart; Leaflet clock-in map (pulsing dot + geofence + Inside/Outside badge)
 - [x] **Dashboard Performance** — N+1 → batch query; @st.cache_data(ttl=120); skeleton shimmer loading; counting number animations; card entrance animations (fade-in + staggered slide-up)
+- [x] **Dashboard v2 Redesign** — 6-panel bento grid (Payroll Overview with dept-stacked bars + Recent Payroll + Mini Calendar + Donut Workforce + Attendance Detail + Pending Requests); [3,1] outer layout with Reminders/Alerts sidebar; clickable cards with navigation + expanded Payroll Overview dialog; SVG donut with on-ring labels; pure HTML mini calendar; per-row JS height equalizer
+- [x] **GeNXcript Branding** — renamed GenXcript → GeNXcript across 66 files; topbar badge with individually colored letters
 - [x] **RLS Hardening** — user_preferences + audit_logs RLS enabled (migrations 023, 024)
 - [x] **Employee Cards Redesign** — compact single-row cards with swipe-right-to-reveal action buttons (Edit/Print/Deactivate); department grouping with headers; photo integration from Supabase Storage; `on_click` callbacks for instant dialog open (no stale data flash); skeleton loading on edit dialog
 - [x] **Dashboard Stat Cards** — swipe-up-to-reveal action buttons (matching employee card pattern); counting number animations; skeleton shimmer loading; company switch data refresh fix
@@ -156,8 +158,8 @@
 **Snapshot Storage Maintenance** *(run quarterly)*
 - [x] `scripts/archive_snapshots.py` — lists all files in `dtr-snapshots` bucket; downloads files older than 30 days to `archives/dtr-snapshots/YYYY-QN/` on local machine; then deletes them from Supabase; supports `--days N` and `--dry-run`; `archive_snapshots.bat` double-click launcher
 - [ ] Scheduled Windows Task — automate quarterly archival via Task Scheduler (trigger: 1st day of Jan/Apr/Jul/Oct at 9AM; action: `archive_snapshots.bat`)
-- [ ] Archive request flow — if client needs a photo older than 30 days, they contact their IT → IT contacts GenXcript → retrieve from `archives/dtr-snapshots/YYYY-QN/`
-- [ ] **Future (when client has a dedicated PC):** auto-sync archive folder to client's local NAS or PC after each quarter via robocopy / rclone; client retains their own cold copy; no reliance on GenXcript retrieval
+- [ ] Archive request flow — if client needs a photo older than 30 days, they contact their IT → IT contacts GeNXcript → retrieve from `archives/dtr-snapshots/YYYY-QN/`
+- [ ] **Future (when client has a dedicated PC):** auto-sync archive folder to client's local NAS or PC after each quarter via robocopy / rclone; client retains their own cold copy; no reliance on GeNXcript retrieval
 - [x] Company Setup: "📍 Locations" tab — named GPS sites CRUD with latitude/longitude/radius/active toggle + Google Maps link *(company_setup.py)*
 - [x] Time-in record stores: timestamp, coordinates, distance from nearest site, location_id, snapshot URL, method ('manual'/'portal') *(time_logs table in migration 013)*
 - [x] Out-of-range alert — portal warns employee if distance > allowed radius; flag stored in time_logs.is_out_of_range *(employee_portal.py)*

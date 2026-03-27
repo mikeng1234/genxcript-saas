@@ -54,8 +54,8 @@
       "Bash(python -c \"from app.pages.payroll_run import render; print\\(''payroll_run OK''\\)\")",
       "Bash(claude mcp:*)",
       "Bash(where claude:*)",
-      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"payroll SaaS dashboard professional fintech\" --design-system -p \"GenXcript Payroll\")",
-      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"payroll SaaS SME HR fintech professional dashboard\" --design-system -p \"GenXcript Payroll\" -f markdown)",
+      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"payroll SaaS dashboard professional fintech\" --design-system -p \"GeNXcript Payroll\")",
+      "Bash(python skills/ui-ux-pro-max/scripts/search.py \"payroll SaaS SME HR fintech professional dashboard\" --design-system -p \"GeNXcript Payroll\" -f markdown)",
       "Bash(dir \"I:\\\\SaaS\\\\PaySys\\\\genxcript-saas\\\\.claude\\\\skills\\\\ui-ux-pro-max\" /s /b)",
       "Bash(python -m py_compile app/pages/dashboard.py)",
       "Bash(python -m py_compile app/styles.py)",
@@ -251,7 +251,7 @@
       "WebFetch(domain:stitch.withgoogle.com)",
       "Bash(python -c \"from app.styles import inject_css, THEMES, DEFAULT_THEME; print\\(f''Default: {DEFAULT_THEME}''\\); print\\(f''Tactile theme keys: {list\\(THEMES[\"\"tactile\"\"][\"\"vars\"\"].keys\\(\\)\\)[:5]}...''\\); print\\(''OK''\\)\")",
       "Bash(python -c \"import py_compile; py_compile.compile\\(''app/pages/_login.py'', doraise=True\\); print\\(''OK''\\)\")",
-      "Bash(python -c \"import base64; data=open\\(''I:/SaaS/PaySys/genxcript-saas/GenXcript_Dark.png'',''rb''\\).read\\(\\); print\\(f''Size: {len\\(data\\)} bytes \\({len\\(data\\)/1024:.1f} KB\\)''\\); b64=base64.b64encode\\(data\\).decode\\(\\); print\\(f''Base64 length: {len\\(b64\\)} chars''\\); print\\(b64[:80]+''...''\\)\")",
+      "Bash(python -c \"import base64; data=open\\(''I:/SaaS/PaySys/genxcript-saas/GeNXcript_Dark.png'',''rb''\\).read\\(\\); print\\(f''Size: {len\\(data\\)} bytes \\({len\\(data\\)/1024:.1f} KB\\)''\\); b64=base64.b64encode\\(data\\).decode\\(\\); print\\(f''Base64 length: {len\\(b64\\)} chars''\\); print\\(b64[:80]+''...''\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\(''app/pages/_login.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\(''app/main.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\(''app/pages/_dashboard.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''dashboard OK''\\)\")",
@@ -345,7 +345,17 @@
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:www.jsdelivr.com)",
       "WebFetch(domain:unpkg.com)",
-      "WebFetch(domain:nhn.github.io)"
+      "WebFetch(domain:nhn.github.io)",
+      "Bash(grep -h \"CREATE TABLE\" /i/SaaS/PaySys/genxcript-saas/db/*.sql)",
+      "Bash(grep -A 20 \"CREATE TABLE.*user\" /i/SaaS/PaySys/genxcript-saas/db/*.sql)",
+      "Bash(grep -l \"user_preferences\\\\|audit_logs\" /i/SaaS/PaySys/genxcript-saas/db/*.sql)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/main.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/pages/_dashboard.py'', doraise=True\\); py_compile.compile\\(''app/styles.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(mv stitch-prompt-core-team-plugins.md webprompts/)",
+      "Bash(mv stitch-prompt-investor-proposal.md webprompts/)",
+      "Bash(mv stitch-prompt-it-explainer.md webprompts/)",
+      "Bash(mv stitch-prompt-landing-page.md webprompts/)",
+      "Bash(mv stitch-prompt-dashboard-v2.md webprompts/)"
     ]
   }
 }

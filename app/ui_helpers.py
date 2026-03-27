@@ -1,5 +1,5 @@
 """
-Shared UI helpers for GenXcript Payroll SaaS.
+Shared UI helpers for GeNXcript Payroll SaaS.
 Reusable HTML generation functions used across multiple pages.
 """
 

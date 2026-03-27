@@ -27,7 +27,7 @@ Rules:
 
 PAGE: COMPANY SETUP
 
-Build a Company Setup page for "GenXcript Payroll".
+Build a Company Setup page for "GeNXcript Payroll".
 
 Same top nav + sidebar. "Company Setup" active.
 

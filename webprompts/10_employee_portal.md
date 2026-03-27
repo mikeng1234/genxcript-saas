@@ -27,7 +27,7 @@ Rules:
 
 PAGE: EMPLOYEE SELF-SERVICE PORTAL
 
-Build an Employee Self-Service Portal page for "GenXcript Payroll".
+Build an Employee Self-Service Portal page for "GeNXcript Payroll".
 
 Different sidebar (narrower, employee-only nav, no admin items):
   - Top: employee avatar circle (colored initials "IT"), "Iris Tan" bold, "MDC-009 · Marketing" gray caption.

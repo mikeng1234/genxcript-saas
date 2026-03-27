@@ -1,5 +1,5 @@
 """
-Email utility for GenXcript Payroll SaaS.
+Email utility for GeNXcript Payroll SaaS.
 
 Sends transactional emails via SMTP (e.g. Gmail, Outlook, any SMTP relay).
 
@@ -88,7 +88,7 @@ def send_temp_password_email(
         f"  Email      : {to_email}\n"
         f"  Password   : {temp_password}\n\n"
         f"Log in and click 'Forgot Password' to set your own password.\n\n"
-        f"— GenXcript Payroll"
+        f"— GeNXcript Payroll"
     )
 
     html = f"""
@@ -106,7 +106,7 @@ def send_temp_password_email(
         <td style="background:linear-gradient(135deg,#1e3a5f,#2563eb);
                    padding:32px 40px;text-align:center;">
           <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;
-                     letter-spacing:.5px;">GenXcript Payroll</h1>
+                     letter-spacing:.5px;">GeNXcript Payroll</h1>
           <p  style="margin:4px 0 0;color:#93c5fd;font-size:13px;">
             Portal Access Credentials</p>
         </td>
@@ -166,7 +166,7 @@ def send_temp_password_email(
         <td style="background:#f8fafc;border-top:1px solid #e2e8f0;
                    padding:16px 40px;text-align:center;">
           <p style="margin:0;color:#94a3b8;font-size:11px;">
-            GenXcript Payroll — Philippine SME Payroll System
+            GeNXcript Payroll — Philippine SME Payroll System
           </p>
         </td>
       </tr>

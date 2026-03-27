@@ -79,9 +79,9 @@ DECLARE
 BEGIN
 
   -- ── Validate prerequisite ─────────────────────────────────────────────────
-  SELECT id INTO v_cid FROM companies WHERE name = 'GenXcript Tech Solutions';
+  SELECT id INTO v_cid FROM companies WHERE name = 'GeNXcript Tech Solutions';
   IF v_cid IS NULL THEN
-    RAISE EXCEPTION 'Company "GenXcript Tech Solutions" not found. Run seed_test_company.sql first.';
+    RAISE EXCEPTION 'Company "GeNXcript Tech Solutions" not found. Run seed_test_company.sql first.';
   END IF;
 
   -- ═══════════════════════════════════════════════════════════════════════════
@@ -493,7 +493,7 @@ BEGIN
   RAISE NOTICE '====================================================';
   RAISE NOTICE ' Payroll & Attendance seed — COMPLETE';
   RAISE NOTICE '====================================================';
-  RAISE NOTICE ' Company      : GenXcript Tech Solutions';
+  RAISE NOTICE ' Company      : GeNXcript Tech Solutions';
   RAISE NOTICE ' Pay periods  : 5  (Oct 2025 – Feb 2026)';
   RAISE NOTICE '   finalized  : Oct / Nov / Dec 2025';
   RAISE NOTICE '   reviewed   : Jan 2026';

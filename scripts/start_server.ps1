@@ -1,12 +1,12 @@
-# GenXcript Payroll — Auto-start Streamlit Server (PowerShell version)
+# GeNXcript Payroll — Auto-start Streamlit Server (PowerShell version)
 # To auto-start on boot, create a scheduled task:
-#   schtasks /create /tn "GenXcript Server" /tr "powershell -File I:\SaaS\PaySys\genxcript-saas\scripts\start_server.ps1" /sc onlogon /rl highest
+#   schtasks /create /tn "GeNXcript Server" /tr "powershell -File I:\SaaS\PaySys\genxcript-saas\scripts\start_server.ps1" /sc onlogon /rl highest
 
 $ErrorActionPreference = "Continue"
 Set-Location "I:\SaaS\PaySys\genxcript-saas"
 
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host " GenXcript Payroll Server" -ForegroundColor Cyan
+Write-Host " GeNXcript Payroll Server" -ForegroundColor Cyan
 Write-Host " $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
 Write-Host "============================================" -ForegroundColor Cyan
 

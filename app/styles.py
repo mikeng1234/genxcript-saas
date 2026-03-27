@@ -1,5 +1,5 @@
 """
-Shared UI styles, themes, and helper functions for GenXcript Payroll.
+Shared UI styles, themes, and helper functions for GeNXcript Payroll.
 
 Provides semantic CSS tokens via custom properties, named pastel themes,
 status badges, and styled components reusable across all pages.
@@ -1288,9 +1288,13 @@ def inject_css():
     /* Reminders + Alerts in sidebar column */
     .gxp-remind-swipe { animation-delay: 0.12s; }
 
-    /* ── Bento hero row — align columns at top ───────────────────────── */
+    /* ── Bento hero row — cards at natural height ───────────────────── */
     [data-testid="stHorizontalBlock"]:has(.gxp-bento-hero-card) {
         align-items: flex-start !important;
+    }
+    .gxp-bento-hero-card {
+        display: flex !important;
+        flex-direction: column !important;
     }
 
     /* ── Bento clickable cards ──────────────────────────────────────── */
@@ -1824,6 +1828,7 @@ def inject_css():
         div[class*="st-key-deact_"],
         div[class*="st-key-react_"],
         div[class*="st-key-print201_"],
+        div[class*="st-key-invite_"],
         div[class*="st-key-inv_yes_"],
         div[class*="st-key-inv_no_"],
         div[class*="st-key-invite_confirm_"] {{

@@ -27,12 +27,12 @@ Rules:
 
 PAGE: SUPERVISOR TEAM DASHBOARD (ADP Manager Tool — Philippine Market)
 
-Build a supervisor/manager dashboard for "GenXcript Payroll" — a Philippine payroll SaaS. This is what a team supervisor (not admin) sees after login. They manage 5–15 direct/indirect reports. They cannot see company-wide financial data — only their team. Inspired by ADP's Manager Tool adapted for Philippine labor law.
+Build a supervisor/manager dashboard for "GeNXcript Payroll" — a Philippine payroll SaaS. This is what a team supervisor (not admin) sees after login. They manage 5–15 direct/indirect reports. They cannot see company-wide financial data — only their team. Inspired by ADP's Manager Tool adapted for Philippine labor law.
 
-Include fixed glassmorphism top nav: logo "GenXcript" left, right side: role badge pill "Supervisor" in purple (#7c3aed bg, white text, 9999px radius), user name "Victoria Garcia", avatar circle.
+Include fixed glassmorphism top nav: logo "GeNXcript" left, right side: role badge pill "Supervisor" in purple (#7c3aed bg, white text, 9999px radius), user name "Victoria Garcia", avatar circle.
 
 Left sidebar (240px, fixed):
-  - "GenXcript" brand bold blue top, "Supervisor Portal" caption gray below.
+  - "GeNXcript" brand bold blue top, "Supervisor Portal" caption gray below.
   - Nav items (pill shape, full width): Team Dashboard (active, blue-50 bg), Attendance, Calendar, Preferences.
   - Only 4 items — supervisors have limited page access.
   - Icons from Material Symbols for each item.

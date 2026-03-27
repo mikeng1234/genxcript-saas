@@ -10,7 +10,7 @@ cd /d %~dp0
 
 echo.
 echo  ============================================================
-echo   GenXcript — DTR Snapshot Archiver
+echo   GeNXcript — DTR Snapshot Archiver
 echo  ============================================================
 echo.
 echo  This will:

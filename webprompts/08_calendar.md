@@ -27,7 +27,7 @@ Rules:
 
 PAGE: CALENDAR
 
-Build a Calendar page for "GenXcript Payroll".
+Build a Calendar page for "GeNXcript Payroll".
 
 Same top nav + sidebar. "Calendar" active.
 

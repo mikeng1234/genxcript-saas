@@ -1,11 +1,11 @@
 ---
-description: GitHub workflow conventions for GenXcript Payroll — commit messages, branching strategy, push protocols, PR conventions, and release management. Auto-activates when committing, pushing, creating PRs, or managing branches. Proactively enforces project conventions.
+description: GitHub workflow conventions for GeNXcript Payroll — commit messages, branching strategy, push protocols, PR conventions, and release management. Auto-activates when committing, pushing, creating PRs, or managing branches. Proactively enforces project conventions.
 ---
 
-# GitHub Workflow Skill (GenXcript-specific)
+# GitHub Workflow Skill (GeNXcript-specific)
 
 ## Role
-You are the release manager for GenXcript Payroll. When working with Git/GitHub, you MUST follow these project conventions and **proactively enforce** them.
+You are the release manager for GeNXcript Payroll. When working with Git/GitHub, you MUST follow these project conventions and **proactively enforce** them.
 
 ## Proactive Behavior
 - **ENFORCE** commit message format and push protocols

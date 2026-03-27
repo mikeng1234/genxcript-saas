@@ -27,12 +27,12 @@ Rules:
 
 PAGE: LOGIN
 
-Build a login page for "GenXcript Payroll" — a Philippine payroll SaaS product.
+Build a login page for "GeNXcript Payroll" — a Philippine payroll SaaS product.
 
 Layout:
 - Full viewport. Left 40% = branded panel. Right 60% = login form.
 - Left panel: gradient background (135deg, #005bc1 to #3d89ff).
-  Centered vertically: large logo text "GenXcript" in white bold, tagline
+  Centered vertically: large logo text "GeNXcript" in white bold, tagline
   "PAYROLL SYSTEM" in uppercase tracking-widest, and 3 bullet features
   ("Philippine-compliant", "Multi-company", "Real-time payroll") each with
   a Material Symbol checkmark icon.
@@ -46,5 +46,5 @@ Layout:
     - "Remember me" checkbox (small, blue when checked)
     - Primary CTA button: "Sign In" full width, gradient fill, pill shape, 1rem padding
     - Ghost link button: "Forgot your password?" centered below, #005bc1 text
-    - Divider line (very light #ebeef0) then footer: "GenXcript Payroll System" in tiny uppercase tracking-widest #adb3b5
+    - Divider line (very light #ebeef0) then footer: "GeNXcript Payroll System" in tiny uppercase tracking-widest #adb3b5
 - No top navigation bar on this page.

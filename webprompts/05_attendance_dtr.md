@@ -27,7 +27,7 @@ Rules:
 
 PAGE: ATTENDANCE / DTR
 
-Build an Attendance (Daily Time Record) page for "GenXcript Payroll".
+Build an Attendance (Daily Time Record) page for "GeNXcript Payroll".
 
 Same top nav + sidebar. "Attendance" active.
 

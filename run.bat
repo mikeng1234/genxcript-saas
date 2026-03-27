@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM  run.bat — Start GenXcript on Python 3.12
+REM  run.bat — Start GeNXcript on Python 3.12
 REM  Double-click from project root.
 REM ============================================================
 set PY="C:\Users\Jasper Dizon\AppData\Local\Programs\Python\Python312\python.exe"
@@ -9,7 +9,7 @@ cd /d %~dp0
 
 echo.
 echo  ============================================================
-echo   GenXcript Payroll  —  Python 3.12
+echo   GeNXcript Payroll  —  Python 3.12
 echo  ============================================================
 echo.
 echo  Starting on http://localhost:8501

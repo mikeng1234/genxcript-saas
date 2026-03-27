@@ -24,7 +24,7 @@ def render():
     _, col, _ = st.columns([1, 1.5, 1])
 
     with col:
-        st.markdown("## GenXcript Payroll")
+        st.markdown("## GeNXcript Payroll")
         st.markdown("#### Create Your Company Account")
         st.caption("Set up your payroll system in seconds.")
         st.divider()

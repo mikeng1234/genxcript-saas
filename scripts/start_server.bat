@@ -1,13 +1,13 @@
 @echo off
-:: GenXcript Payroll — Auto-start Streamlit Server
+:: GeNXcript Payroll — Auto-start Streamlit Server
 :: Place a shortcut to this file in: shell:startup
 :: (Win+R > shell:startup > paste shortcut)
 
-title GenXcript Payroll Server
+title GeNXcript Payroll Server
 cd /d "I:\SaaS\PaySys\genxcript-saas"
 
 echo ============================================================
-echo  GenXcript Payroll Server
+echo  GeNXcript Payroll Server
 echo  Starting on http://localhost:8501
 echo  Cloudflare Tunnel provides HTTPS access
 echo ============================================================

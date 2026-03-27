@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor Cyan
-Write-Host "   GenXcript — HTTPS Dev Server" -ForegroundColor Cyan
+Write-Host "   GeNXcript — HTTPS Dev Server" -ForegroundColor Cyan
 Write-Host "  ============================================================" -ForegroundColor Cyan
 Write-Host ""
 

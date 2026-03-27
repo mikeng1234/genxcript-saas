@@ -232,7 +232,7 @@ def generate_coe_pdf(company: dict, employee: dict, include_salary: bool = True)
     story.append(HRFlowable(width="100%", thickness=0.5, color=_TEXT_MUTED))
     story.append(Spacer(1, 2 * mm))
     story.append(Paragraph(
-        f"Document generated on {issued_str} via GenXcript Payroll System. "
+        f"Document generated on {issued_str} via GeNXcript Payroll System. "
         "This document is system-generated and valid without a wet signature "
         "unless otherwise required by the requesting party.",
         ParagraphStyle(

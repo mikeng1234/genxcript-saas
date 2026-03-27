@@ -8,7 +8,7 @@ set NGROK_EXE="C:\Users\Jasper Dizon\AppData\Local\Microsoft\WinGet\Packages\Ngr
 
 echo.
 echo  ============================================================
-echo   GenXcript — HTTPS Dev Server (ngrok)
+echo   GeNXcript — HTTPS Dev Server (ngrok)
 echo  ============================================================
 echo.
 

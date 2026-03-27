@@ -1,7 +1,7 @@
 @echo off
-title GenXcript - Cloudflare Tunnel
+title GeNXcript - Cloudflare Tunnel
 echo ============================================================
-echo  GenXcript Payroll - Cloudflare Tunnel
+echo  GeNXcript Payroll - Cloudflare Tunnel
 echo ============================================================
 echo.
 echo Starting tunnel to localhost:8501...

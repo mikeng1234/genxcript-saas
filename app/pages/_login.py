@@ -513,4 +513,4 @@ def _render_forgot_password():
 
     st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
     _gap(16)
-    st.markdown('<p class="login-footer-brand">GenXcript</p>', unsafe_allow_html=True)
+    st.markdown('<p class="login-footer-brand">GeNXcript</p>', unsafe_allow_html=True)

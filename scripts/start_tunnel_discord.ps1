@@ -1,4 +1,4 @@
-# GenXcript - Start Cloudflare Tunnel & Post URL to Discord
+# GeNXcript - Start Cloudflare Tunnel & Post URL to Discord
 # Auto-restarts tunnel if it dies
 $ErrorActionPreference = "SilentlyContinue"
 
@@ -6,7 +6,7 @@ $webhookUrl = "https://discord.com/api/webhooks/1485822463723175970/0q1bl1T-9f1J
 $cloudflared = "$env:USERPROFILE\cloudflared.exe"
 $logFile = "$env:TEMP\cloudflared_output.log"
 
-function Post-Discord($message, $title = "GenXcript Payroll", $color = 3447003) {
+function Post-Discord($message, $title = "GeNXcript Payroll", $color = 3447003) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $body = @{
         embeds = @(
@@ -14,7 +14,7 @@ function Post-Discord($message, $title = "GenXcript Payroll", $color = 3447003) 
                 title = $title
                 description = $message
                 color = $color
-                footer = @{ text = "GenXcript Payroll System" }
+                footer = @{ text = "GeNXcript Payroll System" }
                 timestamp = (Get-Date).ToUniversalTime().ToString("o")
             }
         )
@@ -26,7 +26,7 @@ function Post-Discord($message, $title = "GenXcript Payroll", $color = 3447003) 
 
 function Start-Tunnel {
     Write-Host "============================================" -ForegroundColor Cyan
-    Write-Host " GenXcript - Cloudflare Tunnel" -ForegroundColor Cyan
+    Write-Host " GeNXcript - Cloudflare Tunnel" -ForegroundColor Cyan
     Write-Host "============================================" -ForegroundColor Cyan
     Write-Host ""
 
@@ -62,7 +62,7 @@ function Start-Tunnel {
         Write-Host ""
         Write-Host "==> TUNNEL URL: $tunnelUrl" -ForegroundColor Green
         Write-Host ""
-        Post-Discord "Server is live!`n**$tunnelUrl**`n`nStarted: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`nLocal: http://localhost:8501" "GenXcript Payroll is Live!" 3447003
+        Post-Discord "Server is live!`n**$tunnelUrl**`n`nStarted: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`nLocal: http://localhost:8501" "GeNXcript Payroll is Live!" 3447003
     } else {
         Write-Host "Could not detect tunnel URL after 30 seconds." -ForegroundColor Red
         Post-Discord "Tunnel started but could not detect URL. Check the Beelink." "Tunnel Warning" 16776960

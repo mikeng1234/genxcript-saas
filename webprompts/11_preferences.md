@@ -27,12 +27,12 @@ Rules:
 
 PAGE: PREFERENCES
 
-Build a Preferences page for "GenXcript Payroll".
+Build a Preferences page for "GeNXcript Payroll".
 
 Same top nav + sidebar. "Preferences" active.
 
 Editorial page title: "Preferences"
-Subtitle: "Customize your GenXcript experience."
+Subtitle: "Customize your GeNXcript experience."
 
 3 white cards stacked (radius 2rem, ambient shadow, padding 2.5rem, gap 1.5rem):
 

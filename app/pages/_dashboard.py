@@ -292,7 +292,970 @@ _SVG = {
 
 
 # ============================================================
-# Phase D: Bento Grid Hero
+# Dashboard v2 — 6-Panel Bento Grid
+# ============================================================
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_department_breakdown(_cid: str) -> list[dict]:
+    """Return [{department, count, pct}] for donut chart."""
+    try:
+        db = get_db()
+        rows = (
+            db.table("employee_profiles")
+            .select("employee_id, department")
+            .execute()
+        ).data or []
+        # Filter to active employees in this company
+        emp_rows = (
+            db.table("employees")
+            .select("id")
+            .eq("company_id", _cid)
+            .eq("is_active", True)
+            .execute()
+        ).data or []
+        active_ids = {e["id"] for e in emp_rows}
+        dept_counts: dict[str, int] = {}
+        for r in rows:
+            if r["employee_id"] in active_ids:
+                dept = r.get("department") or "Unassigned"
+                dept_counts[dept] = dept_counts.get(dept, 0) + 1
+        total = sum(dept_counts.values()) or 1
+        result = [
+            {"department": d, "count": c, "pct": round(c / total * 100)}
+            for d, c in sorted(dept_counts.items(), key=lambda x: -x[1])
+        ]
+        return result
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_employee_dept_map(_cid: str) -> dict[str, str]:
+    """Return {employee_id: department} for all employees in the company."""
+    try:
+        db = get_db()
+        profiles = (
+            db.table("employee_profiles")
+            .select("employee_id, department")
+            .execute()
+        ).data or []
+        emp_rows = (
+            db.table("employees")
+            .select("id")
+            .eq("company_id", _cid)
+            .execute()
+        ).data or []
+        company_ids = {e["id"] for e in emp_rows}
+        return {
+            r["employee_id"]: r.get("department") or "Unassigned"
+            for r in profiles if r["employee_id"] in company_ids
+        }
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_today_attendance(_cid: str) -> list[dict]:
+    """Return today's time log entries for the Attendance Detail panel."""
+    try:
+        db = get_db()
+        today_str = date.today().isoformat()
+        rows = (
+            db.table("time_logs")
+            .select("employee_id, clock_in, clock_out, status")
+            .eq("company_id", _cid)
+            .eq("log_date", today_str)
+            .order("clock_in", desc=False)
+            .limit(20)
+            .execute()
+        ).data or []
+        return rows
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _load_attendance_monthly(_cid: str) -> list[dict]:
+    """Return monthly attendance rates for bar chart (last 6 months)."""
+    try:
+        db = get_db()
+        from datetime import timedelta
+        today = date.today()
+        six_months_ago = (today.replace(day=1) - timedelta(days=180)).replace(day=1)
+        rows = (
+            db.table("time_logs")
+            .select("log_date, status")
+            .eq("company_id", _cid)
+            .gte("log_date", six_months_ago.isoformat())
+            .execute()
+        ).data or []
+        if not rows:
+            return []
+        from collections import defaultdict
+        monthly: dict[str, dict] = defaultdict(lambda: {"total": 0, "present": 0})
+        for r in rows:
+            ym = r["log_date"][:7]  # "2026-03"
+            monthly[ym]["total"] += 1
+            if r.get("status") in ("present", "on_time", None, ""):
+                monthly[ym]["present"] += 1
+        result = []
+        for ym in sorted(monthly.keys())[-6:]:
+            d = monthly[ym]
+            pct = round(d["present"] / d["total"] * 100) if d["total"] else 0
+            # Abbreviated month name
+            try:
+                from datetime import datetime as _dt3
+                lbl = _dt3.strptime(ym, "%Y-%m").strftime("%b")
+            except Exception:
+                lbl = ym
+            result.append({"month": lbl, "pct": pct})
+        return result
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_pending_request_details(_cid: str, team_ids: list | None = None) -> list[dict]:
+    """Load pending leave/OT request details for the Pending Requests panel."""
+    try:
+        db = get_db()
+        requests = []
+        # Leave requests
+        lq = (
+            db.table("leave_requests")
+            .select("id, employee_id, leave_type, start_date, end_date, created_at")
+            .eq("company_id", _cid)
+            .eq("status", "pending")
+            .order("created_at", desc=True)
+            .limit(6)
+        )
+        if team_ids:
+            lq = lq.in_("employee_id", [str(t) for t in team_ids])
+        lr = lq.execute().data or []
+        for r in lr:
+            requests.append({
+                "id": r["id"], "employee_id": r["employee_id"],
+                "type": "Leave", "detail": f"{r.get('leave_type', 'Leave')} — {r.get('start_date', '')} to {r.get('end_date', '')}",
+                "created_at": r.get("created_at", ""),
+            })
+        # OT requests
+        oq = (
+            db.table("overtime_requests")
+            .select("id, employee_id, ot_date, hours, created_at")
+            .eq("company_id", _cid)
+            .eq("status", "pending")
+            .order("created_at", desc=True)
+            .limit(6)
+        )
+        if team_ids:
+            oq = oq.in_("employee_id", [str(t) for t in team_ids])
+        otr = oq.execute().data or []
+        for r in otr:
+            requests.append({
+                "id": r["id"], "employee_id": r["employee_id"],
+                "type": "Overtime", "detail": f"{r.get('hours', 0)}hrs on {r.get('ot_date', '')}",
+                "created_at": r.get("created_at", ""),
+            })
+        # Sort by created_at desc
+        requests.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return requests[:8]
+    except Exception:
+        return []
+
+
+# Department color palette for donut chart
+_DEPT_COLORS = [
+    "#005bc1", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444",
+    "#06b6d4", "#ec4899", "#9ca3af",
+]
+
+
+def _render_panel_payroll_overview(latest_period, history, latest_entries,
+                                   total_gross, total_net, total_cost, headcount,
+                                   dept_map: dict | None = None):
+    """Panel 1: Payroll Overview — headline + stacked bars by dept + click → Payroll Run."""
+    from collections import defaultdict
+
+    # Trend
+    bar_vals = [int(r["gross_pay"] * 100) for r in history[-6:]] if history else []
+    max_val = max(bar_vals) if bar_vals else 1
+    bar_labels = []
+    for r in history[-6:]:
+        try:
+            from datetime import datetime as _dt4
+            dt = _dt4.strptime(str(r["period"])[:10], "%Y-%m-%d")
+            day = dt.day
+            mon = dt.strftime("%b")
+            # Show "Jan₁" / "Jan₂" for semi-monthly, plain "Jan" for monthly
+            if day <= 1:
+                lbl = mon
+            elif day >= 15:
+                lbl = f"{mon}₂"
+            else:
+                lbl = f"{mon}₁"
+        except Exception:
+            lbl = str(r["period"])[:3]
+        bar_labels.append(lbl)
+
+    if len(bar_vals) >= 2:
+        pct = (bar_vals[-1] - bar_vals[-2]) / bar_vals[-2] * 100 if bar_vals[-2] else 0
+        if pct > 0.5:
+            trend_html = f'<span style="color:#059669;font-size:11px;font-weight:700;">▲ {pct:.1f}%</span> <span style="color:#9ca3af;font-size:9px;">vs last period</span>'
+        elif pct < -0.5:
+            trend_html = f'<span style="color:#93000a;font-size:11px;font-weight:700;">▼ {abs(pct):.1f}%</span> <span style="color:#9ca3af;font-size:9px;">vs last period</span>'
+        else:
+            trend_html = '<span style="color:#9ca3af;font-size:11px;">— flat vs last period</span>'
+    else:
+        trend_html = '<span style="color:#9ca3af;font-size:10px;">First pay run</span>'
+
+    # Build stacked bars by department for latest period
+    # Each bar = one period; segments stacked by department gross totals
+    dept_map = dept_map or {}
+    # Get unique depts sorted by total (for consistent color assignment)
+    dept_totals: dict[str, int] = defaultdict(int)
+    if latest_entries and dept_map:
+        for e in latest_entries:
+            dept = dept_map.get(e.get("employee_id", ""), "Other")
+            dept_totals[dept] += e.get("gross_pay", 0)
+    sorted_depts = sorted(dept_totals.keys(), key=lambda d: -dept_totals[d])
+    dept_color_map = {d: _DEPT_COLORS[i % len(_DEPT_COLORS)] for i, d in enumerate(sorted_depts)}
+
+    # For historical bars, we don't have per-dept breakdown, so show solid color
+    # For the latest bar, show stacked segments
+    _BAR_MAX_PX = 80  # max bar height in pixels
+    bars_html = ""
+    for i, v in enumerate(bar_vals):
+        h_px = max(int((v / max_val) * _BAR_MAX_PX), 12) if max_val else 12
+        lbl = bar_labels[i] if i < len(bar_labels) else ""
+        is_latest = (i == len(bar_vals) - 1)
+
+        if is_latest and dept_totals and v > 0:
+            # Stacked bar — segments proportional to h_px, no min inflation
+            dept_total_sum = sum(dept_totals.values()) or 1
+            segments_html = ""
+            for dept in reversed(sorted_depts):
+                seg_frac = dept_totals[dept] / dept_total_sum
+                seg_px = max(round(seg_frac * h_px), 2)
+                color = dept_color_map.get(dept, "#005bc1")
+                segments_html += (
+                    f'<div style="width:100%;height:{seg_px}px;background:{color};'
+                    f'transition:height 0.4s ease;" title="{dept}: {_fmt_short(dept_totals[dept])}"></div>'
+                )
+            bars_html += (
+                f'<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">'
+                f'  <div style="width:100%;border-radius:4px 4px 0 0;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;height:{h_px}px;">'
+                f'    {segments_html}'
+                f'  </div>'
+                f'  <span style="font-size:7px;color:#005bc1;font-weight:700;">{lbl}</span>'
+                f'</div>'
+            )
+        else:
+            bg = "#d8e2ff"
+            bars_html += (
+                f'<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">'
+                f'  <div style="width:100%;border-radius:4px 4px 0 0;background:{bg};height:{h_px}px;"></div>'
+                f'  <span style="font-size:7px;color:#9ca3af;font-weight:600;">{lbl}</span>'
+                f'</div>'
+            )
+
+    # Dept legend (compact, single line under the chart)
+    dept_legend = ""
+    for dept in sorted_depts[:4]:
+        color = dept_color_map[dept]
+        short = dept[:6] if len(dept) > 6 else dept
+        dept_legend += (
+            f'<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px;">'
+            f'<span style="width:6px;height:6px;border-radius:2px;background:{color};display:inline-block;"></span>'
+            f'<span style="font-size:7px;font-weight:600;color:#9ca3af;">{short}</span>'
+            f'</span>'
+        )
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}cursor:pointer;max-height:280px;overflow:hidden;">'
+        f'  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">'
+        f'    <div style="{_MLBL}margin-bottom:0;">Payroll Overview</div>'
+        f'    <div style="width:28px;height:28px;border-radius:8px;background:rgba(0,91,193,0.08);display:flex;align-items:center;justify-content:center;">'
+        f'      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#005bc1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>'
+        f'    </div>'
+        f'  </div>'
+        f'  <div style="font-size:24px;font-weight:900;color:#191c1d;letter-spacing:-1.5px;line-height:1;margin-bottom:4px;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">₱{total_gross / 100:,.2f}</div>'
+        f'  <div style="margin-bottom:10px;">{trend_html}</div>'
+        f'  <div style="display:flex;align-items:flex-end;gap:4px;margin-bottom:4px;">{bars_html}</div>'
+        f'  <div style="margin-bottom:8px;">{dept_legend}</div>'
+        f'  <div style="display:flex;gap:12px;padding-top:8px;border-top:1px solid #f3f4f6;">'
+        f'    <div><div style="font-size:7px;color:#9ca3af;font-weight:600;">Net Pay</div><div style="font-size:9px;font-weight:800;color:#191c1d;">{_fmt_short(total_net)}</div></div>'
+        f'    <div><div style="font-size:7px;color:#9ca3af;font-weight:600;">Employer Cost</div><div style="font-size:9px;font-weight:800;color:#191c1d;">{_fmt_short(total_cost)}</div></div>'
+        f'    <div><div style="font-size:7px;color:#9ca3af;font-weight:600;">Headcount</div><div style="font-size:9px;font-weight:800;color:#191c1d;">{headcount}</div></div>'
+        f'  </div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    # Hidden button — JS wires click on the card to this → opens expanded dialog
+    if st.button("Payroll Overview →", key="bento_payroll_overview", use_container_width=True):
+        _dlg_payroll_overview()
+
+
+@st.dialog("Payroll Overview", width="large")
+def _dlg_payroll_overview():
+    """Expanded payroll overview dialog — bigger chart + tables."""
+    from collections import defaultdict
+
+    cid = get_company_id()
+    history = _load_payroll_history(cid=cid)
+    periods = _load_pay_periods()
+    latest_period = _find_latest_finalized(periods)
+    latest_entries = _load_payroll_entries(latest_period["id"]) if latest_period else []
+    dept_map = _load_employee_dept_map(cid)
+    name_map = _load_employee_names(
+        [e["employee_id"] for e in latest_entries if e.get("employee_id")]
+    ) if latest_entries else {}
+
+    total_gross = sum(e["gross_pay"] for e in latest_entries) if latest_entries else 0
+    total_net = sum(e["net_pay"] for e in latest_entries) if latest_entries else 0
+    total_er = sum(
+        e["sss_employer"] + e["philhealth_employer"] + e["pagibig_employer"]
+        for e in latest_entries
+    ) if latest_entries else 0
+
+    # ── Header stats ──
+    st.markdown(
+        f'<div style="display:flex;gap:24px;margin-bottom:20px;flex-wrap:wrap;">'
+        f'  <div><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;">Gross Pay</div>'
+        f'  <div style="font-size:28px;font-weight:900;color:#191c1d;letter-spacing:-1px;">₱{total_gross / 100:,.2f}</div></div>'
+        f'  <div><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;">Net Pay</div>'
+        f'  <div style="font-size:20px;font-weight:800;color:#191c1d;">₱{total_net / 100:,.2f}</div></div>'
+        f'  <div><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;">Employer Cost</div>'
+        f'  <div style="font-size:20px;font-weight:800;color:#191c1d;">₱{(total_gross + total_er) / 100:,.2f}</div></div>'
+        f'  <div><div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;">Headcount</div>'
+        f'  <div style="font-size:20px;font-weight:800;color:#191c1d;">{len(latest_entries)}</div></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if latest_period:
+        st.caption(f"Latest period: {latest_period['period_start']} → {latest_period['period_end']} · Status: {latest_period['status'].upper()}")
+
+    # ── Expanded bar chart — last 12 periods ──
+    st.markdown("#### Payroll History")
+    history = history[-12:]
+    bar_vals = [int(r["gross_pay"] * 100) for r in history] if history else []
+    max_val = max(bar_vals) if bar_vals else 1
+
+    bars_html = ""
+    for i, r in enumerate(history):
+        v = int(r["gross_pay"] * 100)
+        h_px = max(int((v / max_val) * 160), 10) if max_val else 10
+        is_latest = (i == len(history) - 1)
+        bg = "#005bc1" if is_latest else "#d8e2ff"
+        try:
+            from datetime import datetime as _dtx
+            dt = _dtx.strptime(str(r["period"])[:10], "%Y-%m-%d")
+            day = dt.day
+            mon = dt.strftime("%b")
+            if day <= 1:
+                lbl = mon
+            elif day >= 15:
+                lbl = f"{mon}₂"
+            else:
+                lbl = f"{mon}₁"
+        except Exception:
+            lbl = str(r["period"])[:3]
+
+        amt_lbl = f"₱{v / 100:,.0f}"
+        bars_html += (
+            f'<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:36px;">'
+            f'  <div style="font-size:8px;color:#727784;font-weight:600;white-space:nowrap;">{amt_lbl}</div>'
+            f'  <div style="width:100%;border-radius:4px 4px 0 0;background:{bg};height:{h_px}px;"></div>'
+            f'  <span style="font-size:8px;color:{"#005bc1" if is_latest else "#9ca3af"};font-weight:{"700" if is_latest else "600"};">{lbl}</span>'
+            f'</div>'
+        )
+
+    st.markdown(
+        f'<div style="display:flex;align-items:flex-end;gap:4px;padding:8px 0;overflow-x:auto;">{bars_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Department breakdown ──
+    if latest_entries and dept_map:
+        st.markdown("#### Department Breakdown")
+        dept_totals: dict[str, dict] = defaultdict(lambda: {"gross": 0, "net": 0, "count": 0})
+        for e in latest_entries:
+            dept = dept_map.get(e.get("employee_id", ""), "Other")
+            dept_totals[dept]["gross"] += e.get("gross_pay", 0)
+            dept_totals[dept]["net"] += e.get("net_pay", 0)
+            dept_totals[dept]["count"] += 1
+
+        sorted_depts = sorted(dept_totals.items(), key=lambda x: -x[1]["gross"])
+
+        rows_html = ""
+        for i, (dept, vals) in enumerate(sorted_depts):
+            color = _DEPT_COLORS[i % len(_DEPT_COLORS)]
+            pct = round(vals["gross"] / total_gross * 100, 1) if total_gross else 0
+            bar_w = max(pct, 2)
+            rows_html += (
+                f'<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f3f4f6;">'
+                f'  <div style="width:10px;height:10px;border-radius:3px;background:{color};flex-shrink:0;"></div>'
+                f'  <div style="min-width:120px;font-size:12px;font-weight:700;color:#191c1d;white-space:nowrap;">{dept}</div>'
+                f'  <div style="flex:1;display:flex;align-items:center;gap:8px;">'
+                f'    <div style="flex:1;height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden;">'
+                f'      <div style="width:{bar_w}%;height:100%;background:{color};border-radius:4px;"></div>'
+                f'    </div>'
+                f'    <span style="font-size:10px;font-weight:700;color:#191c1d;min-width:32px;text-align:right;">{pct}%</span>'
+                f'  </div>'
+                f'  <div style="font-size:12px;font-weight:800;color:#191c1d;min-width:80px;text-align:right;">₱{vals["gross"] / 100:,.0f}</div>'
+                f'  <div style="font-size:10px;color:#9ca3af;min-width:28px;text-align:right;">{vals["count"]}emp</div>'
+                f'</div>'
+            )
+        st.markdown(f'<div>{rows_html}</div>', unsafe_allow_html=True)
+
+    # ── Per-employee table ──
+    if latest_entries and name_map:
+        st.markdown("#### Employee Breakdown")
+        sorted_entries = sorted(latest_entries, key=lambda e: e.get("gross_pay", 0), reverse=True)
+
+        tbl_rows = ""
+        for e in sorted_entries:
+            eid = e.get("employee_id", "")
+            name = name_map.get(eid, "Unknown")
+            dept = dept_map.get(eid, "—")
+            gross = e.get("gross_pay", 0)
+            net = e.get("net_pay", 0)
+            tbl_rows += (
+                f'<tr style="border-bottom:1px solid #f3f4f6;">'
+                f'  <td style="padding:6px 8px;font-size:11px;font-weight:700;color:#191c1d;">{name}</td>'
+                f'  <td style="padding:6px 8px;font-size:10px;color:#727784;">{dept}</td>'
+                f'  <td style="padding:6px 8px;font-size:11px;font-weight:700;color:#191c1d;text-align:right;">₱{gross / 100:,.2f}</td>'
+                f'  <td style="padding:6px 8px;font-size:11px;color:#727784;text-align:right;">₱{net / 100:,.2f}</td>'
+                f'</tr>'
+            )
+        st.markdown(
+            f'<div style="max-height:300px;overflow-y:auto;">'
+            f'<table style="width:100%;border-collapse:collapse;">'
+            f'  <thead><tr style="border-bottom:2px solid #e5e7eb;">'
+            f'    <th style="padding:6px 8px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:left;">Employee</th>'
+            f'    <th style="padding:6px 8px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:left;">Department</th>'
+            f'    <th style="padding:6px 8px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Gross</th>'
+            f'    <th style="padding:6px 8px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:right;">Net</th>'
+            f'  </tr></thead>'
+            f'  <tbody>{tbl_rows}</tbody>'
+            f'</table></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Go to Payroll Run →", use_container_width=True, type="primary"):
+            st.session_state["_nav_redirect"] = "Payroll Run"
+            st.rerun()
+    with c2:
+        if st.button("Close", use_container_width=True):
+            st.rerun()
+
+
+def _render_panel_recent_payroll(latest_entries, name_map, latest_period):
+    """Panel 2: Recent Payroll — top employees by gross pay."""
+    top = sorted(latest_entries, key=lambda e: e.get("gross_pay", 0), reverse=True)[:6]
+
+    _INITIALS_COLORS = [
+        ("#dbeafe", "#005bc1"), ("#d1fae5", "#059669"), ("#fef3c7", "#d97706"),
+        ("#ede9fe", "#7c3aed"), ("#fce7f3", "#db2777"), ("#e0f2fe", "#0284c7"),
+    ]
+
+    rows_html = ""
+    for idx, ent in enumerate(top):
+        eid = ent.get("employee_id", "")
+        name = name_map.get(eid, "Unknown")
+        initials = "".join(w[0] for w in name.split()[:2]).upper() if name != "Unknown" else "?"
+        gross = ent.get("gross_pay", 0)
+        ibg, ifg = _INITIALS_COLORS[idx % len(_INITIALS_COLORS)]
+        status = latest_period.get("status", "draft") if latest_period else "draft"
+        if status in ("finalized", "paid"):
+            s_bg, s_fg, s_txt = "#d1fae5", "#059669", "Paid"
+        elif status == "reviewed":
+            s_bg, s_fg, s_txt = "#fef3c7", "#d97706", "Reviewed"
+        else:
+            s_bg, s_fg, s_txt = "#f3f4f6", "#6b7280", "Draft"
+
+        border = 'border-bottom:1px solid #f3f4f6;' if idx < len(top) - 1 else ''
+        rows_html += (
+            f'<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 2px;{border}border-radius:6px;">'
+            f'  <div style="display:flex;align-items:center;gap:8px;">'
+            f'    <div style="width:30px;height:30px;border-radius:50%;background:{ibg};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:{ifg};flex-shrink:0;">{initials}</div>'
+            f'    <div>'
+            f'      <div style="font-size:11px;font-weight:700;color:#191c1d;">{name}</div>'
+            f'      <div style="font-size:8px;color:#9ca3af;margin-top:1px;">EMP-{eid[:6]}</div>'
+            f'    </div>'
+            f'  </div>'
+            f'  <div style="text-align:right;">'
+            f'    <div style="font-size:11px;font-weight:800;color:#005bc1;">₱{gross / 100:,.0f}</div>'
+            f'    <span style="font-size:7px;font-weight:700;padding:2px 6px;border-radius:9999px;background:{s_bg};color:{s_fg};text-transform:uppercase;">{s_txt}</span>'
+            f'  </div>'
+            f'</div>'
+        )
+
+    if not top:
+        rows_html = '<div style="color:#9ca3af;font-size:12px;padding:20px 0;text-align:center;">No payroll data yet.</div>'
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}overflow:hidden;">'
+        f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
+        f'    <div style="{_MLBL}margin-bottom:0;">Recent Payroll</div>'
+        f'    <span style="font-size:10px;font-weight:700;color:#005bc1;cursor:pointer;">View All</span>'
+        f'  </div>'
+        f'  <div style="max-height:220px;overflow-y:auto;">{rows_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("View All →", key="bento_recent_payroll", use_container_width=True):
+        st.session_state["_nav_redirect"] = "Payroll Run"
+        st.rerun()
+
+
+def _render_panel_mini_calendar(cal_events: dict):
+    """Panel 3: Mini calendar inside a bento card — pure HTML, no iframe."""
+    import calendar as _cal
+
+    today = date.today()
+    year, month = today.year, today.month
+    month_name = today.strftime("%B %Y")
+    today_iso = today.isoformat()
+
+    _week_pref = st.session_state.get("gxp_week_start", "Sunday")
+    _first_day = 6 if _week_pref == "Sunday" else 0
+    cal_obj = _cal.Calendar(firstweekday=_first_day)
+    weeks = cal_obj.monthdayscalendar(year, month)
+
+    if _week_pref == "Sunday":
+        hdr = "".join(f'<span style="font-size:8px;font-weight:700;color:#727784;text-transform:uppercase;text-align:center;">{d}</span>' for d in ["SU","MO","TU","WE","TH","FR","SA"])
+    else:
+        hdr = "".join(f'<span style="font-size:8px;font-weight:700;color:#727784;text-transform:uppercase;text-align:center;">{d}</span>' for d in ["MO","TU","WE","TH","FR","SA","SU"])
+
+    cells = ""
+    for week in weeks:
+        for day in week:
+            if day == 0:
+                cells += '<div style="min-height:24px;"></div>'
+                continue
+            iso = f"{year}-{month:02d}-{day:02d}"
+            is_today = iso == today_iso
+            evts = cal_events.get(iso, [])
+
+            # Style
+            if is_today:
+                style = "font-size:12px;font-weight:800;color:#005bc1;"
+            elif evts:
+                prio_colors = {"holiday": "#e53935", "payday": "#4caf50", "deadline": "#ff6f00", "special": "#ff9800"}
+                clr = "#424753"
+                for e in evts:
+                    if e.get("type") in prio_colors:
+                        clr = prio_colors[e["type"]]
+                        break
+                style = f"font-size:10px;font-weight:700;color:{clr};"
+            else:
+                style = "font-size:10px;font-weight:500;color:#424753;"
+
+            # Dots
+            dots = ""
+            if evts:
+                dot_spans = "".join(
+                    f'<span style="width:3px;height:3px;border-radius:50%;background:{e.get("color","#9ca3af")};display:inline-block;"></span>'
+                    for e in evts[:3]
+                )
+                dots = f'<div style="display:flex;gap:1px;justify-content:center;margin-top:1px;">{dot_spans}</div>'
+
+            cells += (
+                f'<div style="text-align:center;padding:2px 0;border-radius:4px;min-height:24px;'
+                f'display:flex;flex-direction:column;align-items:center;justify-content:center;{style}">'
+                f'{day}{dots}</div>'
+            )
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}cursor:pointer;">'
+        f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+        f'    <div style="{_MLBL}margin-bottom:0;">{month_name}</div>'
+        f'  </div>'
+        f'  <div style="display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:3px;">{hdr}</div>'
+        f'  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;">{cells}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Calendar →", key="bento_mini_cal", use_container_width=True):
+        st.session_state["_nav_redirect"] = "Calendar"
+        st.rerun()
+
+
+def _render_panel_attendance_rate(monthly_data):
+    """Panel 3: Attendance Rate — headline % + monthly bar chart."""
+    if not monthly_data:
+        st.markdown(
+            f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}cursor:pointer;">'
+            f'  <div style="{_MLBL}">Attendance Rate</div>'
+            f'  <div style="color:#9ca3af;font-size:12px;padding:32px 0;text-align:center;">No attendance data available.<br>Enable the Attendance module to track.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Attendance →", key="bento_attendance_rate_empty", use_container_width=True):
+            st.session_state["_nav_redirect"] = "Attendance"
+            st.rerun()
+        return
+
+    latest_pct = monthly_data[-1]["pct"] if monthly_data else 0
+    prev_pct = monthly_data[-2]["pct"] if len(monthly_data) >= 2 else 0
+
+    if prev_pct and latest_pct > prev_pct:
+        trend_html = f'<span style="color:#059669;font-size:11px;font-weight:700;">▲ {latest_pct - prev_pct}% better than last month</span>'
+    elif prev_pct and latest_pct < prev_pct:
+        trend_html = f'<span style="color:#93000a;font-size:11px;font-weight:700;">▼ {prev_pct - latest_pct}% from last month</span>'
+    else:
+        trend_html = '<span style="color:#9ca3af;font-size:11px;">Stable</span>'
+
+    bars_html = ""
+    max_pct = max(d["pct"] for d in monthly_data) if monthly_data else 100
+    for i, d in enumerate(monthly_data):
+        h = max(int((d["pct"] / max_pct) * 100), 8) if max_pct else 8
+        is_last = i == len(monthly_data) - 1
+        bg = "#10b981" if is_last else "#e5e7eb"
+        bars_html += (
+            f'<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;">'
+            f'  <div style="width:100%;border-radius:4px 4px 0 0;background:{bg};height:{h}%;min-height:4px;transition:height 0.6s ease;"></div>'
+            f'  <span style="font-size:8px;color:#9ca3af;font-weight:600;">{d["month"]}</span>'
+            f'</div>'
+        )
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}cursor:pointer;">'
+        f'  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">'
+        f'    <div style="{_MLBL}margin-bottom:0;">Attendance Rate</div>'
+        f'    <span style="font-size:9px;font-weight:700;padding:3px 10px;border-radius:9999px;background:#d1fae5;color:#059669;text-transform:uppercase;">Monthly</span>'
+        f'  </div>'
+        f'  <div style="font-size:38px;font-weight:900;color:#191c1d;line-height:1;margin-bottom:4px;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">{latest_pct}%</div>'
+        f'  <div style="margin-bottom:14px;">{trend_html}</div>'
+        f'  <div style="display:flex;align-items:flex-end;gap:5px;height:56px;">{bars_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Attendance →", key="bento_attendance_rate", use_container_width=True):
+        st.session_state["_nav_redirect"] = "Attendance"
+        st.rerun()
+
+
+def _render_panel_workforce(dept_data, active_count):
+    """Panel 4: Workforce Breakdown — SVG donut with dept name, count, % on each segment."""
+    import math
+
+    if not dept_data:
+        st.markdown(
+            f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}cursor:pointer;">'
+            f'  <div style="{_MLBL}">Total Employees</div>'
+            f'  <div style="font-size:38px;font-weight:900;color:#191c1d;text-align:center;padding:16px 0;">{active_count}</div>'
+            f'  <div style="color:#9ca3af;font-size:11px;text-align:center;">No department data</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Employees →", key="bento_workforce_empty", use_container_width=True):
+            st.session_state["_nav_redirect"] = "Employees"
+            st.rerun()
+        return
+
+    cx, cy = 60, 60
+    outer_r = 55
+    inner_r = 32
+    gap_deg = 2.5
+    total_gap = gap_deg * len(dept_data)
+    available_deg = 360 - total_gap
+    vb = "0 0 120 120"
+
+    def p2c(r, angle_deg):
+        a = math.radians(angle_deg - 90)
+        return cx + r * math.cos(a), cy + r * math.sin(a)
+
+    segments_svg = ""
+    labels_svg = ""
+    angle = 0
+
+    for i, d in enumerate(dept_data):
+        seg_deg = d["pct"] / 100 * available_deg
+        if seg_deg < 0.5:
+            angle += seg_deg + gap_deg
+            continue
+        start = angle
+        end = angle + seg_deg
+        large = 1 if seg_deg > 180 else 0
+        color = _DEPT_COLORS[i % len(_DEPT_COLORS)]
+
+        ox1, oy1 = p2c(outer_r, start)
+        ox2, oy2 = p2c(outer_r, end)
+        ix1, iy1 = p2c(inner_r, start)
+        ix2, iy2 = p2c(inner_r, end)
+
+        path = (
+            f'M {ox1:.2f} {oy1:.2f} '
+            f'A {outer_r} {outer_r} 0 {large} 1 {ox2:.2f} {oy2:.2f} '
+            f'L {ix2:.2f} {iy2:.2f} '
+            f'A {inner_r} {inner_r} 0 {large} 0 {ix1:.2f} {iy1:.2f} Z'
+        )
+        segments_svg += f'<path d="{path}" fill="{color}" />'
+
+        # Label — positioned outside the ring with a tiny connector line
+        mid_angle = start + seg_deg / 2
+        ring_r = (outer_r + inner_r) / 2
+        rx, ry = p2c(ring_r, mid_angle)
+
+        # For segments big enough, put % + count ON the ring
+        if seg_deg >= 30:
+            labels_svg += (
+                f'<text x="{rx:.1f}" y="{ry:.1f}" text-anchor="middle" '
+                f'dominant-baseline="central" fill="#fff" '
+                f'style="font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;pointer-events:none;">'
+                f'<tspan style="font-size:5px;font-weight:800;">{d["pct"]}%</tspan>'
+                f'<tspan x="{rx:.1f}" dy="5.5" style="font-size:3.5px;font-weight:600;opacity:0.9;">{d["count"]} emp</tspan>'
+                f'</text>'
+            )
+
+        # External label with dept name — connector line from outer edge
+        label_anchor_r = outer_r + 3
+        lx, ly = p2c(label_anchor_r, mid_angle)
+        # Determine text anchor based on which side
+        is_right = lx >= cx
+        txt_anchor = "start" if is_right else "end"
+        txt_x = lx + 2 if is_right else lx - 2
+        # Connector line end
+        line_end_x = lx + 8 if is_right else lx - 8
+
+        dept_name = d["department"]
+        if len(dept_name) > 10:
+            dept_name = dept_name[:9] + "…"
+
+        # Connector line
+        labels_svg += (
+            f'<line x1="{lx:.1f}" y1="{ly:.1f}" x2="{line_end_x:.1f}" y2="{ly:.1f}" '
+            f'stroke="{color}" stroke-width="0.4" opacity="0.5" />'
+        )
+        # Dept name
+        labels_svg += (
+            f'<text x="{line_end_x + (1.5 if is_right else -1.5):.1f}" y="{ly:.1f}" '
+            f'text-anchor="{txt_anchor}" dominant-baseline="central" '
+            f'fill="#191c1d" style="font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;'
+            f'font-size:3.6px;font-weight:700;">{dept_name}</text>'
+        )
+        # Small count + % below dept name (for segments too small to have ring label)
+        if seg_deg < 30:
+            labels_svg += (
+                f'<text x="{line_end_x + (1.5 if is_right else -1.5):.1f}" y="{ly + 4.5:.1f}" '
+                f'text-anchor="{txt_anchor}" dominant-baseline="central" '
+                f'fill="#9ca3af" style="font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;'
+                f'font-size:3px;font-weight:600;">{d["count"]} · {d["pct"]}%</text>'
+            )
+
+        angle = end + gap_deg
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}padding:16px 8px;cursor:pointer;">'
+        f'  <div style="{_MLBL}padding-left:12px;">Total Employees</div>'
+        f'  <div style="position:relative;width:100%;max-width:260px;margin:0 auto;">'
+        f'    <svg viewBox="{vb}" style="width:100%;height:auto;overflow:visible;">'
+        f'      {segments_svg}'
+        f'      {labels_svg}'
+        f'    </svg>'
+        f'    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;">'
+        f'      <div style="font-size:22px;font-weight:900;color:#191c1d;line-height:1;">{active_count}</div>'
+        f'      <div style="font-size:7px;font-weight:700;color:#9ca3af;text-transform:uppercase;margin-top:2px;">Active</div>'
+        f'    </div>'
+        f'  </div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Employees →", key="bento_workforce", use_container_width=True):
+        st.session_state["_nav_redirect"] = "Employees"
+        st.rerun()
+
+
+def _render_panel_attendance_detail(today_logs, name_map_all):
+    """Panel 5: Attendance Detail — today's time logs table."""
+    if not today_logs:
+        st.markdown(
+            f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}cursor:pointer;">'
+            f'  <div style="{_MLBL}">Attendance Detail</div>'
+            f'  <div style="color:#9ca3af;font-size:12px;padding:24px 0;text-align:center;">No attendance logs for today.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Attendance →", key="bento_attendance_detail_empty", use_container_width=True):
+            st.session_state["_nav_redirect"] = "Attendance"
+            st.rerun()
+        return
+
+    _STATUS_PILLS = {
+        "present":  ("#d1fae5", "#059669", "Present"),
+        "on_time":  ("#d1fae5", "#059669", "On Time"),
+        "late":     ("#fee2e2", "#93000a", "Late"),
+        "absent":   ("#f3f4f6", "#6b7280", "Absent"),
+        "overtime": ("#dbeafe", "#005bc1", "Overtime"),
+    }
+
+    _ROW_COLORS = [
+        ("#dbeafe", "#005bc1"), ("#fce7f3", "#db2777"), ("#d1fae5", "#059669"),
+        ("#fef3c7", "#d97706"), ("#ede9fe", "#7c3aed"), ("#e0f2fe", "#0284c7"),
+    ]
+
+    rows_html = ""
+    for idx, log in enumerate(today_logs[:8]):
+        eid = log.get("employee_id", "")
+        name = name_map_all.get(eid, "Employee")
+        initials = "".join(w[0] for w in name.split()[:2]).upper()
+        ibg, ifg = _ROW_COLORS[idx % len(_ROW_COLORS)]
+
+        clock_in = log.get("clock_in", "—")
+        clock_out = log.get("clock_out") or "—"
+        if clock_in and clock_in != "—":
+            try:
+                clock_in = clock_in[11:19] if len(clock_in) > 11 else clock_in
+            except Exception:
+                pass
+        if clock_out and clock_out != "—":
+            try:
+                clock_out = clock_out[11:19] if len(clock_out) > 11 else clock_out
+            except Exception:
+                pass
+
+        raw_status = (log.get("status") or "present").lower().replace(" ", "_")
+        s_bg, s_fg, s_txt = _STATUS_PILLS.get(raw_status, ("#f3f4f6", "#6b7280", raw_status.title()))
+        bg_row = "#fafbfc" if idx % 2 else "transparent"
+
+        rows_html += (
+            f'<tr style="background:{bg_row};">'
+            f'  <td style="padding:10px 8px;">'
+            f'    <div style="display:flex;align-items:center;gap:8px;">'
+            f'      <div style="width:28px;height:28px;border-radius:50%;background:{ibg};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:{ifg};flex-shrink:0;">{initials}</div>'
+            f'      <span style="font-size:12px;font-weight:700;color:#191c1d;">{name}</span>'
+            f'    </div>'
+            f'  </td>'
+            f'  <td style="padding:10px 8px;font-size:12px;color:#191c1d;font-family:monospace;">{clock_in}</td>'
+            f'  <td style="padding:10px 8px;font-size:12px;color:#191c1d;font-family:monospace;">{clock_out}</td>'
+            f'  <td style="padding:10px 8px;">'
+            f'    <span style="font-size:9px;font-weight:700;padding:3px 10px;border-radius:9999px;background:{s_bg};color:{s_fg};text-transform:uppercase;">{s_txt}</span>'
+            f'  </td>'
+            f'</tr>'
+        )
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}cursor:pointer;">'
+        f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
+        f'    <div style="{_MLBL}margin-bottom:0;">Attendance Detail</div>'
+        f'    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor:pointer;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>'
+        f'  </div>'
+        f'  <div style="overflow-x:auto;max-height:240px;overflow-y:auto;">'
+        f'    <table style="width:100%;border-collapse:collapse;text-align:left;">'
+        f'      <thead>'
+        f'        <tr style="border-bottom:2px solid #f3f4f6;">'
+        f'          <th style="padding:8px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em;">Employee</th>'
+        f'          <th style="padding:8px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em;">Time In</th>'
+        f'          <th style="padding:8px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em;">Time Out</th>'
+        f'          <th style="padding:8px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em;">Status</th>'
+        f'        </tr>'
+        f'      </thead>'
+        f'      <tbody>{rows_html}</tbody>'
+        f'    </table>'
+        f'  </div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Attendance →", key="bento_attendance_detail", use_container_width=True):
+        st.session_state["_nav_redirect"] = "Attendance"
+        st.rerun()
+
+
+def _render_panel_pending_requests(pending_details, name_map_all, pending_leave, pending_ot):
+    """Panel 6: Pending Requests — leave/OT cards with approve/reject."""
+    total_pending = pending_leave + pending_ot
+
+    if not pending_details and total_pending == 0:
+        st.markdown(
+            f'<div class="gxp-bento-hero-card" style="{_CARD}">'
+            f'  <div style="{_MLBL}">Pending Requests</div>'
+            f'  <div style="text-align:center;padding:24px 0;">'
+            f'    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+            f'    <div style="font-size:13px;font-weight:700;color:#10b981;margin-top:8px;">All caught up!</div>'
+            f'    <div style="font-size:11px;color:#9ca3af;margin-top:4px;">No pending requests</div>'
+            f'  </div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    _TYPE_STYLE = {
+        "Leave":    ("#fef3c7", "#d97706"),
+        "Overtime": ("#dbeafe", "#005bc1"),
+    }
+
+    cards_html = ""
+    for req in pending_details[:3]:
+        eid = req.get("employee_id", "")
+        name = name_map_all.get(eid, "Employee")
+        rtype = req.get("type", "Leave")
+        detail = req.get("detail", "")
+        tbg, tfg = _TYPE_STYLE.get(rtype, ("#f3f4f6", "#6b7280"))
+
+        # Time ago (simple)
+        ts = req.get("created_at", "")
+        try:
+            from datetime import datetime as _dt5, timezone as _tz5, timedelta as _td5
+            dt = _dt5.fromisoformat(ts.replace("Z", "+00:00"))
+            diff = _dt5.now(_tz5.utc) - dt
+            if diff.days > 0:
+                ago = f"{diff.days}d ago"
+            elif diff.seconds > 3600:
+                ago = f"{diff.seconds // 3600}h ago"
+            else:
+                ago = f"{diff.seconds // 60}m ago"
+        except Exception:
+            ago = ""
+
+        cards_html += (
+            f'<div style="background:#f8f9fa;padding:12px;border-radius:10px;border:1px solid transparent;">'
+            f'  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
+            f'    <span style="font-size:8px;font-weight:700;padding:2px 8px;border-radius:5px;background:{tbg};color:{tfg};">{rtype}</span>'
+            f'    <span style="font-size:8px;color:#9ca3af;">{ago}</span>'
+            f'  </div>'
+            f'  <div style="font-size:11px;font-weight:700;color:#191c1d;margin-bottom:2px;">{name}</div>'
+            f'  <div style="font-size:9px;color:#727784;margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{detail}</div>'
+            f'  <div style="display:flex;gap:5px;">'
+            f'    <div style="flex:1;padding:5px 0;background:#005bc1;color:#fff;font-size:9px;font-weight:700;border-radius:6px;text-align:center;cursor:pointer;">Approve</div>'
+            f'    <div style="flex:1;padding:5px 0;background:#e5e7eb;color:#191c1d;font-size:9px;font-weight:700;border-radius:6px;text-align:center;cursor:pointer;">Decline</div>'
+            f'  </div>'
+            f'</div>'
+        )
+
+    # Summary card
+    summary_card = (
+        f'<div style="background:linear-gradient(135deg,#005bc1,#004494);padding:12px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#fff;">'
+        f'  <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.8;margin-bottom:3px;">Total Pending</div>'
+        f'  <div style="font-size:28px;font-weight:900;line-height:1;margin-bottom:3px;">{total_pending}</div>'
+        f'  <div style="font-size:8px;opacity:0.7;">{pending_leave} leave · {pending_ot} overtime</div>'
+        f'</div>'
+    )
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card" style="{_CARD}">'
+        f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
+        f'    <div>'
+        f'      <div style="{_MLBL}margin-bottom:2px;">Action Required</div>'
+        f'      <div style="font-size:13px;font-weight:800;color:#191c1d;">Pending Requests</div>'
+        f'    </div>'
+        f'    <div style="width:24px;height:24px;border-radius:50%;background:#dbeafe;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#005bc1;">{total_pending}</div>'
+        f'  </div>'
+        f'  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">'
+        f'    {cards_html}'
+        f'    {summary_card}'
+        f'  </div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# Phase D: Bento Grid Hero (legacy — kept for supervisor portal)
 # ============================================================
 
 _ENTITY_LABELS = {
@@ -343,9 +1306,9 @@ def _load_recent_activity(n: int = 4) -> list[dict]:
 
 
 _MS = "font-family:'Material Symbols Outlined';font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;"
-_CARD  = "background:#ffffff;border-radius:16px;padding:28px;box-shadow:0 20px 40px rgba(45,51,53,0.06);"
-_LABEL = "font-size:10px;font-weight:700;color:#004494;text-transform:uppercase;letter-spacing:.2em;margin-bottom:14px;font-family:'Plus Jakarta Sans',system-ui,sans-serif;"
-_MLBL  = "font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.2em;margin-bottom:14px;font-family:'Plus Jakarta Sans',system-ui,sans-serif;"
+_CARD  = "background:#ffffff;border-radius:14px;padding:20px;box-shadow:0 16px 32px rgba(45,51,53,0.05);"
+_LABEL = "font-size:9px;font-weight:700;color:#004494;text-transform:uppercase;letter-spacing:.18em;margin-bottom:10px;font-family:'Plus Jakarta Sans',system-ui,sans-serif;"
+_MLBL  = "font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.18em;margin-bottom:10px;font-family:'Plus Jakarta Sans',system-ui,sans-serif;"
 _BADGE = "display:inline-flex;align-items:center;padding:4px 14px;border-radius:9999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;"
 _BADGE_COLORS = {
     "green":  "background:#89fa9b;color:#005320;",
@@ -392,7 +1355,7 @@ def _render_bento_row1(next_period, active_count, total_count):
 
     with col_next:
         card_html = (
-            f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}min-height:150px;">'
+            f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}">'
             f'  <div style="{_LABEL}">Upcoming Milestone</div>'
             f'  <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px">'
             f'    <span style="font-size:44px;font-weight:800;color:#005bc1;line-height:1;letter-spacing:-2px;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">{date_disp}</span>'
@@ -411,7 +1374,7 @@ def _render_bento_row1(next_period, active_count, total_count):
         sub_txt  = f"{inactive} inactive" if inactive else "All active"
         _cid_tag = get_company_id()[:8]  # force DOM refresh on company switch
         card_html = (
-            f'<div class="gxp-bento-hero-card gxp-bento-clickable" data-cid="{_cid_tag}" style="background:#febf0d;border-radius:16px;padding:24px;min-height:150px;display:flex;flex-direction:column;justify-content:space-between;">'
+            f'<div class="gxp-bento-hero-card gxp-bento-clickable" data-cid="{_cid_tag}" style="background:#febf0d;border-radius:16px;padding:28px;justify-content:space-between;">'
             f'  <div class="gxp-count" data-to="{active_count}" style="font-size:36px;font-weight:900;color:#000;line-height:1;font-family:\'Plus Jakarta Sans\',system-ui,sans-serif;">{active_count}</div>'
             f'  <div>'
             f'    <div style="font-size:1rem;font-weight:700;color:#000;">Active Employees</div>'
@@ -3217,30 +4180,92 @@ def render():
         col_main = None  # skip side column
         col_side = None
     else:
-        # Outer 2-column: left (3/4) for content rows, right (1/4) for Reminders + Alerts
-        col_main, col_side = st.columns([3, 1], gap="medium")
-        with col_main:
-            # Row 1: Upcoming Milestone | Active Employees | Recent Activity
-            _render_bento_row1(next_period, active_count, total_count)
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-            # Row 2: Calendar | Payroll Expenditure
-            _admin_name_map = _load_employee_names(
-                [e["employee_id"] for e in latest_entries if e.get("employee_id")]
-            ) if latest_entries else {}
-            _render_bento_row2(latest_period, history, _cal_events,
-                               latest_entries=latest_entries, name_map=_admin_name_map)
+        # ── NEW 6-panel dashboard layout ──
+        _admin_name_map = _load_employee_names(
+            [e["employee_id"] for e in latest_entries if e.get("employee_id")]
+        ) if latest_entries else {}
 
-    if col_side is not None:
+        # Load additional data for new panels
+        _cid = get_company_id()
+        _dept_data = _load_department_breakdown(_cid)
+        _emp_dept_map = _load_employee_dept_map(_cid)
+        _today_logs = _load_today_attendance(_cid)
+        _monthly_att = _load_attendance_monthly(_cid)
+        _pending_details = _load_pending_request_details(_cid)
+
+        # Name map for all employees (for attendance + pending panels)
+        _all_emp_ids = list(set(
+            [log.get("employee_id", "") for log in _today_logs] +
+            [req.get("employee_id", "") for req in _pending_details]
+        ))
+        _all_name_map = {**_admin_name_map}
+        if _all_emp_ids:
+            _extra_names = _load_employee_names([eid for eid in _all_emp_ids if eid and eid not in _all_name_map])
+            _all_name_map.update(_extra_names)
+
+        # Outer layout: main content (3/4) + sidebar (1/4)
+        col_main, col_side = st.columns([3, 1], gap="medium")
+
+        with col_main:
+            # Row 1: Payroll Overview | Recent Payroll | Attendance Rate
+            r1c1, r1c2, r1c3 = st.columns(3, gap="medium")
+            with r1c1:
+                _render_panel_payroll_overview(
+                    latest_period, history, latest_entries,
+                    total_gross, total_net, total_cost, headcount,
+                    dept_map=_emp_dept_map,
+                )
+            with r1c2:
+                _render_panel_recent_payroll(latest_entries, _admin_name_map, latest_period)
+            with r1c3:
+                _render_panel_mini_calendar(_cal_events or {})
+
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+            # Row 2: Workforce Breakdown | Attendance Detail (wider)
+            r2c1, r2c2 = st.columns([1, 2], gap="medium")
+            with r2c1:
+                _render_panel_workforce(_dept_data, active_count)
+            with r2c2:
+                _render_panel_attendance_detail(_today_logs, _all_name_map)
+
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+            # Row 3: Pending Requests
+            _render_panel_pending_requests(_pending_details, _all_name_map, pending_leave, pending_ot)
+
         with col_side:
-            st.markdown('<span class="gxp-bento-hero-card" style="display:none"></span>', unsafe_allow_html=True)
             _render_reminders(pending_leave, pending_ot)
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             _render_alerts(deadlines, periods)
 
-    # Wire bento card clicks + ripple + reminder swipe action buttons (pure JS)
+    # Wire bento card clicks + ripple + equal-height cards (pure JS)
     _stc.html("""<script>
     (function(){
       var pd=window.parent.document;
+
+      // ── Equal-height cards per row (not across outer columns) ──
+      function equalizeBento(){
+        // Find inner stHorizontalBlock rows that contain bento cards
+        pd.querySelectorAll('[data-testid="stHorizontalBlock"]').forEach(function(row){
+          var cards=row.querySelectorAll(':scope > [data-testid="stColumn"] .gxp-bento-hero-card');
+          if(cards.length<2) return;
+          // Skip the outer [3,1] split (it has col_side with reminders, no bento card directly)
+          // Only equalize rows where ALL columns have a bento card
+          var cols=row.querySelectorAll(':scope > [data-testid="stColumn"]');
+          var bentoColCount=0;
+          cols.forEach(function(c){if(c.querySelector('.gxp-bento-hero-card'))bentoColCount++;});
+          if(bentoColCount<cols.length) return;
+          // Reset then measure
+          cards.forEach(function(c){c.style.minHeight='';});
+          var maxH=0;
+          cards.forEach(function(c){var h=c.getBoundingClientRect().height;if(h>maxH)maxH=h;});
+          if(maxH>40) cards.forEach(function(c){c.style.minHeight=maxH+'px';});
+        });
+      }
+      setTimeout(equalizeBento,400);
+      setTimeout(equalizeBento,900);
+      setTimeout(equalizeBento,1800);
 
       // ── Ripple effect helper ──
       function addRipple(el,e){
@@ -3422,11 +4447,12 @@ def render():
     })();
     </script>""", height=0)
 
-    # ── 3. KPI Stat Cards (hidden for supervisors) ──
-    if not _is_supervisor:
-        _render_stat_cards(active_count, total_count, total_gross, total_net, total_cost,
-                           latest_period, history,
-                           latest_entries=latest_entries, headcount=headcount)
+    # ── 3. KPI Stat Cards — now embedded in Payroll Overview panel ──
+    # (Kept for supervisor portal; hidden for admin since v2 panels cover this)
+    # if not _is_supervisor:
+    #     _render_stat_cards(active_count, total_count, total_gross, total_net, total_cost,
+    #                        latest_period, history,
+    #                        latest_entries=latest_entries, headcount=headcount)
 
     # ── 4. Supervisor Management Sections ──────────
     if _is_supervisor and _team_ids:

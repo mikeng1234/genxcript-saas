@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GenXcript Payroll Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-dim": "#d8dadb",
+              "secondary-container": "#6cf8bb",
+              "on-primary-fixed": "#001a41",
+              "inverse-primary": "#adc6ff",
+              "error-container": "#ffdad6",
+              "on-secondary-fixed-variant": "#005236",
+              "on-primary-fixed-variant": "#004493",
+              "surface-container-lowest": "#ffffff",
+              "surface-container-high": "#e7e8e9",
+              "tertiary-fixed-dim": "#ffb95f",
+              "secondary-fixed-dim": "#4edea3",
+              "surface-variant": "#e1e3e4",
+              "background": "#f8f9fa",
+              "on-tertiary-fixed-variant": "#653e00",
+              "inverse-on-surface": "#eff1f2",
+              "on-error": "#ffffff",
+              "error": "#ba1a1a",
+              "outline-variant": "#c2c6d5",
+              "on-surface": "#191c1d",
+              "outline": "#727784",
+              "on-error-container": "#93000a",
+              "surface-container-highest": "#e1e3e4",
+              "surface-container-low": "#f2f4f5",
+              "surface-container": "#eceeef",
+              "tertiary-fixed": "#ffddb8",
+              "secondary-fixed": "#6ffbbe",
+              "surface-tint": "#005bc0",
+              "on-surface-variant": "#424753",
+              "primary-fixed-dim": "#adc6ff",
+              "on-tertiary-container": "#ffd29e",
+              "secondary": "#006c49",
+              "on-tertiary-fixed": "#2a1700",
+              "on-secondary": "#ffffff",
+              "on-primary": "#ffffff",
+              "surface-bright": "#f8f9fa",
+              "surface": "#f8f9fa",
+              "on-secondary-fixed": "#002113",
+              "primary-container": "#005bc1",
+              "tertiary": "#663f00",
+              "primary": "#004494",
+              "on-secondary-container": "#00714d",
+              "inverse-surface": "#2e3132",
+              "primary-fixed": "#d8e2ff",
+              "on-background": "#191c1d",
+              "on-tertiary": "#ffffff",
+              "tertiary-container": "#865400",
+              "on-primary-container": "#c9d9ff"
+            },
+            fontFamily: {
+              "headline": ["Plus Jakarta Sans"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-card { background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(12px); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="bg-background text-on-surface">
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full z-50 bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl shadow-sm dark:shadow-none">
+<div class="flex justify-between items-center px-6 py-3 w-full">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold tracking-tighter text-blue-900 dark:text-blue-100">GenXcript Payroll</span>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-blue-700 dark:text-blue-400 font-bold border-b-2 border-blue-700 font-plus-jakarta text-sm tracking-tight px-1 py-1" href="#">Dashboard</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-blue-600 font-plus-jakarta text-sm font-medium tracking-tight hover:bg-slate-50 transition-all px-1 py-1" href="#">Settings</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-blue-600 font-plus-jakarta text-sm font-medium tracking-tight hover:bg-slate-50 transition-all px-1 py-1" href="#">Help</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 w-64" placeholder="Search records..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 text-on-surface-variant hover:bg-slate-50 rounded-full transition-all">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-slate-50 rounded-full transition-all">
+<span class="material-symbols-outlined">history</span>
+</button>
+<div class="h-8 w-8 rounded-full bg-primary-fixed overflow-hidden ml-2">
+<img class="w-full h-full object-cover" data-alt="professional headshot of a corporate manager smiling in a modern office setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBzvvepf5OsEO4G0M_mz_Ma8a3P2kpqCJyafUTD9YUXZQACeHkvtrdChPEdDWNd4aI9QT1vo54yh9BnKE5_jxZfLSkYGzX768EILIVbEX8vS3TGG3ywwNvH-u-9R3ZFb0l4T5peBDG-h1fNm2NkYFOGs5CwGm7h-QNaTsE_tFfw2Qlhoh_uaZYxMOpRoXzbxh36yBDYpIk1vg2HC2fGCrL9WbJjWboRBPoCUhrhzeYKZ6yPa5BO3oOIX2g7PjN2docnhvwf4_t4A10"/>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-slate-100 dark:bg-slate-800 h-px"></div>
+</header>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-64 z-40 bg-slate-50 dark:bg-slate-950 flex flex-col h-full p-4 hidden md:flex">
+<div class="pt-20 pb-8 flex items-center gap-3 px-2">
+<div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">account_balance_wallet</span>
+</div>
+<div>
+<h2 class="text-lg font-black text-blue-800 dark:text-blue-200">GenXcript</h2>
+<p class="text-[10px] uppercase tracking-widest text-outline font-bold">Payroll Admin</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-semibold rounded-lg hover:translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-plus-jakarta text-sm antialiased">Payroll</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 hover:translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-plus-jakarta text-sm antialiased">Attendance</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 hover:translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-plus-jakarta text-sm antialiased">Reports</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 hover:translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-plus-jakarta text-sm antialiased">Employees</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 hover:translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined">verified_user</span>
+<span class="font-plus-jakarta text-sm antialiased">Compliance</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 hover:translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-plus-jakarta text-sm antialiased">Settings</span>
+</a>
+</nav>
+<div class="mt-auto space-y-4">
+<button class="w-full bg-gradient-to-br from-primary to-primary-container text-white py-3 rounded-xl font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-sm">rocket_launch</span>
+                Run Payroll
+            </button>
+<div class="h-px bg-slate-200 dark:bg-slate-800 mx-2"></div>
+<a class="flex items-center gap-3 px-4 py-3 text-error hover:bg-error/5 rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-plus-jakarta text-sm antialiased">Log Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="md:ml-64 pt-24 px-6 pb-12 min-h-screen">
+<!-- Dashboard Header -->
+<header class="mb-10">
+<h1 class="text-4xl font-bold tracking-tight text-on-surface mb-2">Dashboard</h1>
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h2 class="text-2xl font-semibold text-primary">Good morning, Alejandro</h2>
+<p class="text-on-surface-variant text-lg">Everything is ready for your next pay cycle.</p>
+</div>
+<div class="flex items-center gap-3">
+<div class="px-4 py-2 bg-secondary/10 text-secondary rounded-full flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+<span class="text-xs font-bold tracking-wider uppercase">DOLE COMPLIANT</span>
+</div>
+<div class="px-4 py-2 bg-surface-container-high rounded-xl flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">calendar_month</span>
+<span class="text-sm font-medium">Cut-off: Oct 15 - Oct 30</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Panel 1: Payroll Overview -->
+<section class="lg:col-span-1 bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col justify-between">
+<div class="flex justify-between items-start mb-4">
+<h3 class="text-sm font-bold text-outline tracking-wider uppercase">Payroll Overview</h3>
+<div class="p-2 bg-primary/5 rounded-lg">
+<span class="material-symbols-outlined text-primary">payments</span>
+</div>
+</div>
+<div class="mb-6">
+<p class="text-4xl font-extrabold text-on-surface tracking-tighter">₱383,127.84</p>
+<div class="flex items-center gap-2 mt-2">
+<span class="flex items-center text-secondary text-sm font-bold">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+                            +12.4%
+                        </span>
+<span class="text-xs text-on-surface-variant font-medium">vs last month</span>
+</div>
+</div>
+<div class="h-16 w-full flex items-end gap-1">
+<!-- Sparkline simulation -->
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[40%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[60%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[50%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[80%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[70%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[90%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[85%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[100%]"></div>
+</div>
+</section>
+<!-- Panel 2: Recent Payroll -->
+<section class="lg:col-span-1 bg-surface-container-lowest rounded-xl p-6 shadow-sm overflow-hidden">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-sm font-bold text-outline tracking-wider uppercase">Recent Payroll</h3>
+<button class="text-primary text-xs font-bold hover:underline">View All</button>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between p-3 rounded-xl hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">AR</div>
+<div>
+<p class="text-sm font-bold">Ana Reyes</p>
+<p class="text-[10px] text-on-surface-variant">UI Designer</p>
+</div>
+</div>
+<p class="text-sm font-bold text-primary">₱42,500.00</p>
+</div>
+<div class="flex items-center justify-between p-3 rounded-xl hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">CS</div>
+<div>
+<p class="text-sm font-bold">Carlos Santos</p>
+<p class="text-[10px] text-on-surface-variant">Backend Engineer</p>
+</div>
+</div>
+<p class="text-sm font-bold text-primary">₱58,000.00</p>
+</div>
+<div class="flex items-center justify-between p-3 rounded-xl hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">ML</div>
+<div>
+<p class="text-sm font-bold">Maria Luna</p>
+<p class="text-[10px] text-on-surface-variant">QA Lead</p>
+</div>
+</div>
+<p class="text-sm font-bold text-primary">₱45,200.00</p>
+</div>
+</div>
+</section>
+<!-- Panel 3: Attendance Rate -->
+<section class="lg:col-span-1 bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+<div class="flex justify-between items-start mb-4">
+<h3 class="text-sm font-bold text-outline tracking-wider uppercase">Attendance Rate</h3>
+<span class="text-xs font-bold text-secondary bg-secondary/10 px-2 py-1 rounded">Optimal</span>
+</div>
+<div class="flex items-center gap-4 mb-8">
+<p class="text-5xl font-black text-on-surface">98%</p>
+<div class="text-xs text-on-surface-variant">
+<p class="font-bold text-secondary">Healthy Workforce</p>
+<p>Avg. 8.2h per day</p>
+</div>
+</div>
+<div class="flex items-end justify-between h-20 gap-2">
+<!-- Bar Chart simulation -->
+<div class="w-full bg-slate-100 rounded-t h-[80%] relative group">
+<div class="absolute inset-0 bg-primary opacity-20 rounded-t h-[90%]"></div>
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-primary hidden group-hover:block">M</div>
+</div>
+<div class="w-full bg-slate-100 rounded-t h-[80%] relative group">
+<div class="absolute inset-0 bg-primary opacity-20 rounded-t h-[95%]"></div>
+</div>
+<div class="w-full bg-slate-100 rounded-t h-[80%] relative group">
+<div class="absolute inset-0 bg-primary opacity-20 rounded-t h-[85%]"></div>
+</div>
+<div class="w-full bg-slate-100 rounded-t h-[80%] relative group">
+<div class="absolute inset-0 bg-primary opacity-20 rounded-t h-[98%]"></div>
+</div>
+<div class="w-full bg-slate-100 rounded-t h-[80%] relative group">
+<div class="absolute inset-0 bg-primary opacity-20 rounded-t h-[70%]"></div>
+</div>
+</div>
+<p class="text-[10px] text-center mt-4 text-outline font-bold tracking-widest uppercase">Mon — Fri Performance</p>
+</section>
+<!-- Panel 4: Workforce Breakdown -->
+<section class="lg:col-span-1 bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+<h3 class="text-sm font-bold text-outline tracking-wider uppercase mb-6">Workforce Breakdown</h3>
+<div class="relative w-40 h-40 mx-auto mb-6">
+<!-- Donut chart placeholder -->
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#f2f4f5" stroke-width="4"></circle>
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#004494" stroke-dasharray="45 100" stroke-dashoffset="0" stroke-width="4"></circle>
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#006c49" stroke-dasharray="30 100" stroke-dashoffset="-45" stroke-width="4"></circle>
+<circle cx="18" cy="18" fill="transparent" r="15.915" stroke="#663f00" stroke-dasharray="25 100" stroke-dashoffset="-75" stroke-width="4"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<p class="text-2xl font-black text-on-surface">124</p>
+<p class="text-[10px] text-on-surface-variant font-bold uppercase">Total</p>
+</div>
+</div>
+<div class="space-y-3">
+<div class="flex items-center justify-between text-xs font-bold">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="text-on-surface-variant">Engineering</span>
+</div>
+<span>45%</span>
+</div>
+<div class="flex items-center justify-between text-xs font-bold">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<span class="text-on-surface-variant">Design &amp; Product</span>
+</div>
+<span>30%</span>
+</div>
+<div class="flex items-center justify-between text-xs font-bold">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-tertiary"></div>
+<span class="text-on-surface-variant">Operations</span>
+</div>
+<span>25%</span>
+</div>
+</div>
+</section>
+<!-- Panel 5: Attendance Detail Table -->
+<section class="lg:col-span-2 bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+<h3 class="text-sm font-bold text-outline tracking-wider uppercase">Attendance Detail</h3>
+<div class="flex items-center gap-2 w-full sm:w-auto">
+<div class="relative flex-1 sm:w-48">
+<span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-sm text-outline">search</span>
+<input class="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-container-low border-none rounded-lg focus:ring-1 focus:ring-primary/30" placeholder="Search employee..." type="text"/>
+</div>
+<button class="p-1.5 bg-surface-container-low rounded-lg text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+</button>
+</div>
+</div>
+<div class="overflow-x-auto no-scrollbar">
+<table class="w-full text-left">
+<thead>
+<tr class="text-[10px] font-bold text-outline uppercase tracking-widest">
+<th class="pb-4 font-bold">Employee</th>
+<th class="pb-4 font-bold">Date</th>
+<th class="pb-4 font-bold">Time In</th>
+<th class="pb-4 font-bold">Time Out</th>
+<th class="pb-4 font-bold">Status</th>
+</tr>
+</thead>
+<tbody class="text-sm divide-y divide-slate-100">
+<tr>
+<td class="py-4">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-full bg-blue-100 text-primary flex items-center justify-center text-[10px] font-bold">JD</div>
+<span class="font-bold">Juan Dela Cruz</span>
+</div>
+</td>
+<td class="py-4 text-on-surface-variant">Oct 24, 2023</td>
+<td class="py-4">08:52 AM</td>
+<td class="py-4">06:05 PM</td>
+<td class="py-4">
+<span class="px-2 py-0.5 bg-secondary/10 text-secondary text-[10px] font-black rounded uppercase">On Time</span>
+</td>
+</tr>
+<tr>
+<td class="py-4">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-[10px] font-bold">EB</div>
+<span class="font-bold">Elena Blanco</span>
+</div>
+</td>
+<td class="py-4 text-on-surface-variant">Oct 24, 2023</td>
+<td class="py-4">09:15 AM</td>
+<td class="py-4">06:00 PM</td>
+<td class="py-4">
+<span class="px-2 py-0.5 bg-tertiary/10 text-tertiary text-[10px] font-black rounded uppercase">Late</span>
+</td>
+</tr>
+<tr>
+<td class="py-4">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-full bg-blue-100 text-primary flex items-center justify-center text-[10px] font-bold">PT</div>
+<span class="font-bold">Pedro Torres</span>
+</div>
+</td>
+<td class="py-4 text-on-surface-variant">Oct 24, 2023</td>
+<td class="py-4">08:45 AM</td>
+<td class="py-4">07:30 PM</td>
+<td class="py-4">
+<span class="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-black rounded uppercase">Overtime</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Panel 6: Pending Requests -->
+<section class="lg:col-span-3 bg-white/60 backdrop-blur-xl border border-white/20 rounded-xl p-6 shadow-xl relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-8 opacity-5">
+<span class="material-symbols-outlined text-[120px]">assignment_late</span>
+</div>
+<div class="flex justify-between items-center mb-8">
+<div>
+<h3 class="text-sm font-bold text-outline tracking-wider uppercase mb-1">Action Required</h3>
+<p class="text-xl font-black text-on-surface">Pending Requests</p>
+</div>
+<div class="flex -space-x-3">
+<div class="w-10 h-10 rounded-full border-4 border-white bg-slate-200 flex items-center justify-center text-[10px] font-bold">8+</div>
+<div class="w-10 h-10 rounded-full border-4 border-white overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="professional portrait of a young woman with a focused expression" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXBTdf7aQPwcnw18DNcQCZnjyGmmGRYsdRiHfCPZuxEPHzdvYa2jWXsluZLkeRP682G1TFxzfIy-FQhCeT8VBavMbxLXyAm1b4_l83L_CDfnxqPSU_E4lEFvMs3judHKdrj9t86ihFjN5Y1eIfeq6XH8rKkB_Q0oKCa2JNhpqjJiDVaVkcgYj2FLBES5qr_1xvYvJwJeGy3BZLIL9iUlmPMa81c0FH0dkJ2fwl-lJjAsbm5mQaMvYwuyUZQq2O51M-MtbFScgerc0"/>
+</div>
+<div class="w-10 h-10 rounded-full border-4 border-white overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="middle aged businessman in a suit with a kind smile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAfE_rPKrhJICRKYxFOFLiOJoE4sUY-Jtl21ch2eFDhgNFHH-H-vkKjrUagN-0vlJWjUvYCkInfDkFcAFVZkh6xK8pLKJyDhuRDFrPFeX-4eTZKM_feg8x5IVqfpCC8S_cJ5NlTbHaoeSdDrdFhecR0zXMKGUTxZFklqJcQVm88Fl4SnPFO-7YUHWfHyVqqAZojyu96Mic3rOzUeTRXVpm6DXiPgguuAQW_oONUH8Dpa1zQJbfl1ivk7G1d55loDJkDqIyG-OyVukg"/>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- Request Card 1 -->
+<div class="bg-surface-container-low/50 p-4 rounded-xl border border-transparent hover:border-primary/20 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-3">
+<span class="px-2 py-1 bg-tertiary/10 text-tertiary text-[10px] font-bold rounded">Leave Request</span>
+<p class="text-[10px] text-outline">2h ago</p>
+</div>
+<p class="font-bold text-on-surface mb-1">Ramon Garcia</p>
+<p class="text-xs text-on-surface-variant line-clamp-1 mb-4">Sick Leave - Oct 25 to Oct 26</p>
+<div class="flex gap-2">
+<button class="flex-1 py-2 bg-primary text-white text-[10px] font-bold rounded-lg hover:shadow-lg hover:shadow-primary/20 transition-all">Approve</button>
+<button class="flex-1 py-2 bg-surface-container-highest text-on-surface text-[10px] font-bold rounded-lg hover:bg-slate-200 transition-all">Decline</button>
+</div>
+</div>
+<!-- Request Card 2 -->
+<div class="bg-surface-container-low/50 p-4 rounded-xl border border-transparent hover:border-primary/20 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-3">
+<span class="px-2 py-1 bg-blue-100 text-primary text-[10px] font-bold rounded">OT Claim</span>
+<p class="text-[10px] text-outline">4h ago</p>
+</div>
+<p class="font-bold text-on-surface mb-1">Liza Soberano</p>
+<p class="text-xs text-on-surface-variant line-clamp-1 mb-4">Product Launch Overtime (4hrs)</p>
+<div class="flex gap-2">
+<button class="flex-1 py-2 bg-primary text-white text-[10px] font-bold rounded-lg hover:shadow-lg hover:shadow-primary/20 transition-all">Approve</button>
+<button class="flex-1 py-2 bg-surface-container-highest text-on-surface text-[10px] font-bold rounded-lg hover:bg-slate-200 transition-all">Decline</button>
+</div>
+</div>
+<!-- Request Card 3 -->
+<div class="bg-surface-container-low/50 p-4 rounded-xl border border-transparent hover:border-primary/20 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-3">
+<span class="px-2 py-1 bg-tertiary/10 text-tertiary text-[10px] font-bold rounded">Leave Request</span>
+<p class="text-[10px] text-outline">6h ago</p>
+</div>
+<p class="font-bold text-on-surface mb-1">Benjie Paras</p>
+<p class="text-xs text-on-surface-variant line-clamp-1 mb-4">Vacation Leave - Nov 12-15</p>
+<div class="flex gap-2">
+<button class="flex-1 py-2 bg-primary text-white text-[10px] font-bold rounded-lg hover:shadow-lg hover:shadow-primary/20 transition-all">Approve</button>
+<button class="flex-1 py-2 bg-surface-container-highest text-on-surface text-[10px] font-bold rounded-lg hover:bg-slate-200 transition-all">Decline</button>
+</div>
+</div>
+<!-- Stats Card / Summary -->
+<div class="bg-gradient-to-br from-primary/90 to-primary text-white p-4 rounded-xl shadow-lg flex flex-col justify-center items-center text-center">
+<p class="text-xs font-bold uppercase tracking-widest opacity-80 mb-1">Total Pending</p>
+<p class="text-4xl font-black mb-1">12</p>
+<p class="text-[10px] font-medium px-4">Requires attention before Oct 30 payroll run.</p>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Contextual FAB (Only on Mobile) -->
+<button class="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center z-50 active:scale-90 transition-transform">
+<span class="material-symbols-outlined">add</span>
+</button>
+</body></html>

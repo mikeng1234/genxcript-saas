@@ -1,5 +1,5 @@
 """
-GenXcript Payroll SaaS — Main Streamlit App
+GeNXcript Payroll SaaS — Main Streamlit App
 
 Run with:  streamlit run app/main.py
 """
@@ -20,7 +20,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="GenXcript Payroll",
+    page_title="GeNXcript Payroll",
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -98,7 +98,7 @@ if not is_logged_in():
         # ── Set New Password form ─────────────────────────────
         _, _col, _ = st.columns([1, 1.5, 1])
         with _col:
-            st.markdown("## GenXcript Payroll")
+            st.markdown("## GeNXcript Payroll")
             st.markdown("#### Set New Password")
             st.divider()
             _ru = st.session_state["pw_reset_user"]
@@ -154,7 +154,7 @@ if not is_logged_in():
             st.session_state.pop("_hash_checked", None)
             _, _col, _ = st.columns([1, 1.5, 1])
             with _col:
-                st.markdown("## GenXcript Payroll")
+                st.markdown("## GeNXcript Payroll")
                 st.error(f"Reset link expired or invalid — {_err_msg}\n\nPlease request a new password reset link.")
                 if st.button("← Back to Sign In", use_container_width=True):
                     st.rerun()
@@ -189,7 +189,7 @@ components.html(
 # Sidebar (only shown when logged in)
 # ============================================================
 
-st.sidebar.title("GenXcript Payroll")
+st.sidebar.title("GeNXcript Payroll")
 st.sidebar.caption(get_current_user_email())
 st.sidebar.divider()
 
@@ -401,8 +401,13 @@ ALL_PAGES = [
     "Preferences",
 ]
 
-# Filter pages based on current user's role
+# Filter pages based on current user's role + enabled modules
 PAGES = get_accessible_pages()
+
+# Super-admin gets Module Administration page
+from app.auth import is_super_admin
+if is_super_admin():
+    PAGES.append("Module Admin")
 
 # current_page = what is actually rendered (source of truth)
 # nav_page     = st.sidebar.radio key (what user clicked)
@@ -468,6 +473,7 @@ _NAV_ICONS = {
     "Calendar":           "calendar-month",
     "Company Setup":      "domain",
     "Preferences":        "cog",
+    "Module Admin":       "puzzle",
 }
 _ALL_NAV_GROUPS = [
     ("Overview",    ["Dashboard"]),
@@ -475,6 +481,7 @@ _ALL_NAV_GROUPS = [
     ("Payroll",     ["Payroll Run", "Payroll Comparison", "Workforce Analytics"]),
     ("Compliance",  ["Government Reports"]),
     ("Settings",    ["Company Setup", "Preferences"]),
+    ("Platform",    ["Module Admin"]),  # Super-admin only (filtered by PAGES)
 ]
 # Filter groups to only include pages the current role can access
 _NAV_GROUPS = [
@@ -536,11 +543,16 @@ _cos_json       = _json.dumps([{"id": c["id"], "name": c["name"]} for c in _acce
 _cur_co_id      = st.session_state.get("company_id", "")
 _company_name   = st.session_state.get("company_name", "")
 _user_email     = st.session_state.get("user_email", "")
-# Derive a short display name: "firstname" from email or role
-_user_display   = _user_email.split("@")[0].replace(".", " ").title() if _user_email else "User"
+# Derive a short display name: stored display_name > email prefix
+_user_display   = st.session_state.get("display_name") or (
+    _user_email.split("@")[0].replace(".", " ").title() if _user_email else "User"
+)
 _nav_pref_label = "Preferences"
 _role_label     = get_role_label()
-_role_fg, _role_bg = ROLE_COLORS.get(get_current_role(), ("#64748b", "#f1f5f9"))
+if is_super_admin():
+    _role_fg, _role_bg = ("#005bc1", "#dbeafe")  # GeNXcript blue
+else:
+    _role_fg, _role_bg = ROLE_COLORS.get(get_current_role(), ("#64748b", "#f1f5f9"))
 
 components.html(f"""
 <script>
@@ -568,6 +580,7 @@ components.html(f"""
   var ROLE_LABEL="{_role_label}";
   var ROLE_FG="{_role_fg}";
   var ROLE_BG="{_role_bg}";
+  var IS_SUPER={"true" if is_super_admin() else "false"};
   var COSW_PFX="__cosw__";
   var ID='gxp-lnav', CSS_ID='gxp-lnav-css', LS='gxp-lnav-c';
   var TB_ID='gxp-topbar';
@@ -788,7 +801,7 @@ components.html(f"""
       'white-space:nowrap;overflow:hidden;'+
       'transition:opacity 0.18s,max-width 0.18s;'+
       (isC?'opacity:0;max-width:0;':'opacity:1;max-width:160px;')+
-      '"><div style="font-size:15px;font-weight:800;color:'+tx+';letter-spacing:-0.3px;line-height:1.2;">GenXcript</div>'+
+      '"><div style="font-size:15px;font-weight:800;color:'+tx+';letter-spacing:-0.3px;line-height:1.2;">GeNXcript</div>'+
       '<div style="font-size:10px;color:'+t2+';font-weight:400;">Payroll Solutions</div></div>';
 
     hdr.appendChild(brand);
@@ -1128,7 +1141,18 @@ components.html(f"""
     chip.innerHTML=
       '<span class="mdi mdi-account-circle" style="font-size:16px;color:'+ac+';"></span>'+
       '<span style="font-size:12px;font-weight:600;color:'+ac+';max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+USER_EMAIL+'">'+USER_DISPLAY+'</span>'+
-      '<span style="font-size:10px;font-weight:700;color:'+ROLE_FG+';background:'+ROLE_BG+';padding:2px 8px;border-radius:9999px;white-space:nowrap;">'+ROLE_LABEL+'</span>';
+      (IS_SUPER
+        ? '<span style="font-size:10px;font-weight:800;background:#191c1d;padding:2px 10px;border-radius:9999px;white-space:nowrap;letter-spacing:0.03em;">'
+          + '<span style="color:#fff;">GeN</span>'
+          + '<span style="color:#3b82f6;">X</span>'
+          + '<span style="color:#8b5cf6;">c</span>'
+          + '<span style="color:#10b981;">r</span>'
+          + '<span style="color:#f97316;">i</span>'
+          + '<span style="color:#eab308;">p</span>'
+          + '<span style="color:#06b6d4;">t</span>'
+          + '</span>'
+        : '<span style="font-size:10px;font-weight:700;color:'+ROLE_FG+';background:'+ROLE_BG+';padding:2px 8px;border-radius:9999px;white-space:nowrap;">'+ROLE_LABEL+'</span>'
+      );
 
     // Divider
     var div=d.createElement('div');
@@ -1200,7 +1224,7 @@ for _co in _accessible_now:
         st.session_state.nav_page = "Dashboard"
         st.rerun()
 
-st.sidebar.caption("GenXcript Payroll SaaS v0.1.0")
+st.sidebar.caption("GeNXcript Payroll SaaS v0.1.0")
 
 if st.sidebar.button("My Account", width="stretch"):
     st.session_state["_show_my_account"] = True
@@ -1299,6 +1323,10 @@ def _render_page(page: str) -> None:
     elif page == "Preferences":
         from app.pages._preferences import render as render_preferences
         render_preferences()
+
+    elif page == "Module Admin":
+        from app.pages._module_admin import render as render_module_admin
+        render_module_admin()
 
 
 try:

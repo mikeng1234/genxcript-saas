@@ -27,7 +27,7 @@ Rules:
 
 PAGE: WORKFORCE ANALYTICS
 
-Build a Workforce Analytics page for "GenXcript Payroll".
+Build a Workforce Analytics page for "GeNXcript Payroll".
 
 Same top nav + sidebar. "Workforce Analytics" active.
 

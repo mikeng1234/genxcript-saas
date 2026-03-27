@@ -1,5 +1,5 @@
 ---
-name: GenXcript Payroll SaaS Overview
+name: GeNXcript Payroll SaaS Overview
 description: Philippine SME payroll SaaS — stack, architecture, team roles, and MVP priorities
 type: project
 ---

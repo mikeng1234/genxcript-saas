@@ -6,7 +6,7 @@ Strategy
 --------
   - Supabase (hot)  : last 30 days only
   - Local archive   : organized by  archives/dtr-snapshots/YYYY-Q{N}/
-  - Retrieval       : client asks IT → IT asks GenXcript → locate file in archive
+  - Retrieval       : client asks IT → IT asks GeNXcript → locate file in archive
 
 What this script does
 ---------------------

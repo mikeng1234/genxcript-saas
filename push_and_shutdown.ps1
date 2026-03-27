@@ -5,7 +5,7 @@ Set-Location "I:\SaaS\PaySys\genxcript-saas"
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "  GenXcript - Push to GitHub and Shutdown" -ForegroundColor Cyan
+Write-Host "  GeNXcript - Push to GitHub and Shutdown" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 

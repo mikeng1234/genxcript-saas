@@ -351,7 +351,7 @@ def render(standalone: bool = True):
     if standalone:
         inject_css()
         st.title("Preferences")
-        st.caption("Personalise how GenXcript Payroll looks and behaves for you.")
+        st.caption("Personalise how GeNXcript Payroll looks and behaves for you.")
 
     tab_appearance, tab_formats, tab_display, tab_notif = st.tabs([
         "Appearance",

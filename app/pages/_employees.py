@@ -1847,6 +1847,17 @@ def _edit_employee_dialog(emp_id: str):
                           key=f"d_em_{emp_id}",
                           help="Used to send the employee a portal invite.")
 
+        # ── Invite result toast (shown inside dialog) ──
+        _invite_result_key = f"_invite_result_{emp_id}"
+        if _invite_result_key in st.session_state:
+            _kind, _msg = st.session_state.pop(_invite_result_key)
+            if _kind == "success":
+                st.success(_msg)
+            elif _kind == "warning":
+                st.warning(_msg)
+            else:
+                st.error(_msg)
+
         # ── Invite to Portal button (only if email exists) ──
         _cur_email = (emp.get("email") or "").strip()
         if _cur_email:
@@ -1883,15 +1894,16 @@ def _edit_employee_dialog(emp_id: str):
                                     pass
                             st.session_state.pop(f"_invite_pending_{emp_id}", None)
                             if len(parts) > 1 and parts[1] == "SMTP_FAILED":
-                                st.session_state["_invite_toast"] = (
+                                _pw = parts[2] if len(parts) > 2 else "N/A"
+                                st.session_state[f"_invite_result_{emp_id}"] = (
                                     "warning",
                                     f"Account created for **{_cur_email}**.\n\n"
                                     f"Email could not be sent.\n\n"
                                     f"**Share this temporary password manually:**\n\n"
-                                    f"```\n{parts[2]}\n```"
+                                    f"```\n{_pw}\n```"
                                 )
                             else:
-                                st.session_state["_invite_toast"] = (
+                                st.session_state[f"_invite_result_{emp_id}"] = (
                                     "success",
                                     f"Portal invite sent to **{_cur_email}**!"
                                 )
@@ -2589,6 +2601,31 @@ def _render_employees_tab(show_salary_toggle: bool = True):
       setTimeout(wire, 500);
       setTimeout(wire, 1500);
 
+      // ── Invite confirm popup (pure HTML/JS) ──
+      var _invOv = pd.getElementById('gxp-inv-popup-ov');
+      if(!_invOv){
+        _invOv = pd.createElement('div');
+        _invOv.id = 'gxp-inv-popup-ov';
+        _invOv.style.cssText = 'display:none;position:fixed;top:0;left:0;right:0;bottom:0;'
+          +'background:rgba(0,0,0,0.35);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);'
+          +'z-index:9999;align-items:center;justify-content:center;';
+        _invOv.innerHTML =
+          '<div style="background:#fff;border-radius:16px;padding:24px 28px;min-width:320px;max-width:400px;'
+          +'box-shadow:0 20px 60px rgba(0,0,0,0.18);font-family:Plus Jakarta Sans,system-ui,sans-serif;'
+          +'animation:gxp-cal-pop-in 0.18s ease-out;">'
+          +'<div style="font-size:15px;font-weight:800;color:#191c1d;margin-bottom:6px;" id="gxp-inv-title">Send Portal Invite</div>'
+          +'<div style="font-size:13px;color:#727784;margin-bottom:20px;" id="gxp-inv-msg"></div>'
+          +'<div style="display:flex;gap:10px;justify-content:flex-end;">'
+          +'<button id="gxp-inv-cancel" style="padding:8px 18px;border-radius:8px;border:1px solid #e5e7eb;'
+          +'background:#fff;color:#424753;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>'
+          +'<button id="gxp-inv-yes" style="padding:8px 18px;border-radius:8px;border:none;'
+          +'background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Yes, Send</button>'
+          +'</div></div>';
+        (pd.body||pd.documentElement).appendChild(_invOv);
+        pd.getElementById('gxp-inv-cancel').onclick = function(){ _invOv.style.display='none'; };
+        _invOv.addEventListener('click', function(ev){ if(ev.target===_invOv) _invOv.style.display='none'; });
+      }
+
       // ── Wire swipe action button clicks to hidden Streamlit buttons ──
       function wireActions(){
         pd.querySelectorAll('.emp-act[data-emp-action]').forEach(function(el){
@@ -2596,10 +2633,31 @@ def _render_employees_tab(show_salary_toggle: bool = True):
           el._actWired = true;
           el.addEventListener('click', function(e){
             e.stopPropagation();
-            var confirmMsg = el.getAttribute('data-emp-confirm');
-            if(confirmMsg && !confirm(confirmMsg)) return;
             var key = el.getAttribute('data-emp-action');
             if(!key) return;
+
+            // Invite actions — show styled popup
+            if(key.indexOf('invite_')===0){
+              var name = el.closest('.emp-swipe-wrap');
+              var nameEl = name ? name.querySelector('div[style*="font-weight:700"][style*="color:#191c1d"]') : null;
+              var empName = nameEl ? nameEl.textContent.replace(/PORTAL/g,'').trim() : 'this employee';
+              var title = el.title || 'Send Portal Invite';
+              pd.getElementById('gxp-inv-title').textContent = title;
+              pd.getElementById('gxp-inv-msg').innerHTML = 'Send portal invite to <b>'+empName+'</b>?<br>'
+                +'<span style="font-size:11px;color:#9ca3af;">A temporary password will be generated.</span>';
+              pd.getElementById('gxp-inv-yes').onclick = function(){
+                _invOv.style.display='none';
+                var btn = pd.querySelector('div[class*="st-key-'+key+'"] button');
+                if(btn) btn.click();
+              };
+              _invOv.style.display='flex';
+              return;
+            }
+
+            // Deactivate/Activate — browser confirm
+            var confirmMsg = el.getAttribute('data-emp-confirm');
+            if(confirmMsg && !confirm(confirmMsg)) return;
+
             var btn = pd.querySelector('div[class*="st-key-' + key + '"] button');
             if(btn) btn.click();
           });
@@ -2831,9 +2889,11 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                     "box-shadow:0 0 0 1px #bdbdbd55;'></span>"
                 )
 
-                # Build swipe action tray (Edit, Deactivate/Activate, Print)
+                # Build swipe action tray (Edit, Invite, Print, Deactivate)
                 _eid = emp["id"]
                 _deact_bg = '#ef5350' if _is_active else '#4caf50'
+                _has_email = bool((emp.get("email") or "").strip())
+                _has_portal = bool(emp.get("user_id"))
                 if _readonly:
                     _swipe_actions = (
                         f"<div class='emp-act' data-emp-action='print201_{_eid}' "
@@ -2841,10 +2901,29 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                         f"&#128424;<span>Print</span></div>"
                     )
                 else:
+                    # Invite / Add Email button
+                    _invite_btn = ""
+                    if _is_active:
+                        if _has_email:
+                            _inv_label = "Re-send" if _has_portal else "Invite"
+                            _inv_bg = "#7c3aed" if not _has_portal else "#6366f1"
+                            _invite_btn = (
+                                f"<div class='emp-act' data-emp-action='invite_{_eid}' "
+                                f"style='background:{_inv_bg};' title='{_inv_label} Portal Access'>"
+                                f"&#128231;<span>{_inv_label}</span></div>"
+                            )
+                        else:
+                            # No email — show "Add Email" which opens edit dialog
+                            _invite_btn = (
+                                f"<div class='emp-act' data-emp-action='edit_{_eid}' "
+                                f"style='background:#6366f1;' title='Add email to enable portal invite'>"
+                                f"&#9993;<span>Add Email</span></div>"
+                            )
                     _swipe_actions = (
                         f"<div class='emp-act' data-emp-action='edit_{_eid}' "
                         f"style='background:#005bc1;' title='Edit'>"
                         f"&#9998;<span>Edit</span></div>"
+                        f"{_invite_btn}"
                         f"<div class='emp-act' data-emp-action='print201_{_eid}' "
                         f"style='background:#ff9800;' title='Print 201'>"
                         f"&#128424;<span>Print</span></div>"
@@ -2915,71 +2994,66 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                                   on_click=_update_employee, args=(emp["id"], {"is_active": True}))
                 if st.button("_", key=f"print201_{emp['id']}"):
                     st.session_state["print201_id"] = emp["id"]
+                # Hidden invite button — triggers the actual invite logic
+                if not _readonly and _has_email and _is_active:
+                    if st.button("_", key=f"invite_{emp['id']}"):
+                        st.session_state[f"_do_invite_{emp['id']}"] = True
+                        st.rerun()
 
-                # ── Invite confirmation ────────────────────────────────────
-                if not _readonly and st.session_state.get(f"invite_confirm_{emp['id']}"):
+                # ── Process invite (after confirmation via JS popup) ──
+                if st.session_state.pop(f"_do_invite_{emp['id']}", False):
+                    from app.auth import invite_employee
                     already_linked = bool(emp.get("user_id"))
-                    action_label   = "Re-send / Re-link portal access" if already_linked else "Send portal invite"
-                    st.info(f"{action_label} for **{emp['email']}**?")
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        if st.button("Yes, Confirm", key=f"inv_yes_{emp['id']}", type="primary"):
-                            from app.auth import invite_employee
-                            ok, result = invite_employee(emp["email"])
-                            if ok:
-                                smtp_failed   = False
-                                temp_password = None
-                                smtp_err      = ""
-                                if "|SMTP_FAILED|" in result:
-                                    parts         = result.split("|SMTP_FAILED|", 1)
-                                    auth_user_id  = parts[0]
-                                    rest          = parts[1].split("|", 1)
-                                    temp_password = rest[0]
-                                    smtp_err      = rest[1] if len(rest) > 1 else ""
-                                    smtp_failed   = True
-                                else:
-                                    auth_user_id = result
-                                db = get_db()
-                                db.table("employees").update({"user_id": auth_user_id}).eq("id", emp["id"]).execute()
-                                try:
-                                    db.table("user_company_access").upsert({
-                                        "user_id":    auth_user_id,
-                                        "company_id": get_company_id(),
-                                        "role":       "employee",
-                                    }, on_conflict="user_id,company_id").execute()
-                                except Exception:
-                                    try:
-                                        db.table("user_company_access").insert({
-                                            "user_id":    auth_user_id,
-                                            "company_id": get_company_id(),
-                                            "role":       "employee",
-                                        }).execute()
-                                    except Exception:
-                                        pass
-                                if smtp_failed:
-                                    toast_msg = (
-                                        f"Account created for **{emp['email']}**.\n\n"
-                                        f"Email could not be sent ({smtp_err}).\n\n"
-                                        f"**Share this temporary password manually:**\n\n"
-                                        f"```\n{temp_password}\n```\n\n"
-                                        "Tell the employee to log in and use **Forgot Password** to change it."
-                                    )
-                                    st.session_state["_invite_toast"] = ("warning", toast_msg)
-                                else:
-                                    action = "re-linked" if already_linked else "created"
-                                    st.session_state["_invite_toast"] = (
-                                        "success",
-                                        f"Portal access {action} for **{emp['email']}**. "
-                                        "A temporary password was emailed.",
-                                    )
-                            else:
-                                st.session_state["_invite_toast"] = ("error", result)
-                            st.session_state[f"invite_confirm_{emp['id']}"] = False
-                            st.rerun()
-                    with c2:
-                        if st.button("Cancel", key=f"inv_no_{emp['id']}"):
-                            st.session_state[f"invite_confirm_{emp['id']}"] = False
-                            st.rerun()
+                    ok, result = invite_employee(emp["email"])
+                    if ok:
+                        smtp_failed   = False
+                        temp_password = None
+                        smtp_err      = ""
+                        if "|SMTP_FAILED|" in result:
+                            parts         = result.split("|SMTP_FAILED|", 1)
+                            auth_user_id  = parts[0]
+                            rest          = parts[1].split("|", 1)
+                            temp_password = rest[0]
+                            smtp_err      = rest[1] if len(rest) > 1 else ""
+                            smtp_failed   = True
+                        else:
+                            auth_user_id = result
+                        db = get_db()
+                        db.table("employees").update({"user_id": auth_user_id}).eq("id", emp["id"]).execute()
+                        try:
+                            db.table("user_company_access").upsert({
+                                "user_id":    auth_user_id,
+                                "company_id": get_company_id(),
+                                "role":       "employee",
+                            }, on_conflict="user_id,company_id").execute()
+                        except Exception:
+                            try:
+                                db.table("user_company_access").insert({
+                                    "user_id":    auth_user_id,
+                                    "company_id": get_company_id(),
+                                    "role":       "employee",
+                                }).execute()
+                            except Exception:
+                                pass
+                        if smtp_failed:
+                            toast_msg = (
+                                f"Account created for **{emp['email']}**.\n\n"
+                                f"Email could not be sent ({smtp_err}).\n\n"
+                                f"**Share this temporary password manually:**\n\n"
+                                f"```\n{temp_password}\n```\n\n"
+                                "Tell the employee to log in and use **Forgot Password** to change it."
+                            )
+                            st.session_state["_invite_toast"] = ("warning", toast_msg)
+                        else:
+                            action = "re-linked" if already_linked else "created"
+                            st.session_state["_invite_toast"] = (
+                                "success",
+                                f"Portal access {action} for **{emp['email']}**. "
+                                "A temporary password was emailed.",
+                            )
+                    else:
+                        st.session_state["_invite_toast"] = ("error", result)
+                    st.rerun()
                 _global_idx += 1
 
     # ── Employee 201 Print ────────────────────────────────────────────────────

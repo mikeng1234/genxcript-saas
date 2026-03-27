@@ -1,7 +1,7 @@
 -- ============================================================
 -- SEED: Mabini Digital Co. — 10-employee QA test company
 -- ============================================================
--- Resets the database by deleting GenXcript Tech Solutions,
+-- Resets the database by deleting GeNXcript Tech Solutions,
 -- then creates a fresh 10-employee, 3-department company with
 -- 4 months of payroll + 3 months of attendance data to exercise
 -- every feature in the application.
@@ -102,9 +102,9 @@ BEGIN
     WHERE employee_id IN (
       SELECT e.id FROM employees e
       JOIN companies c ON c.id = e.company_id
-      WHERE c.name IN ('GenXcript Tech Solutions', 'Mabini Digital Co.')
+      WHERE c.name IN ('GeNXcript Tech Solutions', 'Mabini Digital Co.')
     );
-  DELETE FROM companies WHERE name IN ('GenXcript Tech Solutions', 'Mabini Digital Co.');
+  DELETE FROM companies WHERE name IN ('GeNXcript Tech Solutions', 'Mabini Digital Co.');
   RAISE NOTICE 'Old seed data deleted.';
 
   -- ═══════════════════════════════════════════════════════════════════════════

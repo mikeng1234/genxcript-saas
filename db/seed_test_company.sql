@@ -1,11 +1,11 @@
 -- ============================================================
--- SEED: GenXcript Tech Solutions — Full Personnel & Reporting Map
+-- SEED: GeNXcript Tech Solutions — Full Personnel & Reporting Map
 -- ============================================================
 -- Run this in the Supabase SQL Editor AFTER running all
 -- migrations (001 through 016).
 --
 -- Creates:
---   • 1 company     — GenXcript Tech Solutions
+--   • 1 company     — GeNXcript Tech Solutions
 --   • 4 departments — Leadership, Technology & Product,
 --                     Operations & HR, Sales & Growth
 --   • 25 employees  — full org chart with salaries & reporting lines
@@ -15,7 +15,7 @@
 --
 --   INSERT INTO user_company_access (user_id, company_id, role)
 --   SELECT '<your-auth-uid>', id, 'admin'
---   FROM companies WHERE name = 'GenXcript Tech Solutions';
+--   FROM companies WHERE name = 'GeNXcript Tech Solutions';
 -- ============================================================
 --
 -- ORG CHART SUMMARY
@@ -105,7 +105,7 @@ BEGIN
   INSERT INTO companies (
     name, address, region, pay_frequency
   ) VALUES (
-    'GenXcript Tech Solutions',
+    'GeNXcript Tech Solutions',
     'Unit 4F, The Hub Building, Alabang-Zapote Rd, Muntinlupa City',
     'NCR',
     'monthly'
@@ -414,7 +414,7 @@ BEGIN
   -- 6. CONFIRMATION
   -- ────────────────────────────────────────────────────────
   RAISE NOTICE '================================================';
-  RAISE NOTICE ' GenXcript Tech Solutions — seed complete!';
+  RAISE NOTICE ' GeNXcript Tech Solutions — seed complete!';
   RAISE NOTICE '================================================';
   RAISE NOTICE ' Company ID   : %', v_cid;
   RAISE NOTICE '';

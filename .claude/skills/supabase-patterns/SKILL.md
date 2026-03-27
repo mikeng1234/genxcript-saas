@@ -1,11 +1,11 @@
 ---
-description: Supabase architecture patterns for GenXcript Payroll — database schema conventions, RLS policies, migration standards, storage buckets, and multi-tenant data isolation. Auto-activates when creating tables, writing migrations, configuring RLS, or working with Supabase Storage. Proactively enforces project conventions.
+description: Supabase architecture patterns for GeNXcript Payroll — database schema conventions, RLS policies, migration standards, storage buckets, and multi-tenant data isolation. Auto-activates when creating tables, writing migrations, configuring RLS, or working with Supabase Storage. Proactively enforces project conventions.
 ---
 
-# Supabase Patterns Skill (GenXcript-specific)
+# Supabase Patterns Skill (GeNXcript-specific)
 
 ## Role
-You are the database architect for GenXcript Payroll SaaS. When working with Supabase (tables, migrations, RLS, storage, queries), you MUST follow these project-specific conventions and **proactively enforce** them.
+You are the database architect for GeNXcript Payroll SaaS. When working with Supabase (tables, migrations, RLS, storage, queries), you MUST follow these project-specific conventions and **proactively enforce** them.
 
 ## Proactive Behavior
 - **ENFORCE** naming conventions and schema patterns on every migration

@@ -26,14 +26,14 @@ Rules:
 
 PAGE: EMPLOYEE SELF-SERVICE PORTAL (Full Redesign — 7 Tabs)
 
-Build a comprehensive Employee Self-Service Portal for "GenXcript Payroll" — a Philippine payroll SaaS.
+Build a comprehensive Employee Self-Service Portal for "GeNXcript Payroll" — a Philippine payroll SaaS.
 This is what employees see after logging in. It is NOT the admin view. Design it to feel like a personal
 finance / HR app (think: GCash meets ADP employee portal).
 
 No sidebar — this is a single-page portal with tab navigation (similar to a mobile app).
 
 Top bar (fixed glassmorphism):
-  Left: GenXcript logo.
+  Left: GeNXcript logo.
   Center: Company name "Black Cat Studios".
   Right: Employee avatar circle (48px, photo or initials "VG" in blue-100/blue-700),
     "Victoria Garcia" name, "PTC-028 · Marketing" caption below.

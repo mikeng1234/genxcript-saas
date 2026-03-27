@@ -1,5 +1,5 @@
 """
-Authentication helpers for GenXcript Payroll SaaS.
+Authentication helpers for GeNXcript Payroll SaaS.
 
 Session persistence strategy: st.query_params + server-side cache
 - On login/signup, a random session token is generated and stored in:
@@ -84,6 +84,15 @@ ROLE_EMPLOYEE = "employee"
 
 ALL_STAFF_ROLES = [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR]
 
+# GeNXcript super-admin emails — can access module management across ALL companies
+SUPER_ADMIN_EMAILS = ["mikkoevangelista@gmail.com"]
+
+
+def is_super_admin() -> bool:
+    """Check if the current user is a GeNXcript platform super-admin."""
+    email = st.session_state.get("user_email", "")
+    return email in SUPER_ADMIN_EMAILS
+
 ROLE_LABELS = {
     ROLE_ADMIN: "Admin",
     ROLE_HR_MANAGER: "HR Manager",
@@ -99,6 +108,94 @@ ROLE_COLORS = {
     ROLE_SUPERVISOR: ("#7c3aed", "#ede9fe"),         # purple
     ROLE_EMPLOYEE: ("#64748b", "#f1f5f9"),           # slate
 }
+
+# ── Module definitions ─────────────────────────────────────────────────────
+# Module key → human label, color, description
+MODULE_DEFS = {
+    "core":       ("Core",              "#10b981", "Company Setup, Employees, Auth, Portal, Preferences"),
+    "payroll":    ("Payroll Engine",    "#3b82f6", "Payroll Run, Gov't Contributions, Payslips, 13th Month"),
+    "attendance": ("Time & Attendance", "#f59e0b", "DTR, Schedules, Corrections, Geolocation, Night Diff"),
+    "leave_ot":   ("Leave & OT",       "#f97316", "Leave Requests/Balances, OT Requests, Special Leaves"),
+    "supervisor": ("Supervisor Portal", "#ef4444", "Team Dashboard, Team Payroll, 201 Cards, Approvals"),
+    "analytics":  ("Analytics",         "#8b5cf6", "Payroll Comparison, OT Heatmap, Workforce Analytics"),
+    "compliance": ("Compliance+",       "#374151", "BIR 2316/1604-C, Audit Trail, Holiday Management"),
+}
+
+# Page → which module(s) it belongs to (if ANY module in the list is enabled, page is accessible)
+PAGE_MODULE = {
+    "Dashboard":           ["core"],           # core always has dashboard
+    "Employees":           ["core"],
+    "Payroll Run":         ["payroll"],
+    "Payroll Comparison":  ["analytics"],
+    "Workforce Analytics": ["analytics"],
+    "Attendance":          ["attendance"],
+    "Government Reports":  ["compliance", "payroll"],  # available if either module
+    "Calendar":            ["core"],
+    "Company Setup":       ["core"],
+    "Preferences":         ["core"],
+}
+
+# Tier → included modules
+TIER_MODULES = {
+    "starter":     ["core"],
+    "essential":   ["core", "payroll"],
+    "professional": ["core", "payroll", "attendance", "leave_ot"],
+    "enterprise":  ["core", "payroll", "attendance", "leave_ot", "supervisor", "analytics", "compliance"],
+}
+
+TIER_LABELS = {
+    "starter":     "Starter",
+    "essential":   "Essential",
+    "professional": "Professional",
+    "enterprise":  "Enterprise",
+}
+
+TIER_MAX_EMPLOYEES = {
+    "starter": 20,
+    "essential": 50,
+    "professional": 100,
+    "enterprise": 999,
+}
+
+
+def get_company_modules() -> list[str]:
+    """Return list of enabled module keys for the current company."""
+    company = st.session_state.get("_company_data")
+    if company and "enabled_modules" in company:
+        return company["enabled_modules"]
+    # Fallback: load from DB
+    try:
+        from app.db_helper import get_db, get_company_id
+        cid = get_company_id()
+        if cid:
+            result = get_db().table("companies").select("enabled_modules").eq("id", cid).limit(1).execute()
+            if result.data and result.data[0].get("enabled_modules"):
+                return result.data[0]["enabled_modules"]
+    except Exception:
+        pass
+    return ["core"]  # absolute fallback — core only
+
+
+def has_module(module: str) -> bool:
+    """Check if the current company has a specific module enabled."""
+    return module in get_company_modules()
+
+
+def page_module_enabled(page_name: str) -> bool:
+    """Check if at least one required module for a page is enabled."""
+    required = PAGE_MODULE.get(page_name, ["core"])
+    modules = get_company_modules()
+    return any(m in modules for m in required)
+
+
+def get_missing_module_for_page(page_name: str) -> str | None:
+    """Return the first missing module name for a page, or None if accessible."""
+    required = PAGE_MODULE.get(page_name, ["core"])
+    modules = get_company_modules()
+    if any(m in modules for m in required):
+        return None
+    return required[0] if required else None
+
 
 # Page → list of roles that can ACCESS the page
 PAGE_ACCESS = {
@@ -160,19 +257,30 @@ def has_role(*roles: str) -> bool:
 
 def can_access_page(page_name: str) -> bool:
     """Check if the current user's role can access a given page."""
+    # Super admins can access everything
+    if is_super_admin():
+        return True
     role = get_current_role()
     return role in PAGE_ACCESS.get(page_name, [])
 
 
 def get_accessible_pages() -> list[str]:
-    """Return list of page names the current role can access, in standard order."""
-    role = get_current_role()
+    """Return list of page names the current role can access, in standard order.
+    Two-layer gating: role must have access AND company must have the module enabled.
+    Super admins bypass all checks and see every page.
+    """
     all_pages = [
         "Dashboard", "Employees", "Payroll Run", "Payroll Comparison",
         "Workforce Analytics", "Attendance", "Government Reports",
         "Calendar", "Company Setup", "Preferences",
     ]
-    return [p for p in all_pages if role in PAGE_ACCESS.get(p, [])]
+    if is_super_admin():
+        return all_pages  # super admin sees all (Module Admin added separately in main.py)
+    role = get_current_role()
+    return [
+        p for p in all_pages
+        if role in PAGE_ACCESS.get(p, []) and page_module_enabled(p)
+    ]
 
 
 def is_page_readonly(page_name: str) -> bool:
@@ -183,6 +291,9 @@ def is_page_readonly(page_name: str) -> bool:
 
 def get_role_label(role: str | None = None) -> str:
     """Human-readable label for a role."""
+    # Super admin override — show "GeNXcript" regardless of company role
+    if role is None and is_super_admin():
+        return "GeNXcript"
     if role is None:
         role = get_current_role()
     return ROLE_LABELS.get(role, role.replace("_", " ").title())
@@ -305,6 +416,17 @@ def _store_session(
             pass
     st.session_state.display_name = _dn
 
+    # Load company module/subscription data into session
+    try:
+        from app.db_helper import get_db
+        _co = get_db().table("companies").select(
+            "enabled_modules, subscription_tier, max_employees"
+        ).eq("id", company_id).limit(1).execute()
+        if _co.data:
+            st.session_state["_company_data"] = _co.data[0]
+    except Exception:
+        pass
+
     # Load persisted theme / display preferences for this user
     try:
         from app.pages._preferences import load_user_prefs
@@ -387,6 +509,22 @@ def update_active_company(company_id: str, role: str, company_name: str) -> None
     st.session_state.user_role     = role
     st.session_state.company_name  = company_name
     st.session_state["company_switcher"] = company_id   # keep dropdown in sync
+
+    # Reload module data for new company
+    try:
+        from app.db_helper import get_db
+        _co = get_db().table("companies").select(
+            "enabled_modules, subscription_tier, max_employees"
+        ).eq("id", company_id).limit(1).execute()
+        if _co.data:
+            st.session_state["_company_data"] = _co.data[0]
+    except Exception:
+        st.session_state.pop("_company_data", None)
+
+    # Clear hierarchy cache (different company = different org)
+    for k in list(st.session_state.keys()):
+        if k.startswith("_hierarchy_data_"):
+            del st.session_state[k]
 
     sid = st.query_params.get("sid")
     if sid and sid in _session_cache():

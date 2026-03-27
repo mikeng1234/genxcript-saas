@@ -27,7 +27,7 @@ Rules:
 
 PAGE: GOVERNMENT REPORTS
 
-Build a Government Reports page for "GenXcript Payroll" (Philippine statutory compliance).
+Build a Government Reports page for "GeNXcript Payroll" (Philippine statutory compliance).
 
 Same top nav + sidebar. "Government Reports" active.
 

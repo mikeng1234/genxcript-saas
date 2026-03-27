@@ -27,13 +27,13 @@ Rules:
 
 PAGE: DASHBOARD
 
-Build a dashboard page for "GenXcript Payroll" — a Philippine payroll SaaS.
+Build a dashboard page for "GeNXcript Payroll" — a Philippine payroll SaaS.
 
-Include fixed glassmorphism top nav: logo "GenXcript" left, search bar center-right
+Include fixed glassmorphism top nav: logo "GeNXcript" left, search bar center-right
 (rounded-full, #ebeef0 bg), notification bell icon, user avatar circle.
 
 Left sidebar (240px, fixed):
-  - "GenXcript" brand bold blue top, "Admin Portal" caption gray below.
+  - "GeNXcript" brand bold blue top, "Admin Portal" caption gray below.
   - Nav items (pill shape, full width): Dashboard (active, blue-50 bg), Employees,
     Payroll Run, Attendance, Workforce Analytics, Government Reports, Calendar,
     Company Setup, Preferences.

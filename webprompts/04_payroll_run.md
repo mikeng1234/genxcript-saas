@@ -27,7 +27,7 @@ Rules:
 
 PAGE: PAYROLL RUN
 
-Build a Payroll Run page for "GenXcript Payroll" (Philippine payroll SaaS).
+Build a Payroll Run page for "GeNXcript Payroll" (Philippine payroll SaaS).
 
 Same top nav + sidebar. "Payroll Run" active in sidebar.
 

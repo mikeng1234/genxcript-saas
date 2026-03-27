@@ -1,5 +1,5 @@
 -- ============================================================
--- GenXcript Payroll SaaS — Complete Supabase Schema
+-- GeNXcript Payroll SaaS — Complete Supabase Schema
 -- Philippine SME Payroll System
 -- ============================================================
 -- All monetary values stored as INTEGER in centavos

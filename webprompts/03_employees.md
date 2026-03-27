@@ -27,7 +27,7 @@ Rules:
 
 PAGE: EMPLOYEES
 
-Build an Employees page for "GenXcript Payroll".
+Build an Employees page for "GeNXcript Payroll".
 
 Same top nav and left sidebar as Dashboard (Employees is the active nav item).
 
