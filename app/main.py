@@ -232,9 +232,35 @@ if is_employee_role():
           'section[data-testid="stMain"]{{margin-left:0!important;padding-left:0!important;}}',
           /* Push content down for topbar */
           'section[data-testid="stMain"] .stMainBlockContainer{{padding-top:56px!important;}}',
+          /* Collapse CSS injection containers */
+          '[data-testid="stElementContainer"]:has(.gxp-css-inject){{display:none!important;}}',
         ].join('');
         d.head.appendChild(s);
       }}
+
+      /* Collapse empty/CSS-only stElementContainers */
+      function collapseEmpty(){{
+        d.querySelectorAll('[data-testid="stElementContainer"]').forEach(function(el){{
+          if(el.getAttribute('height')==='0px'||el.getAttribute('height')==='0'){{
+            el.style.display='none';
+            return;
+          }}
+          // Check if stMarkdownContainer only contains <style> elements (no visible content)
+          var mc=el.querySelector('[data-testid="stMarkdownContainer"]');
+          if(!mc) return;
+          var children=mc.children;
+          var onlyStyle=true;
+          for(var i=0;i<children.length;i++){{
+            if(children[i].tagName!=='STYLE'){{ onlyStyle=false; break; }}
+          }}
+          if(onlyStyle && children.length>0){{
+            el.style.display='none';
+          }}
+        }});
+      }}
+      collapseEmpty();
+      setTimeout(collapseEmpty,200);
+      setTimeout(collapseEmpty,800);
 
       /* Build topbar */
       var topbarId = 'gxp-emp-topbar';
@@ -691,9 +717,33 @@ components.html(f"""
       'section[data-testid="stMain"]{{margin-left:0!important;padding-left:0!important;}}',
       // MDI icon sizing overrides for sidebar / topbar
       '#gxp-lnav .mdi,#gxp-topbar .mdi{{line-height:1;}}',
+      '[data-testid="stElementContainer"]:has(.gxp-css-inject){{display:none!important;}}',
     ].join('');
     d.head.appendChild(s);
   }}
+
+  /* Collapse empty/CSS-only stElementContainers */
+  function collapseEmpty(){{
+    d.querySelectorAll('[data-testid="stElementContainer"]').forEach(function(el){{
+      if(el.getAttribute('height')==='0px'||el.getAttribute('height')==='0'){{
+        el.style.display='none';
+        return;
+      }}
+      var mc=el.querySelector('[data-testid="stMarkdownContainer"]');
+      if(!mc) return;
+      var children=mc.children;
+      var onlyStyle=true;
+      for(var i=0;i<children.length;i++){{
+        if(children[i].tagName!=='STYLE'){{ onlyStyle=false; break; }}
+      }}
+      if(onlyStyle && children.length>0){{
+        el.style.display='none';
+      }}
+    }});
+  }}
+  collapseEmpty();
+  setTimeout(collapseEmpty,200);
+  setTimeout(collapseEmpty,800);
 
   // ── Offset main content by sidebar width ─────────────────────────────
   function setOffset(w){{

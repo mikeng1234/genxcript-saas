@@ -137,8 +137,8 @@ PAGE_MODULE = {
 
 # Tier → included modules
 TIER_MODULES = {
-    "starter":     ["core"],
-    "essential":   ["core", "payroll"],
+    "starter":     ["core", "leave_ot"],
+    "essential":   ["core", "payroll", "leave_ot"],
     "professional": ["core", "payroll", "attendance", "leave_ot"],
     "enterprise":  ["core", "payroll", "attendance", "leave_ot", "supervisor", "analytics", "compliance"],
 }

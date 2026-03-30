@@ -355,7 +355,18 @@
       "Bash(mv stitch-prompt-investor-proposal.md webprompts/)",
       "Bash(mv stitch-prompt-it-explainer.md webprompts/)",
       "Bash(mv stitch-prompt-landing-page.md webprompts/)",
-      "Bash(mv stitch-prompt-dashboard-v2.md webprompts/)"
+      "Bash(mv stitch-prompt-dashboard-v2.md webprompts/)",
+      "Bash(del \"\\\\\\\\192.168.254.125\\\\i\\\\SaaS\\\\PaySys\\\\genxcript-saas\\\\.git\\\\index.lock\")",
+      "Bash(rm -f \"//192.168.254.125/i/SaaS/PaySys/genxcript-saas/.git/index.lock\")",
+      "mcp__Windows-MCP__PowerShell",
+      "Bash(gh repo:*)",
+      "mcp__github__get_file_contents",
+      "Bash(gh api:*)",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/mikeng1234/spottyfire/main/dist/spottyfire.min.js\" -o app/static/spottyfire.min.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8501/app/static/spottyfire.min.js\")",
+      "Bash(cp /tmp/dashboard_orig.py app/pages/_dashboard.py)",
+      "Bash(cp /tmp/styles_orig.py app/styles.py)",
+      "Bash(python -c \"import streamlit as st; print\\(hasattr\\(st, ''segmented_control''\\)\\)\")"
     ]
   }
 }

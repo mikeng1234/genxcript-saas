@@ -437,16 +437,32 @@ def _render_payslips(emp: dict, company: dict):
     _build_chart(payslips)
     st.divider()
 
-    # ── Individual payslip entries (collapsed by default) ─────────────────────
+    # ── Individual payslip entries grouped by year ─────────────────────
     st.markdown("##### Payslip History")
+
+    # Group payslips by year
+    from collections import defaultdict
+    _by_year = defaultdict(list)
     for entry in payslips:
-        pp  = entry.get("pay_periods") or {}
-        net = _p(entry.get("net_pay") or 0)
-        period_start = pp.get("period_start", "?")
-        period_end   = pp.get("period_end",   "?")
-        label        = f"{period_start} – {period_end}  ·  Net Pay: ₱{net:,.2f}"
-        with st.expander(label, expanded=False):
-            _render_payslip_detail(entry, emp, company)
+        pp = entry.get("pay_periods") or {}
+        _yr = str(pp.get("period_start", "?"))[:4]
+        _by_year[_yr].append(entry)
+
+    # Sort years descending
+    for _yr in sorted(_by_year.keys(), reverse=True):
+        _entries = _by_year[_yr]
+        _total_net = sum(_p(e.get("net_pay") or 0) for e in _entries)
+        _yr_label = f"{_yr}  —  {len(_entries)} payslip{'s' if len(_entries) != 1 else ''}  ·  Total Net: ₱{_total_net:,.2f}"
+        _is_current_yr = (_yr == sorted(_by_year.keys(), reverse=True)[0])
+        with st.expander(_yr_label, expanded=_is_current_yr):
+            for entry in _entries:
+                pp = entry.get("pay_periods") or {}
+                net = _p(entry.get("net_pay") or 0)
+                period_start = pp.get("period_start", "?")
+                period_end = pp.get("period_end", "?")
+                label = f"{period_start} – {period_end}  ·  Net Pay: ₱{net:,.2f}"
+                with st.expander(label, expanded=False):
+                    _render_payslip_detail(entry, emp, company)
 
 
 # ============================================================
@@ -987,12 +1003,9 @@ def _render_time_leave(emp: dict, company: dict):
 
     # ── File a new request ─────────────────────────────────────────────────────
     st.markdown("##### File a New Request")
-    req_type = st.radio(
-        "Request type", ["Leave", "Overtime", "Special Leave"],
-        horizontal=True, key="portal_req_type", label_visibility="collapsed",
-    )
+    _req_tabs = st.tabs(["Leave", "Overtime", "Special Leave"])
 
-    if req_type == "Leave":
+    with _req_tabs[0]:
         with st.form("leave_form", clear_on_submit=True):
             c1, c2, c3 = st.columns([1.2, 1, 1])
             lt_key   = c1.selectbox(
@@ -1032,7 +1045,7 @@ def _render_time_leave(emp: dict, company: dict):
                 except Exception as ex:
                     st.error(f"Error: {ex}")
 
-    elif req_type == "Overtime":
+    with _req_tabs[1]:
         with st.form("ot_form", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
             ot_date    = c1.date_input("Date", value=today)
@@ -1064,7 +1077,7 @@ def _render_time_leave(emp: dict, company: dict):
                 except Exception as ex:
                     st.error(f"Error: {ex}")
 
-    else:  # Special Leave
+    with _req_tabs[2]:
         # ── Info panel with law reference ─────────────────────────────────────
         st.markdown(
             '<div style="background:#f8f7ff;border:1px solid #ddd6fe;border-radius:8px;'

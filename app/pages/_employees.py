@@ -2580,6 +2580,29 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                 icon="⚠️",
             )
 
+    # Build role options based on current user's role
+    from app.auth import get_current_role, is_super_admin
+    _cur_role = get_current_role()
+    _role_options = []
+    if _cur_role == "admin" or is_super_admin():
+        _role_options = [
+            ("employee", "Employee"),
+            ("supervisor", "Supervisor"),
+            ("hr_manager", "HR Manager"),
+            ("payroll_officer", "Payroll Officer"),
+            ("admin", "Admin"),
+        ]
+    elif _cur_role == "hr_manager":
+        _role_options = [
+            ("employee", "Employee"),
+            ("supervisor", "Supervisor"),
+        ]
+    else:
+        _role_options = [("employee", "Employee")]
+    _role_opts_html = "".join(
+        f'<option value="{v}">{lbl}</option>' for v, lbl in _role_options
+    )
+
     # JS: wire stat card clicks to hidden buttons + employee card hover
     import streamlit.components.v1 as _stc_sf
     _stc_sf.html("""<script>
@@ -2614,7 +2637,13 @@ def _render_employees_tab(show_salary_toggle: bool = True):
           +'box-shadow:0 20px 60px rgba(0,0,0,0.18);font-family:Plus Jakarta Sans,system-ui,sans-serif;'
           +'animation:gxp-cal-pop-in 0.18s ease-out;">'
           +'<div style="font-size:15px;font-weight:800;color:#191c1d;margin-bottom:6px;" id="gxp-inv-title">Send Portal Invite</div>'
-          +'<div style="font-size:13px;color:#727784;margin-bottom:20px;" id="gxp-inv-msg"></div>'
+          +'<div style="font-size:13px;color:#727784;margin-bottom:14px;" id="gxp-inv-msg"></div>'
+          +'<div style="margin-bottom:18px;">'
+          +'<label style="font-size:11px;font-weight:700;color:#424753;text-transform:uppercase;letter-spacing:0.05em;">Access Level</label>'
+          +'<select id="gxp-inv-role" style="display:block;width:100%;margin-top:6px;padding:9px 12px;border-radius:10px;'
+          +'border:1.5px solid #d1d5db;font-size:13px;font-family:inherit;background:#fff;color:#191c1d;'
+          +'outline:none;cursor:pointer;appearance:auto;">'
+          +'</select></div>'
           +'<div style="display:flex;gap:10px;justify-content:flex-end;">'
           +'<button id="gxp-inv-cancel" style="padding:8px 18px;border-radius:8px;border:1px solid #e5e7eb;'
           +'background:#fff;color:#424753;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>'
@@ -2622,9 +2651,10 @@ def _render_employees_tab(show_salary_toggle: bool = True):
           +'background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Yes, Send</button>'
           +'</div></div>';
         (pd.body||pd.documentElement).appendChild(_invOv);
-        pd.getElementById('gxp-inv-cancel').onclick = function(){ _invOv.style.display='none'; };
-        _invOv.addEventListener('click', function(ev){ if(ev.target===_invOv) _invOv.style.display='none'; });
       }
+      // Re-attach handlers every run (previous iframe's closures may be dead)
+      pd.getElementById('gxp-inv-cancel').onclick = function(){ _invOv.style.display='none'; };
+      _invOv.onclick = function(ev){ if(ev.target===_invOv) _invOv.style.display='none'; };
 
       // ── Wire swipe action button clicks to hidden Streamlit buttons ──
       function wireActions(){
@@ -2645,9 +2675,13 @@ def _render_employees_tab(show_salary_toggle: bool = True):
               pd.getElementById('gxp-inv-title').textContent = title;
               pd.getElementById('gxp-inv-msg').innerHTML = 'Send portal invite to <b>'+empName+'</b>?<br>'
                 +'<span style="font-size:11px;color:#9ca3af;">A temporary password will be generated.</span>';
+              pd.getElementById('gxp-inv-role').value = 'employee';
               pd.getElementById('gxp-inv-yes').onclick = function(){
                 _invOv.style.display='none';
-                var btn = pd.querySelector('div[class*="st-key-'+key+'"] button');
+                var role = pd.getElementById('gxp-inv-role').value;
+                var eid = key.replace('invite_','');
+                // Click the role-specific invite button (invite_{role}_{eid})
+                var btn = pd.querySelector('div[class*="st-key-invite_'+role+'_'+eid+'"] button');
                 if(btn) btn.click();
               };
               _invOv.style.display='flex';
@@ -2676,6 +2710,13 @@ def _render_employees_tab(show_salary_toggle: bool = True):
       setTimeout(function(){ _empObs.disconnect(); }, 30000);
     })();
     </script>""", height=0)
+
+    # Inject role-filtered options into invite popup dropdown
+    _stc_sf.html(
+        f"<script>(function(){{var s=window.parent.document.getElementById('gxp-inv-role');"
+        f"if(s)s.innerHTML='{_role_opts_html}';}})()</script>",
+        height=0,
+    )
 
     # --- Employee Card Grid ---
     if not filtered:
@@ -2897,8 +2938,8 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                 if _readonly:
                     _swipe_actions = (
                         f"<div class='emp-act' data-emp-action='print201_{_eid}' "
-                        f"style='background:#ff9800;' title='Print 201'>"
-                        f"&#128424;<span>Print</span></div>"
+                        f"style='background:#ff9800;' title='Print E201'>"
+                        f"&#128424;<span>Print E201</span></div>"
                     )
                 else:
                     # Invite / Add Email button
@@ -2913,7 +2954,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                                 f"&#128231;<span>{_inv_label}</span></div>"
                             )
                         else:
-                            # No email — show "Add Email" which opens edit dialog
+                            # No email — open edit dialog to add email
                             _invite_btn = (
                                 f"<div class='emp-act' data-emp-action='edit_{_eid}' "
                                 f"style='background:#6366f1;' title='Add email to enable portal invite'>"
@@ -2925,8 +2966,8 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                         f"&#9998;<span>Edit</span></div>"
                         f"{_invite_btn}"
                         f"<div class='emp-act' data-emp-action='print201_{_eid}' "
-                        f"style='background:#ff9800;' title='Print 201'>"
-                        f"&#128424;<span>Print</span></div>"
+                        f"style='background:#ff9800;' title='Print E201'>"
+                        f"&#128424;<span>Print E201</span></div>"
                         f"<div class='emp-act emp-act-sm' data-emp-action='{_act_key}' "
                         f"data-emp-confirm='{_act_label} this employee?' "
                         f"style='background:{_deact_bg};' title='{_act_label}'>"
@@ -2994,15 +3035,19 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                                   on_click=_update_employee, args=(emp["id"], {"is_active": True}))
                 if st.button("_", key=f"print201_{emp['id']}"):
                     st.session_state["print201_id"] = emp["id"]
-                # Hidden invite button — triggers the actual invite logic
+                # Hidden invite buttons — one per role. JS clicks the matching one.
                 if not _readonly and _has_email and _is_active:
-                    if st.button("_", key=f"invite_{emp['id']}"):
-                        st.session_state[f"_do_invite_{emp['id']}"] = True
-                        st.rerun()
+                    for _rv in [r for r, _ in _role_options]:
+                        def _on_invite_click(_eid=emp["id"], _r=_rv):
+                            st.session_state[f"_do_invite_{_eid}"] = True
+                            st.session_state[f"_invite_role_{_eid}"] = _r
+                        if st.button("_", key=f"invite_{_rv}_{emp['id']}", on_click=_on_invite_click):
+                            st.rerun()
 
                 # ── Process invite (after confirmation via JS popup) ──
                 if st.session_state.pop(f"_do_invite_{emp['id']}", False):
                     from app.auth import invite_employee
+                    _invite_role = st.session_state.pop(f"_invite_role_{emp['id']}", "employee")
                     already_linked = bool(emp.get("user_id"))
                     ok, result = invite_employee(emp["email"])
                     if ok:
@@ -3024,20 +3069,21 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                             db.table("user_company_access").upsert({
                                 "user_id":    auth_user_id,
                                 "company_id": get_company_id(),
-                                "role":       "employee",
+                                "role":       _invite_role,
                             }, on_conflict="user_id,company_id").execute()
                         except Exception:
                             try:
                                 db.table("user_company_access").insert({
                                     "user_id":    auth_user_id,
                                     "company_id": get_company_id(),
-                                    "role":       "employee",
+                                    "role":       _invite_role,
                                 }).execute()
                             except Exception:
                                 pass
+                        _role_label = _invite_role.replace("_", " ").title()
                         if smtp_failed:
                             toast_msg = (
-                                f"Account created for **{emp['email']}**.\n\n"
+                                f"Account created for **{emp['email']}** as **{_role_label}**.\n\n"
                                 f"Email could not be sent ({smtp_err}).\n\n"
                                 f"**Share this temporary password manually:**\n\n"
                                 f"```\n{temp_password}\n```\n\n"
@@ -3048,7 +3094,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                             action = "re-linked" if already_linked else "created"
                             st.session_state["_invite_toast"] = (
                                 "success",
-                                f"Portal access {action} for **{emp['email']}**. "
+                                f"Portal access {action} for **{emp['email']}** as **{_role_label}**. "
                                 "A temporary password was emailed.",
                             )
                     else:

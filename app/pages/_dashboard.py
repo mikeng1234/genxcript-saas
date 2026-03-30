@@ -20,6 +20,24 @@ import pandas as pd
 
 
 # ============================================================
+# Widget Registry — each dashboard widget with its module gate
+# ============================================================
+
+DASHBOARD_WIDGETS = [
+    {"id": "payroll_overview",  "label": "Payroll Overview",  "module": ["payroll"]},
+    {"id": "recent_payroll",    "label": "Recent Payroll",    "module": ["payroll"]},
+    {"id": "calendar",          "label": "Calendar",          "module": ["core"]},
+    {"id": "workforce",         "label": "Workforce",         "module": ["core"]},
+    {"id": "quick_stats",       "label": "Quick Stats",       "module": ["core"]},
+    {"id": "recent_activity",   "label": "Recent Activity",   "module": ["core"]},
+    {"id": "onboarding",        "label": "Onboarding",        "module": ["core"]},
+    {"id": "approvals",         "label": "Approvals",          "module": ["core"]},
+    {"id": "attendance",        "label": "Attendance",         "module": ["attendance"]},
+    {"id": "pending_requests",  "label": "Pending Requests",  "module": ["leave_ot"]},
+    {"id": "alerts",            "label": "Alerts",            "module": ["compliance", "payroll"]},
+]
+
+# ============================================================
 # Data Helpers
 # ============================================================
 
@@ -826,16 +844,18 @@ def _render_panel_mini_calendar(cal_events: dict):
     cal_obj = _cal.Calendar(firstweekday=_first_day)
     weeks = cal_obj.monthdayscalendar(year, month)
 
+    _num_weeks = len(weeks)
+    _HDR_S = "font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;text-align:center;padding:6px 0;"
     if _week_pref == "Sunday":
-        hdr = "".join(f'<span style="font-size:8px;font-weight:700;color:#727784;text-transform:uppercase;text-align:center;">{d}</span>' for d in ["SU","MO","TU","WE","TH","FR","SA"])
+        hdr = "".join(f'<span style="{_HDR_S}">{d}</span>' for d in ["SU","MO","TU","WE","TH","FR","SA"])
     else:
-        hdr = "".join(f'<span style="font-size:8px;font-weight:700;color:#727784;text-transform:uppercase;text-align:center;">{d}</span>' for d in ["MO","TU","WE","TH","FR","SA","SU"])
+        hdr = "".join(f'<span style="{_HDR_S}">{d}</span>' for d in ["MO","TU","WE","TH","FR","SA","SU"])
 
     cells = ""
     for week in weeks:
         for day in week:
             if day == 0:
-                cells += '<div style="min-height:24px;"></div>'
+                cells += '<div></div>'
                 continue
             iso = f"{year}-{month:02d}-{day:02d}"
             is_today = iso == today_iso
@@ -843,7 +863,8 @@ def _render_panel_mini_calendar(cal_events: dict):
 
             # Style
             if is_today:
-                style = "font-size:12px;font-weight:800;color:#005bc1;"
+                style = "font-size:15px;font-weight:800;color:#005bc1;"
+                bg = "background:rgba(0,91,193,0.08);border-radius:8px;"
             elif evts:
                 prio_colors = {"holiday": "#e53935", "payday": "#4caf50", "deadline": "#ff6f00", "special": "#ff9800"}
                 clr = "#424753"
@@ -851,32 +872,46 @@ def _render_panel_mini_calendar(cal_events: dict):
                     if e.get("type") in prio_colors:
                         clr = prio_colors[e["type"]]
                         break
-                style = f"font-size:10px;font-weight:700;color:{clr};"
+                style = f"font-size:14px;font-weight:600;color:{clr};"
+                bg = ""
             else:
-                style = "font-size:10px;font-weight:500;color:#424753;"
+                style = "font-size:14px;font-weight:500;color:#424753;"
+                bg = ""
 
-            # Dots
+            # Dots + tooltip
             dots = ""
+            tooltip = ""
             if evts:
                 dot_spans = "".join(
-                    f'<span style="width:3px;height:3px;border-radius:50%;background:{e.get("color","#9ca3af")};display:inline-block;"></span>'
+                    f'<span style="width:4px;height:4px;border-radius:50%;background:{e.get("color","#9ca3af")};display:inline-block;"></span>'
                     for e in evts[:3]
                 )
-                dots = f'<div style="display:flex;gap:1px;justify-content:center;margin-top:1px;">{dot_spans}</div>'
+                dots = f'<div style="display:flex;gap:2px;justify-content:center;margin-top:2px;">{dot_spans}</div>'
+                # Build tooltip content
+                _tip_lines = "".join(
+                    f'<div style="display:flex;align-items:center;gap:4px;margin:2px 0;">'
+                    f'<span style="width:5px;height:5px;border-radius:50%;background:{e.get("color","#9ca3af")};flex-shrink:0;"></span>'
+                    f'<span>{e.get("label", e.get("type", "Event"))}</span></div>'
+                    for e in evts[:5]
+                )
+                tooltip = (
+                    f'<div class="gxp-cal-tip">{_tip_lines}</div>'
+                )
 
             cells += (
-                f'<div style="text-align:center;padding:2px 0;border-radius:4px;min-height:24px;'
+                f'<div class="gxp-cal-cell" style="text-align:center;position:relative;{bg}'
                 f'display:flex;flex-direction:column;align-items:center;justify-content:center;{style}">'
-                f'{day}{dots}</div>'
+                f'{day}{dots}{tooltip}</div>'
             )
 
+    # Grid rows auto-sized to fill card (flex:1 stretches the grid)
     st.markdown(
-        f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}cursor:pointer;">'
-        f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+        f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}cursor:pointer;display:flex;flex-direction:column;">'
+        f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
         f'    <div style="{_MLBL}margin-bottom:0;">{month_name}</div>'
         f'  </div>'
-        f'  <div style="display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:3px;">{hdr}</div>'
-        f'  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;">{cells}</div>'
+        f'  <div style="display:grid;grid-template-columns:repeat(7,1fr);text-align:center;">{hdr}</div>'
+        f'  <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat({_num_weeks},1fr);flex:1;align-items:center;">{cells}</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -1071,6 +1106,274 @@ def _render_panel_workforce(dept_data, active_count):
         st.rerun()
 
 
+def _render_panel_quick_stats(active_count, total_count, dept_data):
+    """Widget: Quick Stats — bento grid filling full card."""
+    _inactive = total_count - active_count
+    _dept_count = len(dept_data) if dept_data else 0
+    _active_rate = round(active_count / total_count * 100) if total_count else 0
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}display:flex;flex-direction:column;cursor:pointer;">'
+        f'  <div style="{_MLBL}margin-bottom:6px;">Quick Stats</div>'
+        f'  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;flex:1;">'
+        #  Row 1: Active (large, spans 2 cols) | Total
+        f'    <div style="grid-column:span 2;border-radius:12px;background:#dcfce7;'
+        f'display:flex;align-items:center;justify-content:space-between;padding:14px 18px;">'
+        f'      <div>'
+        f'        <div style="font-size:36px;font-weight:900;color:#15803d;line-height:1;">{active_count}</div>'
+        f'        <div style="font-size:9px;font-weight:700;color:#166534;text-transform:uppercase;'
+        f'letter-spacing:.1em;margin-top:4px;">Active Employees</div>'
+        f'      </div>'
+        f'      <div style="font-size:28px;opacity:0.15;">&#128100;</div>'
+        f'    </div>'
+        f'    <div style="border-radius:12px;background:#dbeafe;'
+        f'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 6px;">'
+        f'      <div style="font-size:26px;font-weight:900;color:#2563eb;line-height:1;">{total_count}</div>'
+        f'      <div style="font-size:8px;font-weight:700;color:#1e40af;text-transform:uppercase;'
+        f'letter-spacing:.1em;margin-top:4px;">Total</div>'
+        f'    </div>'
+        #  Row 2: Inactive | Departments | Active Rate
+        f'    <div style="border-radius:12px;background:#fee2e2;'
+        f'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 6px;">'
+        f'      <div style="font-size:24px;font-weight:900;color:#dc2626;line-height:1;">{_inactive}</div>'
+        f'      <div style="font-size:8px;font-weight:700;color:#991b1b;text-transform:uppercase;'
+        f'letter-spacing:.1em;margin-top:4px;">Inactive</div>'
+        f'    </div>'
+        f'    <div style="border-radius:12px;background:#f3e8ff;'
+        f'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 6px;">'
+        f'      <div style="font-size:24px;font-weight:900;color:#7c3aed;line-height:1;">{_dept_count}</div>'
+        f'      <div style="font-size:8px;font-weight:700;color:#6b21a8;text-transform:uppercase;'
+        f'letter-spacing:.1em;margin-top:4px;">Depts</div>'
+        f'    </div>'
+        f'    <div style="border-radius:12px;background:#fef3c7;'
+        f'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 6px;">'
+        f'      <div style="font-size:24px;font-weight:900;color:#d97706;line-height:1;">{_active_rate}%</div>'
+        f'      <div style="font-size:8px;font-weight:700;color:#92400e;text-transform:uppercase;'
+        f'letter-spacing:.1em;margin-top:4px;">Rate</div>'
+        f'    </div>'
+        f'  </div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Employees →", key="bento_quick_stats", use_container_width=True):
+        st.session_state["_nav_redirect"] = "Employees"
+        st.rerun()
+
+
+def _render_panel_recent_activity_widget():
+    """Widget: Recent Activity — last 6 audit log entries."""
+    entries = _load_recent_activity(6)
+
+    _COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"]
+
+    items_html = ""
+    if not entries:
+        items_html = '<div style="color:#9ca3af;font-size:11px;text-align:center;padding:20px 0;">No recent activity</div>'
+    else:
+        for i, e in enumerate(entries):
+            color = _COLORS[i % len(_COLORS)]
+            items_html += (
+                f'<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;'
+                f'border-bottom:1px solid #f3f4f6;">'
+                f'  <div style="width:8px;height:8px;border-radius:50%;background:{color};'
+                f'flex-shrink:0;margin-top:4px;"></div>'
+                f'  <div style="flex:1;min-width:0;">'
+                f'    <div style="font-size:12px;font-weight:700;color:#191c1d;'
+                f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{e["title"]}</div>'
+                f'    <div style="font-size:10px;color:#9ca3af;">{e["sub"]} &middot; {e["date"]}</div>'
+                f'  </div>'
+                f'</div>'
+            )
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card gxp-no-lift" style="{_CARD}">'
+        f'  <div style="{_MLBL}margin-bottom:8px;">Recent Activity</div>'
+        f'  <div>{items_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_panel_onboarding():
+    """Widget: Onboarding Progress — employees with incomplete gov IDs."""
+    try:
+        db = get_db()
+        cid = get_company_id()
+        emps = (
+            db.table("employees")
+            .select("id,first_name,last_name,sss_no,philhealth_no,pagibig_no,tin")
+            .eq("company_id", cid)
+            .eq("is_active", True)
+            .execute()
+        ).data or []
+    except Exception:
+        emps = []
+
+    _fields = ["sss_no", "philhealth_no", "pagibig_no", "tin"]
+    _incomplete = []
+    for e in emps:
+        _missing = [f for f in _fields if not (e.get(f) or "").strip()]
+        if _missing:
+            _incomplete.append({
+                "name": f"{e.get('first_name','')} {e.get('last_name','')}".strip(),
+                "missing": len(_missing),
+                "total": len(_fields),
+            })
+    _incomplete.sort(key=lambda x: -x["missing"])
+
+    _complete = len(emps) - len(_incomplete)
+    _pct = round(_complete / len(emps) * 100) if emps else 100
+
+    # Progress bar
+    _bar_color = "#10b981" if _pct >= 80 else ("#f59e0b" if _pct >= 50 else "#ef4444")
+
+    items_html = ""
+    for emp in _incomplete[:5]:
+        _done = emp["total"] - emp["missing"]
+        _dots = (
+            '<span style="color:#10b981;">&#9679;</span>' * _done +
+            '<span style="color:#e5e7eb;">&#9679;</span>' * emp["missing"]
+        )
+        items_html += (
+            f'<div style="display:flex;justify-content:space-between;align-items:center;'
+            f'padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:11px;">'
+            f'  <span style="font-weight:600;color:#191c1d;flex:1;overflow:hidden;'
+            f'text-overflow:ellipsis;white-space:nowrap;">{emp["name"]}</span>'
+            f'  <span style="font-size:10px;letter-spacing:2px;">{_dots}</span>'
+            f'</div>'
+        )
+
+    if not _incomplete:
+        items_html = (
+            '<div style="text-align:center;padding:16px 0;color:#10b981;font-size:12px;font-weight:600;">'
+            'All profiles complete</div>'
+        )
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card gxp-bento-clickable" style="{_CARD}cursor:pointer;">'
+        f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+        f'    <div style="{_MLBL}margin-bottom:0;">Onboarding</div>'
+        f'    <span style="font-size:11px;font-weight:800;color:{_bar_color};">{_pct}%</span>'
+        f'  </div>'
+        f'  <div style="height:4px;border-radius:2px;background:#f3f4f6;margin-bottom:10px;">'
+        f'    <div style="height:100%;width:{_pct}%;border-radius:2px;background:{_bar_color};'
+        f'transition:width 0.4s ease;"></div>'
+        f'  </div>'
+        f'  <div>{items_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Employees →", key="bento_onboarding", use_container_width=True):
+        st.session_state["_nav_redirect"] = "Employees"
+        st.rerun()
+
+
+def _render_panel_approvals():
+    """Widget: Approvals — pending leave & OT requests with employee names."""
+    try:
+        db = get_db()
+        cid = get_company_id()
+        # Pending leave requests
+        _leave = (
+            db.table("leave_requests")
+            .select("id,employee_id,leave_type,start_date,end_date,status,created_at")
+            .eq("company_id", cid)
+            .eq("status", "pending")
+            .order("created_at", desc=True)
+            .limit(5)
+            .execute()
+        ).data or []
+        # Pending OT requests
+        _ot = (
+            db.table("ot_requests")
+            .select("id,employee_id,ot_date,hours,status,created_at")
+            .eq("company_id", cid)
+            .eq("status", "pending")
+            .order("created_at", desc=True)
+            .limit(5)
+            .execute()
+        ).data or []
+        # Load employee names
+        _all_ids = list(set(
+            [r.get("employee_id", "") for r in _leave] +
+            [r.get("employee_id", "") for r in _ot]
+        ))
+        _names = {}
+        if _all_ids:
+            _names = _load_employee_names([x for x in _all_ids if x])
+    except Exception:
+        _leave, _ot, _names = [], [], {}
+
+    _total = len(_leave) + len(_ot)
+
+    items_html = ""
+    # Leave items
+    for r in _leave[:4]:
+        _name = _names.get(r.get("employee_id", ""), "Employee")
+        _type = (r.get("leave_type") or "Leave").replace("_", " ").title()
+        _dates = f"{r.get('start_date', '')}"
+        if r.get("end_date") and r["end_date"] != r.get("start_date"):
+            _dates += f" → {r['end_date']}"
+        items_html += (
+            f'<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;'
+            f'border-bottom:1px solid #f3f4f6;">'
+            f'  <div style="width:6px;height:6px;border-radius:50%;background:#f59e0b;'
+            f'flex-shrink:0;margin-top:5px;"></div>'
+            f'  <div style="flex:1;min-width:0;">'
+            f'    <div style="font-size:11px;font-weight:700;color:#191c1d;'
+            f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{_name}</div>'
+            f'    <div style="font-size:9px;color:#9ca3af;">{_type} &middot; {_dates}</div>'
+            f'  </div>'
+            f'  <span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:4px;'
+            f'background:#fef3c7;color:#92400e;white-space:nowrap;">LEAVE</span>'
+            f'</div>'
+        )
+    # OT items
+    for r in _ot[:4]:
+        _name = _names.get(r.get("employee_id", ""), "Employee")
+        _hrs = r.get("hours", 0)
+        _date = r.get("ot_date", "")
+        items_html += (
+            f'<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;'
+            f'border-bottom:1px solid #f3f4f6;">'
+            f'  <div style="width:6px;height:6px;border-radius:50%;background:#3b82f6;'
+            f'flex-shrink:0;margin-top:5px;"></div>'
+            f'  <div style="flex:1;min-width:0;">'
+            f'    <div style="font-size:11px;font-weight:700;color:#191c1d;'
+            f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{_name}</div>'
+            f'    <div style="font-size:9px;color:#9ca3af;">{_hrs}hrs &middot; {_date}</div>'
+            f'  </div>'
+            f'  <span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:4px;'
+            f'background:#dbeafe;color:#1d4ed8;white-space:nowrap;">OT</span>'
+            f'</div>'
+        )
+
+    if not items_html:
+        items_html = (
+            '<div style="text-align:center;padding:20px 0;">'
+            '<div style="font-size:20px;margin-bottom:6px;">&#9989;</div>'
+            '<div style="font-size:12px;font-weight:600;color:#10b981;">All caught up!</div>'
+            '<div style="font-size:10px;color:#9ca3af;">No pending approvals</div>'
+            '</div>'
+        )
+
+    # Badge color
+    _badge_bg = "#ef4444" if _total > 0 else "#10b981"
+    _badge_txt = str(_total) if _total > 0 else "0"
+
+    st.markdown(
+        f'<div class="gxp-bento-hero-card gxp-no-lift" style="{_CARD}">'
+        f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+        f'    <div style="{_MLBL}margin-bottom:0;">Approvals</div>'
+        f'    <span style="font-size:10px;font-weight:800;color:#fff;background:{_badge_bg};'
+        f'padding:2px 8px;border-radius:9999px;min-width:20px;text-align:center;">{_badge_txt}</span>'
+        f'  </div>'
+        f'  <div>{items_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _render_panel_attendance_detail(today_logs, name_map_all):
     """Panel 5: Attendance Detail — today's time logs table."""
     if not today_logs:
@@ -1172,7 +1475,7 @@ def _render_panel_pending_requests(pending_details, name_map_all, pending_leave,
 
     if not pending_details and total_pending == 0:
         st.markdown(
-            f'<div class="gxp-bento-hero-card" style="{_CARD}">'
+            f'<div class="gxp-bento-hero-card gxp-no-lift" style="{_CARD}">'
             f'  <div style="{_MLBL}">Pending Requests</div>'
             f'  <div style="text-align:center;padding:24px 0;">'
             f'    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
@@ -1237,7 +1540,7 @@ def _render_panel_pending_requests(pending_details, name_map_all, pending_leave,
     )
 
     st.markdown(
-        f'<div class="gxp-bento-hero-card" style="{_CARD}">'
+        f'<div class="gxp-bento-hero-card gxp-no-lift" style="{_CARD}">'
         f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
         f'    <div>'
         f'      <div style="{_MLBL}margin-bottom:2px;">Action Required</div>'
@@ -2274,7 +2577,7 @@ def _render_alerts(deadlines: list[dict], periods: list[dict]):
         st.markdown(
             '<span class="gxp-alert-section" style="display:none"></span>'
             '<span class="gxp-alert-gov-marker" style="display:none"></span>'
-            '<div class="gxp-panel-title" style="margin-bottom:10px">Alerts</div>',
+            f'<div style="{_MLBL}margin-bottom:10px;">Alerts</div>',
             unsafe_allow_html=True,
         )
 
@@ -2323,7 +2626,7 @@ def _render_reminders(pending_leave: int, pending_ot: int):
     with st.container():
         st.markdown(
             '<span class="gxp-remind-section" style="display:none"></span>'
-            '<div class="gxp-panel-title" style="margin-bottom:10px">Reminders</div>',
+            f'<div style="{_MLBL}margin-bottom:10px;">Reminders</div>',
             unsafe_allow_html=True,
         )
 
@@ -4180,20 +4483,113 @@ def render():
         col_main = None  # skip side column
         col_side = None
     else:
-        # ── NEW 6-panel dashboard layout ──
-        _admin_name_map = _load_employee_names(
-            [e["employee_id"] for e in latest_entries if e.get("employee_id")]
-        ) if latest_entries else {}
+        # ── Customizable widget dashboard ──
+        from app.auth import has_module
 
-        # Load additional data for new panels
+        # Resolve available widgets (filtered by enabled modules)
+        _available = [w for w in DASHBOARD_WIDGETS if any(has_module(m) for m in w["module"])]
+        _available_ids = {w["id"] for w in _available}
+        _widget_label = {w["id"]: w["label"] for w in DASHBOARD_WIDGETS}
+
+        # Resolve active widget list from user preferences
+        _saved_order = st.session_state.get("dashboard_widgets") or None
+        if _saved_order and isinstance(_saved_order, list):
+            _active_ids = [wid for wid in _saved_order if wid in _available_ids]
+        else:
+            _active_ids = [w["id"] for w in _available]
+
+        # ── "Edit Dashboard" toggle — subtle link under greeting ──
+        _editing = st.session_state.get("_dash_editing", False)
+        if _editing:
+            if st.button("Done editing", key="_dash_edit_toggle", type="primary"):
+                from app.pages._preferences import save_user_prefs
+                _uid = st.session_state.get("user_id", "")
+                if _uid:
+                    save_user_prefs(_uid)
+                st.session_state["_dash_editing"] = False
+                st.rerun()
+        else:
+            st.markdown(
+                '<div style="text-align:right;margin:-8px 0 4px;">'
+                '<span class="gxp-edit-dash-link" style="font-size:10px;color:#9ca3af;cursor:pointer;'
+                'font-weight:600;letter-spacing:0.03em;">Edit Dashboard</span></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("_", key="_dash_edit_hidden"):
+                st.session_state["_dash_editing"] = True
+                st.rerun()
+
+        if _editing:
+            # Hidden widgets — add buttons
+            _hidden = [w for w in _available if w["id"] not in _active_ids]
+            if _hidden:
+                _hid_cols = st.columns(max(len(_hidden), 1))
+                for _hi, _hw in enumerate(_hidden):
+                    with _hid_cols[_hi]:
+                        def _show(_w=_hw["id"]):
+                            _new = list(_active_ids) + [_w]
+                            st.session_state["dashboard_widgets"] = _new
+                            from app.pages._preferences import save_user_prefs
+                            _u = st.session_state.get("user_id", "")
+                            if _u: save_user_prefs(_u)
+                        st.button(f"+ {_hw['label']}", key=f"_ws_{_hw['id']}", on_click=_show,
+                                  type="primary")
+
+            # Hidden move/hide buttons (clicked by JS edge-hover arrows)
+            for _aw in _active_ids:
+                def _mv(_w=_aw, _d=""):
+                    _l = list(st.session_state.get("dashboard_widgets") or _active_ids)
+                    if _w not in _l:
+                        return
+                    _i = _l.index(_w)
+                    if _d == "left" and _i > 0:
+                        _l[_i], _l[_i-1] = _l[_i-1], _l[_i]
+                    elif _d == "right" and _i < len(_l)-1:
+                        _l[_i], _l[_i+1] = _l[_i+1], _l[_i]
+                    elif _d == "up" and _i >= 4:
+                        _l[_i], _l[_i-4] = _l[_i-4], _l[_i]
+                    elif _d == "down" and _i + 4 < len(_l):
+                        _l[_i], _l[_i+4] = _l[_i+4], _l[_i]
+                    st.session_state["dashboard_widgets"] = _l
+                    from app.pages._preferences import save_user_prefs
+                    _u = st.session_state.get("user_id", "")
+                    if _u: save_user_prefs(_u)
+                st.button("_", key=f"_wl_{_aw}", on_click=_mv, kwargs={"_w": _aw, "_d": "left"})
+                st.button("_", key=f"_wr_{_aw}", on_click=_mv, kwargs={"_w": _aw, "_d": "right"})
+                st.button("_", key=f"_wu_{_aw}", on_click=_mv, kwargs={"_w": _aw, "_d": "up"})
+                st.button("_", key=f"_wd_{_aw}", on_click=_mv, kwargs={"_w": _aw, "_d": "down"})
+                def _hide(_w=_aw):
+                    _l = list(st.session_state.get("dashboard_widgets") or _active_ids)
+                    st.session_state["dashboard_widgets"] = [x for x in _l if x != _w]
+                    from app.pages._preferences import save_user_prefs
+                    _u = st.session_state.get("user_id", "")
+                    if _u: save_user_prefs(_u)
+                st.button("_", key=f"_wh_{_aw}", on_click=_hide)
+
+        # ── Load data based on active widgets ──
+        _render_set = set(_active_ids)
+        _need_payroll = bool(_render_set & {"payroll_overview", "recent_payroll", "alerts"})
+        _need_attendance = "attendance" in _render_set
+        _need_leave_ot = bool(_render_set & {"pending_requests", "reminders"})
+
         _cid = get_company_id()
-        _dept_data = _load_department_breakdown(_cid)
-        _emp_dept_map = _load_employee_dept_map(_cid)
-        _today_logs = _load_today_attendance(_cid)
-        _monthly_att = _load_attendance_monthly(_cid)
-        _pending_details = _load_pending_request_details(_cid)
+        _admin_name_map = {}
+        _emp_dept_map = {}
+        _dept_data = _load_department_breakdown(_cid) if (_render_set & {"workforce", "quick_stats"}) else []
+        _today_logs = []
+        _pending_details = []
+        _all_name_map = {}
 
-        # Name map for all employees (for attendance + pending panels)
+        if _need_payroll and latest_entries:
+            _admin_name_map = _load_employee_names(
+                [e["employee_id"] for e in latest_entries if e.get("employee_id")]
+            )
+            _emp_dept_map = _load_employee_dept_map(_cid)
+        if _need_attendance:
+            _today_logs = _load_today_attendance(_cid)
+        if _need_leave_ot:
+            _pending_details = _load_pending_request_details(_cid)
+
         _all_emp_ids = list(set(
             [log.get("employee_id", "") for log in _today_logs] +
             [req.get("employee_id", "") for req in _pending_details]
@@ -4203,46 +4599,170 @@ def render():
             _extra_names = _load_employee_names([eid for eid in _all_emp_ids if eid and eid not in _all_name_map])
             _all_name_map.update(_extra_names)
 
-        # Outer layout: main content (3/4) + sidebar (1/4)
-        col_main, col_side = st.columns([3, 1], gap="medium")
-
-        with col_main:
-            # Row 1: Payroll Overview | Recent Payroll | Attendance Rate
-            r1c1, r1c2, r1c3 = st.columns(3, gap="medium")
-            with r1c1:
+        # ── Widget dispatch ──
+        def _dispatch_widget(_wid):
+            if _wid == "payroll_overview":
                 _render_panel_payroll_overview(
                     latest_period, history, latest_entries,
                     total_gross, total_net, total_cost, headcount,
                     dept_map=_emp_dept_map,
                 )
-            with r1c2:
+            elif _wid == "recent_payroll":
                 _render_panel_recent_payroll(latest_entries, _admin_name_map, latest_period)
-            with r1c3:
+            elif _wid == "calendar":
                 _render_panel_mini_calendar(_cal_events or {})
-
-            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-
-            # Row 2: Workforce Breakdown | Attendance Detail (wider)
-            r2c1, r2c2 = st.columns([1, 2], gap="medium")
-            with r2c1:
+            elif _wid == "workforce":
                 _render_panel_workforce(_dept_data, active_count)
-            with r2c2:
+            elif _wid == "quick_stats":
+                _render_panel_quick_stats(active_count, total_count, _dept_data)
+            elif _wid == "recent_activity":
+                _render_panel_recent_activity_widget()
+            elif _wid == "onboarding":
+                _render_panel_onboarding()
+            elif _wid == "approvals":
+                _render_panel_approvals()
+            elif _wid == "attendance":
                 _render_panel_attendance_detail(_today_logs, _all_name_map)
+            elif _wid == "pending_requests":
+                st.markdown('<span class="gxp-wdg-scroll-marker"></span>', unsafe_allow_html=True)
+                _render_panel_pending_requests(_pending_details, _all_name_map, pending_leave, pending_ot)
+            elif _wid == "alerts":
+                st.markdown('<span class="gxp-wdg-scroll-marker"></span>', unsafe_allow_html=True)
+                _render_alerts(deadlines, periods)
 
-            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+        # ── Render active widgets in 4-column grid ──
+        _GRID_COLS = 4
+        if _active_ids:
+            for _row_start in range(0, len(_active_ids), _GRID_COLS):
+                if _row_start > 0:
+                    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+                _row_wids = _active_ids[_row_start:_row_start + _GRID_COLS]
+                _row_cols = st.columns(_GRID_COLS, gap="medium")
+                for _ci, _wid in enumerate(_row_wids):
+                    _wi = _row_start + _ci
+                    with _row_cols[_ci]:
+                        if _editing:
+                            st.markdown(
+                                f"<div class='gxp-wdg-marker' data-wid='{_wid}'></div>",
+                                unsafe_allow_html=True,
+                            )
+                        _dispatch_widget(_wid)
+        elif not _editing:
+            st.info("No widgets selected. Click **Edit Dashboard** to add widgets.")
 
-            # Row 3: Pending Requests
-            _render_panel_pending_requests(_pending_details, _all_name_map, pending_leave, pending_ot)
+        # ── Edge-hover move/hide overlays (edit mode only) ──
+        if _editing and _active_ids:
+            _stc.html("""<script>(function(){
+              var pd = window.parent.document;
+              if (!pd.getElementById('gxp-edge-hover-css')) {
+                var sty = pd.createElement('style');
+                sty.id = 'gxp-edge-hover-css';
+                sty.textContent = `
+                  .gxp-edge-zone { position:absolute; z-index:50; display:flex;
+                    align-items:center; justify-content:center; opacity:0;
+                    transition:opacity 0.18s,transform 0.18s; pointer-events:none; }
+                  .gxp-edge-zone.show { opacity:1; pointer-events:auto; }
+                  .gxp-edge-btn { width:30px; height:30px; border-radius:50%; border:none;
+                    background:rgba(0,91,193,0.9); color:#fff; font-size:13px; font-weight:700;
+                    cursor:pointer; display:flex; align-items:center; justify-content:center;
+                    box-shadow:0 2px 10px rgba(0,0,0,0.2); transition:transform 0.12s,background 0.12s;
+                    backdrop-filter:blur(4px); }
+                  .gxp-edge-btn:hover { background:rgba(0,61,138,0.95); transform:scale(1.15); }
+                  .gxp-edge-btn.hide-btn { background:rgba(239,68,68,0.9); font-size:10px; width:auto;
+                    padding:0 10px; border-radius:14px; font-weight:700; }
+                  .gxp-edge-btn.hide-btn:hover { background:rgba(220,38,38,0.95); }
+                  .gxp-edge-left { left:4px; top:50%; transform:translateY(-50%) translateX(-8px); }
+                  .gxp-edge-left.show { transform:translateY(-50%) translateX(0); }
+                  .gxp-edge-right { right:4px; top:50%; transform:translateY(-50%) translateX(8px); }
+                  .gxp-edge-right.show { transform:translateY(-50%) translateX(0); }
+                  .gxp-edge-top { top:4px; left:50%; transform:translateX(-50%) translateY(-8px); }
+                  .gxp-edge-top.show { transform:translateX(-50%) translateY(0); }
+                  .gxp-edge-bottom { bottom:4px; left:50%; transform:translateX(-50%) translateY(8px); }
+                  .gxp-edge-bottom.show { transform:translateX(-50%) translateY(0); }
+                `;
+                pd.head.appendChild(sty);
+              }
+              // Helper: get current wid from the marker inside a column
+              function getWid(col) {
+                var m = col.querySelector('.gxp-wdg-marker');
+                return m ? m.getAttribute('data-wid') : '';
+              }
 
-        with col_side:
-            _render_reminders(pending_leave, pending_ot)
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-            _render_alerts(deadlines, periods)
+              function addEdgeOverlays() {
+                pd.querySelectorAll('.gxp-wdg-marker').forEach(function(marker) {
+                  var col = marker.closest('[data-testid="stColumn"]');
+                  if (!col || col._edgeWired) return;
+                  col._edgeWired = true;
+                  col.style.position = 'relative';
+                  var zones = [
+                    {cls:'gxp-edge-left', arrow:'\u25C0', key:'_wl_'},
+                    {cls:'gxp-edge-right', arrow:'\u25B6', key:'_wr_'},
+                    {cls:'gxp-edge-top', arrow:'\u25B2', key:'_wu_'},
+                    {cls:'gxp-edge-bottom', arrow:'\u25BC', key:'_wd_'},
+                  ];
+                  zones.forEach(function(z) {
+                    var zone = pd.createElement('div');
+                    zone.className = 'gxp-edge-zone ' + z.cls;
+                    var btn = pd.createElement('button');
+                    btn.className = 'gxp-edge-btn';
+                    btn.innerHTML = z.arrow;
+                    btn.addEventListener('click', function(e) {
+                      e.stopPropagation();
+                      var wid = getWid(col);
+                      var hb = pd.querySelector('div[class*="st-key-'+z.key+wid+'"] button');
+                      if (hb) hb.click();
+                    });
+                    zone.appendChild(btn);
+                    col.appendChild(zone);
+                  });
+                  var hideZone = pd.createElement('div');
+                  hideZone.className = 'gxp-edge-zone';
+                  hideZone.style.cssText = 'bottom:8px;right:8px;';
+                  var hideBtn = pd.createElement('button');
+                  hideBtn.className = 'gxp-edge-btn hide-btn';
+                  hideBtn.textContent = 'Hide';
+                  hideBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var wid = getWid(col);
+                    var hb = pd.querySelector('div[class*="st-key-_wh_'+wid+'"] button');
+                    if (hb) hb.click();
+                  });
+                  hideZone.appendChild(hideBtn);
+                  col.appendChild(hideZone);
+                  col.addEventListener('mousemove', function(e) {
+                    var rect = col.getBoundingClientRect();
+                    var x = e.clientX - rect.left, y = e.clientY - rect.top;
+                    var w = rect.width, h = rect.height, edge = 40;
+                    col.querySelectorAll('.gxp-edge-zone').forEach(function(z){ z.classList.remove('show'); });
+                    if (x < edge) { var z=col.querySelector('.gxp-edge-left'); if(z) z.classList.add('show'); }
+                    else if (x > w-edge) { var z=col.querySelector('.gxp-edge-right'); if(z) z.classList.add('show'); }
+                    if (y < edge) { var z=col.querySelector('.gxp-edge-top'); if(z) z.classList.add('show'); }
+                    else if (y > h-edge) { var z=col.querySelector('.gxp-edge-bottom'); if(z) z.classList.add('show'); }
+                    hideZone.classList.add('show');
+                  });
+                  col.addEventListener('mouseleave', function() {
+                    col.querySelectorAll('.gxp-edge-zone').forEach(function(z){ z.classList.remove('show'); });
+                  });
+                });
+              }
+              addEdgeOverlays();
+              setTimeout(addEdgeOverlays, 500);
+              setTimeout(addEdgeOverlays, 1500);
+            })();</script>""", height=0)
 
-    # Wire bento card clicks + ripple + equal-height cards (pure JS)
+    # Wire bento card clicks + ripple + equal-height cards + edit link (pure JS)
     _stc.html("""<script>
     (function(){
       var pd=window.parent.document;
+
+      // ── Wire "Edit Dashboard" text link to hidden button ──
+      var editLink = pd.querySelector('.gxp-edit-dash-link');
+      if (editLink) {
+        editLink.addEventListener('click', function() {
+          var btn = pd.querySelector('div[class*="st-key-_dash_edit_hidden"] button');
+          if (btn) btn.click();
+        });
+      }
 
       // ── Equal-height cards per row (not across outer columns) ──
       function equalizeBento(){

@@ -22,6 +22,7 @@ _PREF_DEFAULTS: dict = {
     "gxp_table_density": "normal",        # compact | normal | relaxed
     "gxp_default_page":  "Dashboard",
     "gxp_sidebar_open":  True,
+    "dashboard_widgets": None,          # ordered list of widget IDs, None = all defaults
 }
 
 DATE_FORMAT_OPTIONS = [

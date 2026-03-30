@@ -531,6 +531,7 @@ def inject_css():
     """Inject shared CSS with active theme variables. Call once per page render()."""
     # Load Plus Jakarta Sans + Material Symbols — @import inside <style>
     st.markdown(
+        '<span class="gxp-css-inject"></span>'
         "<style>"
         "@font-face {"
         "  font-family: 'Material Symbols Outlined';"
@@ -662,17 +663,11 @@ def inject_css():
         [data-testid="stElementContainer"][height="0px"],
         [data-testid="stElementContainer"][height="0"],
         [data-testid="stElementContainer"]:has(iframe[height="0"]) {{
-            height: 0 !important;
-            min-height: 0 !important;
-            max-height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-            border: none !important;
-            position: absolute !important;
-            width: 0 !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
+            display: none !important;
+        }}
+        /* Collapse CSS injection containers (marked with gxp-css-inject) */
+        [data-testid="stElementContainer"]:has(.gxp-css-inject) {{
+            display: none !important;
         }}
         /* ── Collapse empty element containers ── */
         [data-testid="stElementContainer"]:empty {{
@@ -692,6 +687,7 @@ def inject_css():
 
     # ── 2. Component styles (all use var(--gxp-*)) ───────────
     st.markdown("""
+    <span class="gxp-css-inject"></span>
     <style>
 
     /* ── Ripple effect ───────────────────────────── */
@@ -1288,13 +1284,49 @@ def inject_css():
     /* Reminders + Alerts in sidebar column */
     .gxp-remind-swipe { animation-delay: 0.12s; }
 
-    /* ── Bento hero row — cards at natural height ───────────────────── */
+    /* ── Bento hero row — uniform fixed-height cards ───────────────── */
     [data-testid="stHorizontalBlock"]:has(.gxp-bento-hero-card) {
-        align-items: flex-start !important;
+        align-items: stretch !important;
     }
     .gxp-bento-hero-card {
         display: flex !important;
         flex-direction: column !important;
+        height: 320px !important;
+        min-height: 320px !important;
+        max-height: 320px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
+    .gxp-bento-hero-card::-webkit-scrollbar { width: 4px; }
+    .gxp-bento-hero-card::-webkit-scrollbar-track { background: transparent; }
+    .gxp-bento-hero-card::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+    .gxp-bento-hero-card::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+    /* Scrollable widget columns (Reminders, Alerts, Pending Requests) */
+    [data-testid="stColumn"]:has(.gxp-wdg-scroll-marker) {
+        position: relative !important;
+    }
+    [data-testid="stColumn"]:has(.gxp-wdg-scroll-marker) > div[data-testid="stVerticalBlock"] {
+        height: 320px !important;
+        max-height: 320px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        background: #fff;
+        border-radius: 16px;
+        padding: 8px 16px 16px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    }
+    [data-testid="stColumn"]:has(.gxp-wdg-scroll-marker) > div[data-testid="stVerticalBlock"]::-webkit-scrollbar { width: 4px; }
+    [data-testid="stColumn"]:has(.gxp-wdg-scroll-marker) > div[data-testid="stVerticalBlock"]::-webkit-scrollbar-track { background: transparent; }
+    [data-testid="stColumn"]:has(.gxp-wdg-scroll-marker) > div[data-testid="stVerticalBlock"]::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+    .gxp-wdg-scroll-marker { display: none !important; }
+    [data-testid="stElementContainer"]:has(.gxp-wdg-scroll-marker),
+    [data-testid="stMarkdown"]:has(.gxp-wdg-scroll-marker),
+    [data-testid="stMarkdownContainer"]:has(.gxp-wdg-scroll-marker) {
+        display: none !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
 
     /* ── Bento clickable cards ──────────────────────────────────────── */
@@ -1809,15 +1841,53 @@ def inject_css():
             backface-visibility: hidden !important;
         }}
         .gxp-hover-lg:hover,
-        .gxp-bento-hero-card:not(:has(.gxp-team-tile)):hover {{
+        .gxp-bento-hero-card:not(:has(.gxp-team-tile)):not(.gxp-no-lift):hover {{
             transform: translateY(-4px) !important;
             box-shadow: 0 8px 28px rgba(0,0,0,0.12) !important;
         }}
         .gxp-hover-lg:active,
-        .gxp-bento-hero-card:not(:has(.gxp-team-tile)):active {{
+        .gxp-bento-hero-card:not(:has(.gxp-team-tile)):not(.gxp-no-lift):active {{
             transform: translateY(-2px) scale(0.98) !important;
             transition-duration: 0.08s !important;
         }}
+        .gxp-bento-hero-card.gxp-no-lift {{
+            cursor: default !important;
+        }}
+        /* ── Mini calendar day tooltip ── */
+        .gxp-cal-cell {{
+            cursor: default;
+        }}
+        .gxp-cal-tip {{
+            display: none;
+            position: absolute;
+            bottom: calc(100% + 6px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #191c1d;
+            color: #fff;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 6px 10px;
+            border-radius: 8px;
+            white-space: nowrap;
+            z-index: 20;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            pointer-events: none;
+            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+        }}
+        .gxp-cal-tip::after {{
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: #191c1d;
+        }}
+        .gxp-cal-cell:hover .gxp-cal-tip {{
+            display: block;
+        }}
+
         /* Employee cards — no hover lift, cursor default (swipe only) */
         .gxp-emp-card {{
             cursor: default !important;
@@ -1831,7 +1901,22 @@ def inject_css():
         div[class*="st-key-invite_"],
         div[class*="st-key-inv_yes_"],
         div[class*="st-key-inv_no_"],
-        div[class*="st-key-invite_confirm_"] {{
+        div[class*="st-key-invite_confirm_"],
+        div[class*="st-key-_wl_"],
+        div[class*="st-key-_wr_"],
+        div[class*="st-key-_wu_"],
+        div[class*="st-key-_wd_"],
+        div[class*="st-key-_wh_"],
+        div[class*="st-key-_dash_edit_hidden"],
+        div[class*="st-key-bento_quick_stats"],
+        div[class*="st-key-bento_onboarding"],
+        div[class*="st-key-bento_payroll_overview"],
+        div[class*="st-key-bento_workforce"],
+        div[class*="st-key-bento_mini_cal"],
+        div[class*="st-key-bento_recent_payroll"],
+        div[class*="st-key-bento_attendance"],
+        div[class*="st-key-alert_nav_gov"],
+        div[class*="st-key-alert_nav_payroll"] {{
             position: absolute !important;
             width: 1px !important;
             height: 1px !important;
@@ -1841,6 +1926,17 @@ def inject_css():
             margin: -1px !important;
             padding: 0 !important;
             border: 0 !important;
+        }}
+
+        /* Hide widget marker divs */
+        .gxp-wdg-marker {{
+            display: none !important;
+        }}
+        [data-testid="stElementContainer"]:has(.gxp-wdg-marker) {{
+            display: none !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }}
 
         /* ── Employee card swipe-to-reveal (mirrors gxp-remind-swipe pattern) ── */
@@ -2436,9 +2532,23 @@ def inject_css():
             background: {surface} !important;
             padding: 1.25rem 1.5rem 1.5rem !important;
         }}
-        /* ── Hide broken Streamlit toggle icon — our ::before replaces it ── */
-        [data-testid="stExpanderToggleIcon"] {{
+        /* ── Hide broken Streamlit toggle icon text ── */
+        [data-testid="stExpanderToggleIcon"],
+        [data-testid="stExpander"] summary span[translate="no"],
+        [data-testid="stExpander"] summary svg {{
             display: none !important;
+        }}
+        /* Replace with CSS arrow */
+        [data-testid="stExpander"] summary::before {{
+            content: '\\25B6';
+            font-size: 10px;
+            color: #9ca3af;
+            margin-right: 8px;
+            transition: transform 0.2s;
+            display: inline-block;
+        }}
+        [data-testid="stExpander"][open] summary::before {{
+            transform: rotate(90deg);
         }}
 
         /* ── Metric cards ── */

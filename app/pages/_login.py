@@ -467,6 +467,18 @@ def _render_signin():
                 st.rerun()
             else:
                 st.error(error)
+                # Reset the Sign In button (JS disabled it during loading)
+                import streamlit.components.v1 as _stc_login
+                _stc_login.html("""<script>(function(){
+                  var pd = window.parent.document;
+                  var btn = pd.querySelector('[data-testid="stFormSubmitButton"] button');
+                  if(!btn) return;
+                  btn.disabled = false;
+                  btn.style.opacity = '1';
+                  btn.style.pointerEvents = 'auto';
+                  var span = btn.querySelector('p') || btn.querySelector('span span') || btn;
+                  span.textContent = 'Sign In';
+                })();</script>""", height=0)
 
     _gap(4)
 
