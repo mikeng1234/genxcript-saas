@@ -3049,7 +3049,7 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                     from app.auth import invite_employee
                     _invite_role = st.session_state.pop(f"_invite_role_{emp['id']}", "employee")
                     already_linked = bool(emp.get("user_id"))
-                    ok, result = invite_employee(emp["email"])
+                    ok, result = invite_employee(emp["email"], _invite_role)
                     if ok:
                         smtp_failed   = False
                         temp_password = None
@@ -3065,12 +3065,14 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                             auth_user_id = result
                         db = get_db()
                         db.table("employees").update({"user_id": auth_user_id}).eq("id", emp["id"]).execute()
+                        _role_saved = False
                         try:
                             db.table("user_company_access").upsert({
                                 "user_id":    auth_user_id,
                                 "company_id": get_company_id(),
                                 "role":       _invite_role,
                             }, on_conflict="user_id,company_id").execute()
+                            _role_saved = True
                         except Exception:
                             try:
                                 db.table("user_company_access").insert({
@@ -3078,10 +3080,17 @@ def _render_employees_tab(show_salary_toggle: bool = True):
                                     "company_id": get_company_id(),
                                     "role":       _invite_role,
                                 }).execute()
-                            except Exception:
-                                pass
+                                _role_saved = True
+                            except Exception as _role_err:
+                                st.session_state["_invite_toast"] = (
+                                    "error",
+                                    f"Account created but **role assignment failed**: {_role_err}. "
+                                    "Go to Company Setup > Users & Roles to assign the role manually.",
+                                )
                         _role_label = _invite_role.replace("_", " ").title()
-                        if smtp_failed:
+                        if not _role_saved:
+                            pass  # error toast already set above
+                        elif smtp_failed:
                             toast_msg = (
                                 f"Account created for **{emp['email']}** as **{_role_label}**.\n\n"
                                 f"Email could not be sent ({smtp_err}).\n\n"

@@ -401,7 +401,8 @@ def _render_signin():
     st.markdown("<h2>Welcome back!</h2>", unsafe_allow_html=True)
 
     if remembered_company:
-        subtitle = f'Signing in to <strong>{remembered_company}</strong>'
+        import html as _html_esc
+        subtitle = f'Signing in to <strong>{_html_esc.escape(remembered_company)}</strong>'
     else:
         subtitle = "Sign in to your account to continue."
     st.markdown(f'<p class="login-subtitle">{subtitle}</p>', unsafe_allow_html=True)

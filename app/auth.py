@@ -40,16 +40,26 @@ def _session_cache() -> dict:
 # Auth Client
 # ============================================================
 
+def _require_env(name: str) -> str:
+    val = os.environ.get(name)
+    if not val:
+        raise RuntimeError(
+            f"Missing required environment variable: {name}. "
+            f"Check your .env file or environment configuration."
+        )
+    return val
+
+
 def _get_auth_client() -> Client:
-    url = os.environ["SUPABASE_URL"]
-    key = os.environ["SUPABASE_KEY"]
+    url = _require_env("SUPABASE_URL")
+    key = _require_env("SUPABASE_KEY")
     return create_client(url, key, options=_SB_OPTS)
 
 
 def _get_admin_auth_client() -> Client:
     """Service-role client required for admin Auth API (invite, delete user, etc.)."""
-    url = os.environ["SUPABASE_URL"]
-    key = os.environ["SUPABASE_SERVICE_KEY"]
+    url = _require_env("SUPABASE_URL")
+    key = _require_env("SUPABASE_SERVICE_KEY")
     return create_client(url, key, options=_SB_OPTS)
 
 

@@ -56,61 +56,76 @@ def _fmt_short(centavos: int) -> str:
 
 
 def _load_company() -> dict:
-    db = get_db()
-    result = db.table("companies").select("*").eq("id", get_company_id()).execute()
-    return result.data[0] if result.data else {}
+    try:
+        db = get_db()
+        result = db.table("companies").select("*").eq("id", get_company_id()).execute()
+        return result.data[0] if result.data else {}
+    except Exception:
+        return {}
 
 
 def _load_employee_counts() -> tuple[int, int]:
     """Return (active_count, total_count) in a single query."""
-    db = get_db()
-    result = (
-        db.table("employees")
-        .select("id, is_active")
-        .eq("company_id", get_company_id())
-        .execute()
-    )
-    total = len(result.data)
-    active = sum(1 for e in result.data if e.get("is_active", True))
-    return active, total
+    try:
+        db = get_db()
+        result = (
+            db.table("employees")
+            .select("id, is_active")
+            .eq("company_id", get_company_id())
+            .execute()
+        )
+        total = len(result.data)
+        active = sum(1 for e in result.data if e.get("is_active", True))
+        return active, total
+    except Exception:
+        return 0, 0
 
 
 def _load_pay_periods() -> list[dict]:
-    db = get_db()
-    result = (
-        db.table("pay_periods")
-        .select("*")
-        .eq("company_id", get_company_id())
-        .order("period_start", desc=True)
-        .limit(10)
-        .execute()
-    )
-    return result.data
+    try:
+        db = get_db()
+        result = (
+            db.table("pay_periods")
+            .select("*")
+            .eq("company_id", get_company_id())
+            .order("period_start", desc=True)
+            .limit(10)
+            .execute()
+        )
+        return result.data
+    except Exception:
+        return []
 
 
 def _load_payroll_entries(pay_period_id: str) -> list[dict]:
-    db = get_db()
-    result = (
-        db.table("payroll_entries")
-        .select("*")
-        .eq("pay_period_id", pay_period_id)
-        .execute()
-    )
-    return result.data
+    try:
+        db = get_db()
+        result = (
+            db.table("payroll_entries")
+            .select("*")
+            .eq("pay_period_id", pay_period_id)
+            .execute()
+        )
+        return result.data
+    except Exception:
+        return []
 
 
 def _load_employee_names(employee_ids: list[str]) -> dict[str, str]:
     """Return {employee_id: "First Last"} for the given IDs."""
     if not employee_ids:
         return {}
-    db = get_db()
-    result = (
-        db.table("employees")
-        .select("id, first_name, last_name")
-        .in_("id", employee_ids)
-        .execute()
-    )
-    return {r["id"]: f"{r['first_name']} {r['last_name']}" for r in result.data}
+    try:
+        db = get_db()
+        result = (
+            db.table("employees")
+            .select("id, first_name, last_name")
+            .in_("id", employee_ids)
+            .execute()
+        )
+        return {r["id"]: f"{r['first_name']} {r['last_name']}" for r in result.data}
+    except Exception:
+        return {}
 
 
 @st.cache_data(ttl=120, show_spinner=False)
@@ -628,10 +643,10 @@ def _dlg_payroll_overview():
         [e["employee_id"] for e in latest_entries if e.get("employee_id")]
     ) if latest_entries else {}
 
-    total_gross = sum(e["gross_pay"] for e in latest_entries) if latest_entries else 0
-    total_net = sum(e["net_pay"] for e in latest_entries) if latest_entries else 0
+    total_gross = sum(e.get("gross_pay") or 0 for e in latest_entries) if latest_entries else 0
+    total_net = sum(e.get("net_pay") or 0 for e in latest_entries) if latest_entries else 0
     total_er = sum(
-        e["sss_employer"] + e["philhealth_employer"] + e["pagibig_employer"]
+        (e.get("sss_employer") or 0) + (e.get("philhealth_employer") or 0) + (e.get("pagibig_employer") or 0)
         for e in latest_entries
     ) if latest_entries else 0
 
@@ -4442,9 +4457,18 @@ def render():
     # ── Load all data ─────────────────────────────────
     company             = _load_company()
     if _is_supervisor and _team_ids:
-        # Supervisor sees only their team
-        active_count = sum(1 for _ in _team_ids)  # approximate — all team members
+        # Supervisor sees only their team — query actual active status
         total_count = len(_team_ids)
+        try:
+            _team_rows = (
+                get_db().table("employees")
+                .select("id, is_active")
+                .in_("id", [str(t) for t in _team_ids])
+                .execute()
+            ).data or []
+            active_count = sum(1 for e in _team_rows if e.get("is_active", True))
+        except Exception:
+            active_count = total_count  # fallback: assume all active
     else:
         active_count, total_count = _load_employee_counts()
     pending_leave, pending_ot = _count_pending_requests(_team_ids if _is_supervisor else None)
@@ -4468,10 +4492,10 @@ def render():
     _cal_events = _build_calendar_events(periods, deadlines)
 
     if not _is_supervisor:
-        total_gross = sum(e["gross_pay"] for e in latest_entries) if latest_entries else 0
-        total_net   = sum(e["net_pay"]   for e in latest_entries) if latest_entries else 0
+        total_gross = sum(e.get("gross_pay") or 0 for e in latest_entries) if latest_entries else 0
+        total_net   = sum(e.get("net_pay") or 0 for e in latest_entries) if latest_entries else 0
         total_er    = sum(
-            e["sss_employer"] + e["philhealth_employer"] + e["pagibig_employer"]
+            (e.get("sss_employer") or 0) + (e.get("philhealth_employer") or 0) + (e.get("pagibig_employer") or 0)
             for e in latest_entries
         ) if latest_entries else 0
         total_cost  = total_gross + total_er
