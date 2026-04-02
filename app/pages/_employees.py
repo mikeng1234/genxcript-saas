@@ -2671,9 +2671,10 @@ def _render_employees_tab(show_salary_toggle: bool = True):
               var name = el.closest('.emp-swipe-wrap');
               var nameEl = name ? name.querySelector('div[style*="font-weight:700"][style*="color:#191c1d"]') : null;
               var empName = nameEl ? nameEl.textContent.replace(/PORTAL/g,'').trim() : 'this employee';
+              var safeEmpName = empName.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
               var title = el.title || 'Send Portal Invite';
               pd.getElementById('gxp-inv-title').textContent = title;
-              pd.getElementById('gxp-inv-msg').innerHTML = 'Send portal invite to <b>'+empName+'</b>?<br>'
+              pd.getElementById('gxp-inv-msg').innerHTML = 'Send portal invite to <b>'+safeEmpName+'</b>?<br>'
                 +'<span style="font-size:11px;color:#9ca3af;">A temporary password will be generated.</span>';
               pd.getElementById('gxp-inv-role').value = 'employee';
               pd.getElementById('gxp-inv-yes').onclick = function(){

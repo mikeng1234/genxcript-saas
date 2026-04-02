@@ -196,9 +196,13 @@ st.sidebar.divider()
 # ---- Employee portal (limited view) ----
 if is_employee_role():
     # ── Hide Streamlit sidebar + header for employee portal ──────────────
+    import json as _json_esc
     _emp_user_email = st.session_state.get("user_email", "")
     _emp_display = _emp_user_email.split("@")[0].title() if _emp_user_email else "Employee"
     _emp_company = st.session_state.get("company_name", "")
+    # Escape for safe JS string interpolation (prevents XSS via session values)
+    _emp_company_js = _json_esc.dumps(_emp_company)[1:-1]  # strip quotes, keep escaped content
+    _emp_display_js = _json_esc.dumps(_emp_display)[1:-1]
 
     # Hidden sidebar button for sign-out (JS will click it)
     with st.sidebar:
@@ -279,7 +283,7 @@ if is_employee_role():
       var left = d.createElement('div');
       left.style.cssText = 'display:flex;align-items:center;gap:8px;';
       left.innerHTML = '<span style="font-size:14px;font-weight:800;color:#191c1d;">'
-        + '{_emp_company}'.replace(/</g,'&lt;') + '</span>'
+        + '{_emp_company_js}'.replace(/</g,'&lt;') + '</span>'
         + '<span style="font-size:10px;font-weight:600;color:#727784;'
         + 'background:#f3f4f5;padding:2px 8px;border-radius:9999px;">Employee Portal</span>';
 
@@ -290,7 +294,7 @@ if is_employee_role():
       var chip = d.createElement('span');
       chip.style.cssText = 'font-size:12px;font-weight:600;color:#005bc1;'
         +'background:#d8e2ff;padding:4px 12px;border-radius:9999px;';
-      chip.textContent = '{_emp_display}'.replace(/</g,'&lt;');
+      chip.textContent = '{_emp_display_js}';
 
       var signout = d.createElement('button');
       signout.style.cssText = 'font-size:11px;font-weight:600;color:#727784;'

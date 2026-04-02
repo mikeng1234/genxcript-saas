@@ -94,8 +94,10 @@ ROLE_EMPLOYEE = "employee"
 
 ALL_STAFF_ROLES = [ROLE_ADMIN, ROLE_HR_MANAGER, ROLE_PAYROLL_OFFICER, ROLE_SUPERVISOR]
 
-# GeNXcript super-admin emails — can access module management across ALL companies
-SUPER_ADMIN_EMAILS = ["mikkoevangelista@gmail.com"]
+# GeNXcript super-admin emails — from env var (comma-separated) or empty
+SUPER_ADMIN_EMAILS = [
+    e.strip() for e in os.environ.get("SUPER_ADMIN_EMAILS", "").split(",") if e.strip()
+]
 
 
 def is_super_admin() -> bool:
