@@ -1337,6 +1337,29 @@ def inject_css():
         height: 0 !important; overflow: hidden !important;
         margin: 0 !important; padding: 0 !important;
     }
+    /* ── Responsive: collapse 4-col widget grid to 2-col on narrow screens ── */
+    @media (max-width: 900px) {
+        [data-testid="stHorizontalBlock"]:has(.gxp-bento-hero-card),
+        [data-testid="stHorizontalBlock"]:has(.gxp-wdg-scroll-marker),
+        [data-testid="stHorizontalBlock"]:has(.gxp-wdg-marker) {
+            flex-wrap: wrap !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.gxp-bento-hero-card) > [data-testid="stColumn"],
+        [data-testid="stHorizontalBlock"]:has(.gxp-wdg-scroll-marker) > [data-testid="stColumn"],
+        [data-testid="stHorizontalBlock"]:has(.gxp-wdg-marker) > [data-testid="stColumn"] {
+            flex: 0 0 48% !important;
+            max-width: 48% !important;
+        }
+    }
+    @media (max-width: 600px) {
+        [data-testid="stHorizontalBlock"]:has(.gxp-bento-hero-card) > [data-testid="stColumn"],
+        [data-testid="stHorizontalBlock"]:has(.gxp-wdg-scroll-marker) > [data-testid="stColumn"],
+        [data-testid="stHorizontalBlock"]:has(.gxp-wdg-marker) > [data-testid="stColumn"] {
+            flex: 0 0 100% !important;
+            max-width: 100% !important;
+        }
+    }
+
     /* Cursor + hover lift + tactile press on card */
     .gxp-bento-clickable {
         cursor: pointer !important;
@@ -1860,7 +1883,7 @@ def inject_css():
         .gxp-cal-tip {{
             display: none;
             position: absolute;
-            bottom: calc(100% + 6px);
+            top: calc(100% + 4px);
             left: 50%;
             transform: translateX(-50%);
             background: #191c1d;
@@ -1870,7 +1893,7 @@ def inject_css():
             padding: 6px 10px;
             border-radius: 8px;
             white-space: nowrap;
-            z-index: 20;
+            z-index: 100;
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
             pointer-events: none;
             font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
@@ -1878,11 +1901,11 @@ def inject_css():
         .gxp-cal-tip::after {{
             content: '';
             position: absolute;
-            top: 100%;
+            bottom: 100%;
             left: 50%;
             transform: translateX(-50%);
             border: 5px solid transparent;
-            border-top-color: #191c1d;
+            border-bottom-color: #191c1d;
         }}
         .gxp-cal-cell:hover .gxp-cal-tip {{
             display: block;
