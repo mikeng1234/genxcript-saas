@@ -55,23 +55,25 @@ def _fmt_short(centavos: int) -> str:
     return f"\u20b1{pesos:,.0f}"
 
 
-def _load_company() -> dict:
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_company(_cid: str = "") -> dict:
     try:
         db = get_db()
-        result = db.table("companies").select("*").eq("id", get_company_id()).execute()
+        result = db.table("companies").select("*").eq("id", _cid or get_company_id()).execute()
         return result.data[0] if result.data else {}
     except Exception:
         return {}
 
 
-def _load_employee_counts() -> tuple[int, int]:
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_employee_counts(_cid: str = "") -> tuple[int, int]:
     """Return (active_count, total_count) in a single query."""
     try:
         db = get_db()
         result = (
             db.table("employees")
             .select("id, is_active")
-            .eq("company_id", get_company_id())
+            .eq("company_id", _cid or get_company_id())
             .execute()
         )
         total = len(result.data)
@@ -81,13 +83,14 @@ def _load_employee_counts() -> tuple[int, int]:
         return 0, 0
 
 
-def _load_pay_periods() -> list[dict]:
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_pay_periods(_cid: str = "") -> list[dict]:
     try:
         db = get_db()
         result = (
             db.table("pay_periods")
             .select("*")
-            .eq("company_id", get_company_id())
+            .eq("company_id", _cid or get_company_id())
             .order("period_start", desc=True)
             .limit(10)
             .execute()
@@ -97,13 +100,14 @@ def _load_pay_periods() -> list[dict]:
         return []
 
 
-def _load_payroll_entries(pay_period_id: str) -> list[dict]:
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_payroll_entries(_ppid: str = "") -> list[dict]:
     try:
         db = get_db()
         result = (
             db.table("payroll_entries")
             .select("*")
-            .eq("pay_period_id", pay_period_id)
+            .eq("pay_period_id", _ppid)
             .execute()
         )
         return result.data
@@ -333,12 +337,7 @@ def _load_department_breakdown(_cid: str) -> list[dict]:
     """Return [{department, count, pct}] for donut chart."""
     try:
         db = get_db()
-        rows = (
-            db.table("employee_profiles")
-            .select("employee_id, department")
-            .execute()
-        ).data or []
-        # Filter to active employees in this company
+        # Get active employee IDs for this company first
         emp_rows = (
             db.table("employees")
             .select("id")
@@ -346,12 +345,20 @@ def _load_department_breakdown(_cid: str) -> list[dict]:
             .eq("is_active", True)
             .execute()
         ).data or []
-        active_ids = {e["id"] for e in emp_rows}
+        if not emp_rows:
+            return []
+        active_ids = [e["id"] for e in emp_rows]
+        # Fetch only profiles for this company's employees
+        rows = (
+            db.table("employee_profiles")
+            .select("employee_id, department")
+            .in_("employee_id", active_ids)
+            .execute()
+        ).data or []
         dept_counts: dict[str, int] = {}
         for r in rows:
-            if r["employee_id"] in active_ids:
-                dept = r.get("department") or "Unassigned"
-                dept_counts[dept] = dept_counts.get(dept, 0) + 1
+            dept = r.get("department") or "Unassigned"
+            dept_counts[dept] = dept_counts.get(dept, 0) + 1
         total = sum(dept_counts.values()) or 1
         result = [
             {"department": d, "count": c, "pct": round(c / total * 100)}
@@ -367,21 +374,24 @@ def _load_employee_dept_map(_cid: str) -> dict[str, str]:
     """Return {employee_id: department} for all employees in the company."""
     try:
         db = get_db()
-        profiles = (
-            db.table("employee_profiles")
-            .select("employee_id, department")
-            .execute()
-        ).data or []
         emp_rows = (
             db.table("employees")
             .select("id")
             .eq("company_id", _cid)
             .execute()
         ).data or []
-        company_ids = {e["id"] for e in emp_rows}
+        if not emp_rows:
+            return {}
+        company_ids = [e["id"] for e in emp_rows]
+        profiles = (
+            db.table("employee_profiles")
+            .select("employee_id, department")
+            .in_("employee_id", company_ids)
+            .execute()
+        ).data or []
         return {
             r["employee_id"]: r.get("department") or "Unassigned"
-            for r in profiles if r["employee_id"] in company_ids
+            for r in profiles
         }
     except Exception:
         return {}
@@ -635,7 +645,7 @@ def _dlg_payroll_overview():
 
     cid = get_company_id()
     history = _load_payroll_history(cid=cid)
-    periods = _load_pay_periods()
+    periods = _load_pay_periods(cid)
     latest_period = _find_latest_finalized(periods)
     latest_entries = _load_payroll_entries(latest_period["id"]) if latest_period else []
     dept_map = _load_employee_dept_map(cid)
@@ -4455,7 +4465,8 @@ def render():
     #  provides sufficient loading feedback.)
 
     # ── Load all data ─────────────────────────────────
-    company             = _load_company()
+    _cid = get_company_id()
+    company             = _load_company(_cid)
     if _is_supervisor and _team_ids:
         # Supervisor sees only their team — query actual active status
         total_count = len(_team_ids)
@@ -4470,17 +4481,16 @@ def render():
         except Exception:
             active_count = total_count  # fallback: assume all active
     else:
-        active_count, total_count = _load_employee_counts()
+        active_count, total_count = _load_employee_counts(_cid)
     pending_leave, pending_ot = _count_pending_requests(_team_ids if _is_supervisor else None)
 
     # ── Build team cache for supervisors (single bulk load, cached 2 min) ──
     _team_cache = None
     if _is_supervisor and _team_ids:
-        _cid = get_company_id()
         _team_cache = _load_team_cache(tuple(_team_ids), _cid)
 
     # ── Load payroll & calendar data (shared by admin + supervisor) ──
-    periods             = _load_pay_periods()
+    periods             = _load_pay_periods(_cid)
     history             = _load_payroll_history(cid=get_company_id())
     remittance_status   = _load_current_remittance_status()
     deadlines           = _get_deadlines(remittance_status)
@@ -4543,6 +4553,23 @@ def render():
                 st.session_state["_dash_editing"] = True
                 st.rerun()
 
+        # Undo toast for hidden widget
+        _just_hidden = st.session_state.pop("_widget_just_hidden", None)
+        if _just_hidden and _editing:
+            _hidden_label = _widget_label.get(_just_hidden, _just_hidden)
+            _undo_col1, _undo_col2 = st.columns([4, 1])
+            with _undo_col1:
+                st.info(f"**{_hidden_label}** hidden from dashboard.")
+            with _undo_col2:
+                def _undo(_w=_just_hidden):
+                    _l = list(st.session_state.get("dashboard_widgets") or [])
+                    _l.append(_w)
+                    st.session_state["dashboard_widgets"] = _l
+                    from app.pages._preferences import save_user_prefs
+                    _u = st.session_state.get("user_id", "")
+                    if _u: save_user_prefs(_u)
+                st.button("Undo", key="_undo_hide", on_click=_undo, type="primary")
+
         if _editing:
             # Hidden widgets — add buttons
             _hidden = [w for w in _available if w["id"] not in _active_ids]
@@ -4585,6 +4612,7 @@ def render():
                 def _hide(_w=_aw):
                     _l = list(st.session_state.get("dashboard_widgets") or _active_ids)
                     st.session_state["dashboard_widgets"] = [x for x in _l if x != _w]
+                    st.session_state["_widget_just_hidden"] = _w
                     from app.pages._preferences import save_user_prefs
                     _u = st.session_state.get("user_id", "")
                     if _u: save_user_prefs(_u)

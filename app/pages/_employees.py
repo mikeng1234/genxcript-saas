@@ -1119,11 +1119,18 @@ def _render_leave_request_row(req: dict):
                 st.session_state["_review_toast"] = ("success", f"Leave request for **{name}** approved.")
                 st.rerun()
         with rc:
-            if st.button("Reject", key=f"rej_lr_{req['id']}", width='stretch'):
-                _review_leave_request(req["id"], "rejected", st.session_state.get(note_key, ""))
-                log_action("rejected", "leave_request", req["id"], f"{name} - {lt_lbl}", {"dates": f"{start} to {end}"})
-                st.session_state["_review_toast"] = ("error", f"Leave request for **{name}** rejected.")
-                st.rerun()
+            _rej_key = f"_confirm_rej_lr_{req['id']}"
+            if st.session_state.get(_rej_key):
+                if st.button("Confirm Reject", key=f"rej_lr_{req['id']}", type="primary", width='stretch'):
+                    st.session_state.pop(_rej_key, None)
+                    _review_leave_request(req["id"], "rejected", st.session_state.get(note_key, ""))
+                    log_action("rejected", "leave_request", req["id"], f"{name} - {lt_lbl}", {"dates": f"{start} to {end}"})
+                    st.session_state["_review_toast"] = ("error", f"Leave request for **{name}** rejected.")
+                    st.rerun()
+            else:
+                if st.button("Reject", key=f"rej_lr_{req['id']}", width='stretch'):
+                    st.session_state[_rej_key] = True
+                    st.rerun()
 
 
 def _render_ot_request_row(req: dict):
@@ -1172,11 +1179,18 @@ def _render_ot_request_row(req: dict):
                 st.session_state["_review_toast"] = ("success", f"OT request for **{name}** approved.")
                 st.rerun()
         with rc:
-            if st.button("Reject", key=f"rej_ot_{req['id']}", width='stretch'):
-                _review_ot_request(req["id"], "rejected", st.session_state.get(note_key, ""))
-                log_action("rejected", "overtime_request", req["id"], f"{name} - {ot_date}", {"hours": hours})
-                st.session_state["_review_toast"] = ("error", f"OT request for **{name}** rejected.")
-                st.rerun()
+            _rej_key = f"_confirm_rej_ot_{req['id']}"
+            if st.session_state.get(_rej_key):
+                if st.button("Confirm Reject", key=f"rej_ot_{req['id']}", type="primary", width='stretch'):
+                    st.session_state.pop(_rej_key, None)
+                    _review_ot_request(req["id"], "rejected", st.session_state.get(note_key, ""))
+                    log_action("rejected", "overtime_request", req["id"], f"{name} - {ot_date}", {"hours": hours})
+                    st.session_state["_review_toast"] = ("error", f"OT request for **{name}** rejected.")
+                    st.rerun()
+            else:
+                if st.button("Reject", key=f"rej_ot_{req['id']}", width='stretch'):
+                    st.session_state[_rej_key] = True
+                    st.rerun()
 
 
 # ============================================================
@@ -1493,12 +1507,19 @@ def _render_special_leave_row(req: dict):
                 st.session_state["_review_toast"] = ("success", f"Special leave for **{name}** approved.")
                 st.rerun()
         with rc:
-            if st.button("Reject", key=f"rej_slr_{req['id']}", width="stretch"):
-                _review_special_leave(req["id"], "rejected", st.session_state.get(note_key, ""))
-                log_action("rejected", "special_leave_request", req["id"],
-                           f"{name} — {lt_label}", {"dates": f"{start} to {end}"})
-                st.session_state["_review_toast"] = ("error", f"Special leave for **{name}** rejected.")
-                st.rerun()
+            _rej_key = f"_confirm_rej_slr_{req['id']}"
+            if st.session_state.get(_rej_key):
+                if st.button("Confirm Reject", key=f"rej_slr_{req['id']}", type="primary", width="stretch"):
+                    st.session_state.pop(_rej_key, None)
+                    _review_special_leave(req["id"], "rejected", st.session_state.get(note_key, ""))
+                    log_action("rejected", "special_leave_request", req["id"],
+                               f"{name} — {lt_label}", {"dates": f"{start} to {end}"})
+                    st.session_state["_review_toast"] = ("error", f"Special leave for **{name}** rejected.")
+                    st.rerun()
+            else:
+                if st.button("Reject", key=f"rej_slr_{req['id']}", width="stretch"):
+                    st.session_state[_rej_key] = True
+                    st.rerun()
 
 
 def _render_special_leaves_tab():
